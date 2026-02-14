@@ -18,6 +18,7 @@ These variables control the backend connection to the TAK Server and the local A
 | `TAK_UID` | Unique ID for the viewer entity. | `CesiumViewer-[Callsign]` |
 | `ICONSETS_DIR` | Directory to scan for built-in iconsets. | `/iconsets` |
 | `USER_ICONSETS_DIR` | Additional directory to scan for user-installed iconsets. | `/user_iconsets` |
+| `TERRAIN_URL` | URL to a Cesium terrain provider (quantized-mesh or heightmap). | (Empty) |
 | `LOG_COTS` | Set to `true` to log incoming CoT messages to the console. | `false` |
 | `CENTER_ALERT` | Automatically zoom and alert on new emergency messages. | `false` |
 | `TRUSTED_PROXIES` | Comma-separated list of IP addresses/CIDRs to trust for X-Forwarded-For logging. | `127.0.0.1` |
