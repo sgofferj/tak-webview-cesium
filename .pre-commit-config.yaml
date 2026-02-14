@@ -1,0 +1,37 @@
+repos:
+  - repo: local
+    hooks:
+      - id: backend-lint
+        name: Backend Lint (Ruff)
+        entry: bash -c "cd backend && ../venv/bin/poetry run ruff check ."
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: backend-typecheck
+        name: Backend Type Check (Mypy)
+        entry: bash -c "cd backend && ../venv/bin/poetry run mypy ."
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: backend-test
+        name: Backend Tests (Pytest)
+        entry: bash -c "cd backend && ../venv/bin/poetry run pytest"
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: frontend-lint
+        name: Frontend Lint (ESLint)
+        entry: bash -c "cd frontend && /usr/bin/node ./node_modules/.bin/eslint . --ext .js"
+        language: system
+        types: [javascript]
+        pass_filenames: false
+
+      - id: frontend-test
+        name: Frontend Tests (Vitest)
+        entry: bash -c "cd frontend && /usr/bin/node ./node_modules/.bin/vitest run"
+        language: system
+        types: [javascript]
+        pass_filenames: false

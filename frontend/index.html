@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TAK Cesium Map</title>
+    <style>
+      #cesiumContainer {
+        width: 100%;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+      }
+
+      /* Filter Panel */
+      #filterContainer {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        background: rgba(42, 42, 42, 0.8);
+        padding: 10px;
+        border-radius: 4px;
+        display: flex;
+        gap: 5px;
+        border: 1px solid #444;
+      }
+      #filterInput {
+        background: #111;
+        color: white;
+        border: 1px solid #555;
+        padding: 5px;
+        width: 300px;
+        border-radius: 3px;
+      }
+      #affiliationFilter {
+        background: #111;
+        color: white;
+        border: 1px solid #555;
+        padding: 5px;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      #clearFilter,
+      #resetView,
+      #toggleTrails,
+      #toggleUnitList,
+      #showInfo {
+        background: #444;
+        color: white;
+        border: 1px solid #555;
+        padding: 5px 10px;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+      #clearFilter:hover,
+      #resetView:hover,
+      #toggleTrails:hover,
+      #toggleUnitList:hover,
+      #showInfo:hover {
+        background: #555;
+      }
+
+      /* Info Modal Styles */
+      #infoModal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 2000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: opacity 0.3s ease;
+      }
+      .modal-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #infoModalContent {
+        background: #222;
+        padding: 30px;
+        border-radius: 8px;
+        border: 1px solid #444;
+        width: 500px;
+        max-width: 90%;
+        max-height: 80%;
+        overflow-y: auto;
+        position: relative;
+        box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+      }
+      #closeInfo {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: transparent;
+        border: none;
+        color: #888;
+        font-size: 24px;
+        cursor: pointer;
+      }
+      #closeInfo:hover {
+        color: white;
+      }
+
+      /* Unit List Panel */
+      #unitListPanel {
+        position: absolute;
+        top: 60px;
+        left: 10px;
+        width: 300px;
+        bottom: 30px;
+        background: rgba(42, 42, 42, 0.9);
+        color: white;
+        z-index: 1000;
+        border-radius: 4px;
+        border: 1px solid #444;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.3s ease;
+        font-family: sans-serif;
+      }
+      #unitListPanel.hidden {
+        transform: translateX(-320px);
+      }
+      #unitListHeader {
+        padding: 15px;
+        background: #222;
+        font-weight: bold;
+        border-bottom: 1px solid #444;
+        border-radius: 4px 4px 0 0;
+      }
+      #unitListContent {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+      }
+      .unit-group {
+        margin-bottom: 15px;
+      }
+      .unit-group-header,
+      .affiliation-header {
+        font-size: 0.9em;
+        text-transform: uppercase;
+        color: #aaa;
+        margin-bottom: 5px;
+        border-bottom: 1px solid #333;
+        padding: 5px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .unit-group-header::after,
+      .affiliation-header::after {
+        content: "▼";
+        font-size: 0.8em;
+      }
+      .unit-group.collapsed .unit-group-content,
+      .affiliation-group.collapsed .affiliation-content {
+        display: none;
+      }
+      .unit-group.collapsed .unit-group-header::after,
+      .affiliation-group.collapsed .affiliation-header::after {
+        content: "▶";
+      }
+      .affiliation-group {
+        margin-left: 10px;
+        margin-bottom: 5px;
+      }
+      .affiliation-header {
+        font-size: 0.75em;
+        color: #888;
+        background: transparent;
+        border-bottom: 1px solid #222;
+      }
+      .unit-item {
+        display: flex;
+        align-items: center;
+        padding: 4px 5px;
+        cursor: pointer;
+        border-radius: 3px;
+        transition: background 0.2s;
+      }
+      .unit-item:hover {
+        background: #555;
+      }
+      .unit-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 10px;
+        object-fit: contain;
+      }
+      .unit-name {
+        font-size: 0.95em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .unit-emergency {
+        color: #ff4444;
+        font-weight: bold;
+        margin-left: auto;
+        font-size: 0.8em;
+      }
+
+      /* Cesium InfoBox Fixes */
+      .cesium-infoBox {
+        top: auto !important;
+        bottom: 30px !important;
+        right: 10px !important;
+        left: auto !important;
+        width: 350px !important;
+        height: 33vh !important;
+        max-height: 33vh !important;
+        transition: border 0.3s ease;
+        display: flex !important;
+        flex-direction: column !important;
+      }
+      .cesium-infoBox-iframe {
+        flex: 1 1 auto !important;
+        height: 100% !important;
+        width: 100% !important;
+        border: none !important;
+      }
+
+      /* Emergency Blinking Animation */
+      @keyframes emergency-blink {
+        0% {
+          border: 5px solid red;
+          box-shadow: 0 0 20px red;
+        }
+        50% {
+          border: 5px solid transparent;
+          box-shadow: none;
+        }
+        100% {
+          border: 5px solid red;
+          box-shadow: 0 0 20px red;
+        }
+      }
+
+      .emergency-active {
+        animation: emergency-blink 0.8s infinite !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="cesiumContainer"></div>
+    
+    <div id="filterContainer">
+      <select id="affiliationFilter">
+        <option value="all">All</option>
+        <option value="f">Friendly</option>
+        <option value="h">Hostile</option>
+        <option value="n">Neutral</option>
+        <option value="u">Unknown</option>
+      </select>
+      <input type="text" id="filterInput" placeholder="..." />
+      <button id="clearFilter"></button>
+      <button id="resetView" title=""></button>
+      <button id="toggleTrails" title=""></button>
+      <button id="toggleUnitList" title=""></button>
+      <button id="showInfo" title="Information">ⓘ</button>
+    </div>
+
+    <div id="infoModal" class="modal-hidden">
+      <div id="infoModalContent">
+        <button id="closeInfo">×</button>
+        <div id="infoBody"></div>
+      </div>
+    </div>
+
+    <div id="unitListPanel" class="hidden">
+      <div id="unitListHeader"></div>
+      <div id="unitListContent"></div>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

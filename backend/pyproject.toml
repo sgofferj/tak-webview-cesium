@@ -1,0 +1,68 @@
+[tool.poetry]
+name = "tak-cesium-backend"
+version = "0.1.0"
+package-mode = false
+description = "Backend for TAK Cesium Viewer with mTLS CoT connectivity"
+authors = ["Stefan Gofferje <stefan@gofferje.net>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = "^0.27.0"
+websockets = "^12.0"
+lxml = "^5.1.0"
+python-dotenv = "^1.0.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.2.0"
+mypy = "^1.8.0"
+pylint = "^3.0.0"
+types-lxml = "^2024.01.06"
+httpx = "^0.26.0"
+pytest = "^8.0.0"
+pytest-asyncio = "^0.23.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "ASYNC"]
+ignore = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = false
+disallow_untyped_defs = true
+disallow_any_unimported = true
+no_implicit_optional = true
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+show_error_codes = true
+
+[tool.pylint.messages_control]
+disable = [
+    "C0114",  # missing-module-docstring (handled by strict review)
+    "C0115",  # missing-class-docstring (handled by strict review)
+    "C0116",  # missing-function-docstring (handled by strict review)
+    "R0903",  # too-few-public-methods (common in data classes/simple endpoints)
+]
+extension-pkg-allow-list = ["lxml"]
+max-line-length = 88
+
+[tool.pylint.format]
+max-line-length = 88

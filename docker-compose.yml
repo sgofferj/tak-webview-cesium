@@ -1,0 +1,17 @@
+services:
+  tak-webview:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_WS_HOST=${VITE_WS_HOST:-}
+        - VITE_CESIUM_ION_TOKEN=${CESIUM_ION_TOKEN:-}
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./certs:/app/certs:ro
+      - ./frontend/iconsets:/iconsets
+      - ./user_iconsets:/user_iconsets
+    restart: unless-stopped
