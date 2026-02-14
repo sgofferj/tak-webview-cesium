@@ -242,6 +242,8 @@ async function init() {
     navigationHelpButton: false,
     sceneModePicker: true,
     terrainProviderViewModels: [],
+    terrainExaggeration: appConfig.terrain_exaggeration || 1.0,
+    terrainExaggerationRelativeHeight: 0.0,
   });
   viewer.camera.setView({
     destination: Cartesian3.fromDegrees(24.9384, 60.1699, 2000000.0),
@@ -431,6 +433,8 @@ function setupEvents() {
           viewer.terrainProvider = await CesiumTerrainProvider.fromUrl(
             appConfig.terrain_url,
           );
+          viewer.scene.terrainExaggeration =
+            appConfig.terrain_exaggeration || 1.0;
           terrainBtn.style.background = "#666";
         } catch (e) {
           console.error("Failed to load terrain:", e);
