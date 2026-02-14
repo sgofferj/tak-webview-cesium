@@ -150,26 +150,13 @@ else:
 
 
 @app.get("/config")
-
-
 async def get_config() -> dict[str, Any]:
-
-
     """Provides dynamic configuration to the frontend."""
-
-
     return {
-
-
         "center_alert": CENTER_ALERT,
-
-
         "iconsets": iconsets_cache,
-
-
-        "terrain_url": os.getenv("TERRAIN_URL")
-
-
+        "terrain_url": os.getenv("TERRAIN_URL"),
+        "terrain_exaggeration": float(os.getenv("TERRAIN_EXAGGERATION", "1.0")),
     }
 
 
