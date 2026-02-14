@@ -198,6 +198,7 @@ def parse_cot(xml_data: bytes) -> dict[str, Any] | None:
         root_el = etree.fromstring(xml_data.strip())
         uid = root_el.get("uid")
         ctype = root_el.get("type")
+        stale_time = root_el.get("stale")
         if not uid or not ctype:
             return None
 
@@ -287,6 +288,7 @@ def parse_cot(xml_data: bytes) -> dict[str, Any] | None:
             "course": course,
             "speed": speed,
             "squawk": squawk,
+            "stale": stale_time,
         }
 
     except etree.XMLSyntaxError:

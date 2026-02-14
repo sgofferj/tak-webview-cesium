@@ -378,10 +378,12 @@ function setupEvents() {
     currentFilter = e.target.value.toLowerCase();
     applyFilter();
   });
-  document.getElementById("affiliationFilter").addEventListener("change", (e) => {
-    currentAffiliationFilter = e.target.value;
-    applyFilter();
-  });
+  document
+    .getElementById("affiliationFilter")
+    .addEventListener("change", (e) => {
+      currentAffiliationFilter = e.target.value;
+      applyFilter();
+    });
   document.getElementById("clearFilter").addEventListener("click", () => {
     document.getElementById("filterInput").value = "";
     document.getElementById("affiliationFilter").value = "all";
@@ -403,12 +405,15 @@ function setupEvents() {
 
   document.getElementById("toggleTrails").addEventListener("click", (e) => {
     showAllTrails = !showAllTrails;
-    e.target.innerText = showAllTrails ? i18n.trailsButtonOn : i18n.trailsButtonOff;
+    e.target.innerText = showAllTrails
+      ? i18n.trailsButtonOn
+      : i18n.trailsButtonOff;
     const selected = viewer.selectedEntity;
     Object.keys(entityState).forEach((uid) => {
       const state = entityState[uid];
       if (state.trailEntity) {
-        state.trailEntity.show = showAllTrails || (selected && selected.id === uid);
+        state.trailEntity.show =
+          showAllTrails || (selected && selected.id === uid);
       }
     });
   });
@@ -479,7 +484,8 @@ function updateUnitListUI() {
     if (uidLower.includes("gdacs")) cat = "incidents";
     else if (uidLower.includes("icao") || remarksLower.includes("#adsb"))
       cat = "aircraft";
-    else if (uidLower.includes("ais") || remarksLower.includes("#ais")) cat = "vessels";
+    else if (uidLower.includes("ais") || remarksLower.includes("#ais"))
+      cat = "vessels";
 
     const et = data.type.split("-");
     const affilCode = et[1] ? et[1].toLowerCase() : "u";
@@ -568,11 +574,10 @@ function updateEntity(data) {
     alt,
     color,
     iconsetpath,
-    remarks,
     emergency,
     course,
-    speed,
     squawk,
+    stale,
   } = data;
   const upperType = (type || "").toUpperCase();
   let sidc = cotToSidc(upperType);
@@ -642,7 +647,8 @@ function updateEntity(data) {
     if (iconsetpath) {
       if (iconsetpath.includes("firedept")) customIconName = "fire";
       else if (iconsetpath.includes("sunny")) customIconName = "sunny";
-      else if (iconsetpath.includes("earthquake")) customIconName = "earthquake";
+      else if (iconsetpath.includes("earthquake"))
+        customIconName = "earthquake";
       else if (iconsetpath.includes("thunderstorm")) customIconName = "cyclone";
       else if (iconsetpath.includes("water")) customIconName = "flood";
       else if (iconsetpath.includes("volcano")) customIconName = "volcano";
@@ -655,7 +661,7 @@ function updateEntity(data) {
   // Zoom-dependent altitude display logic
   const camHeight = viewer.camera.positionCartographic.height;
   const showAltOnIcon = camHeight < 200000 && type.split("-")[2] === "A";
-  
+
   const stateKey = iconsetUrl
     ? `icon-${iconsetUrl}-${rgbColor}`
     : customIconName
@@ -740,6 +746,7 @@ function updateEntity(data) {
       state.lastStateKey = stateKey;
       state.lastRgbColor = rgbColor;
     }
+    state.staleAt = stale ? new Date(stale).getTime() : null;
 
     // Handle Squawk Codes (7500, 7600, 7700)
     const squawkLabel = getSquawkLabel(squawk, i18n);
@@ -749,18 +756,23 @@ function updateEntity(data) {
       // Add flashing circle if it doesn't exist
       if (!state.flashingCircle) {
         state.flashingCircle = viewer.entities.add({
-          position: new CallbackProperty(() => state.entity.position.getValue(viewer.clock.currentTime), false),
+          position: new CallbackProperty(
+            () => state.entity.position.getValue(viewer.clock.currentTime),
+            false,
+          ),
           ellipse: {
             semiMinorAxis: 500,
             semiMajorAxis: 500,
             material: new ColorMaterialProperty(
-              new CallbackProperty((time, result) => {
+              new CallbackProperty(() => {
                 const alpha = (Math.sin(Date.now() / 200) + 1) / 2;
                 return Color.RED.withAlpha(alpha * 0.5);
               }, false),
             ),
             height: new CallbackProperty(() => {
-              const pos = state.entity.position.getValue(viewer.clock.currentTime);
+              const pos = state.entity.position.getValue(
+                viewer.clock.currentTime,
+              );
               if (!pos) return 0;
               return Ellipsoid.WGS84.cartesianToCartographic(pos).height;
             }, false),
@@ -785,15 +797,26 @@ function updateEntity(data) {
     ) {
       if (!state.directionArrow) {
         state.directionArrow = viewer.entities.add({
-          position: new CallbackProperty(() => state.entity.position.getValue(viewer.clock.currentTime), false),
+          position: new CallbackProperty(
+            () => state.entity.position.getValue(viewer.clock.currentTime),
+            false,
+          ),
           polyline: {
             positions: new CallbackProperty(() => {
-              const pos = state.entity.position.getValue(viewer.clock.currentTime);
+              const pos = state.entity.position.getValue(
+                viewer.clock.currentTime,
+              );
               if (!pos || course === null) return [];
               const cart = Ellipsoid.WGS84.cartesianToCartographic(pos);
-              const destLon = cart.longitude + Math.sin(CesiumMath.toRadians(course)) * 0.0001;
-              const destLat = cart.latitude + Math.cos(CesiumMath.toRadians(course)) * 0.0001;
-              return [pos, Cartesian3.fromRadians(destLon, destLat, cart.height)];
+              const destLon =
+                cart.longitude +
+                Math.sin(CesiumMath.toRadians(course)) * 0.0001;
+              const destLat =
+                cart.latitude + Math.cos(CesiumMath.toRadians(course)) * 0.0001;
+              return [
+                pos,
+                Cartesian3.fromRadians(destLon, destLat, cart.height),
+              ];
             }, false),
             width: 2,
             material: cesiumColor,
@@ -905,6 +928,7 @@ function updateEntity(data) {
       lastData: data,
       lastIconUrl: iconCanvas ? iconCanvas.toDataURL() : iconsetUrl,
       lastRgbColor: rgbColor,
+      staleAt: stale ? new Date(stale).getTime() : null,
     };
     entityState[uid] = state;
 
@@ -919,7 +943,9 @@ function updateEntity(data) {
     collapsedStates.add(`${cat}-${affilLabel}`);
 
     if (appConfig.center_alert && emergency && emergency.status === "active") {
-      viewer.flyTo(entity, { offset: new HeadingPitchRange(0, -Math.PI / 2, 200000) });
+      viewer.flyTo(entity, {
+        offset: new HeadingPitchRange(0, -Math.PI / 2, 200000),
+      });
       viewer.selectedEntity = entity;
       const infoBox = document.querySelector(".cesium-infoBox");
       if (infoBox) infoBox.classList.add("emergency-active");
@@ -936,6 +962,31 @@ function updateEntity(data) {
     }, 1000);
   }
 }
+
+function removeEntity(uid) {
+  const state = entityState[uid];
+  if (!state) return;
+
+  if (state.entity) viewer.entities.remove(state.entity);
+  if (state.trailEntity) viewer.entities.remove(state.trailEntity);
+  if (state.flashingCircle) viewer.entities.remove(state.flashingCircle);
+  if (state.directionArrow) viewer.entities.remove(state.directionArrow);
+
+  delete entityState[uid];
+  updateUnitListUI();
+}
+
+// Periodic cleanup for stale entities
+setInterval(() => {
+  const now = Date.now();
+  Object.keys(entityState).forEach((uid) => {
+    const state = entityState[uid];
+    if (state.staleAt && now > state.staleAt) {
+      console.log(`Removing stale entity: ${uid}`);
+      removeEntity(uid);
+    }
+  });
+}, 5000);
 
 // --- WS CLIENT ---
 
