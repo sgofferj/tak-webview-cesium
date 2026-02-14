@@ -17,6 +17,8 @@ import {
   HeadingPitchRange,
   Math as CesiumMath,
   Ellipsoid,
+  CesiumTerrainProvider,
+  EllipsoidTerrainProvider,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ms from "milsymbol";
@@ -417,6 +419,29 @@ function setupEvents() {
       }
     });
   });
+
+  if (appConfig.terrain_url) {
+    const terrainBtn = document.getElementById("toggleTerrain");
+    terrainBtn.classList.remove("hidden");
+    let terrainActive = false;
+    terrainBtn.addEventListener("click", async () => {
+      terrainActive = !terrainActive;
+      if (terrainActive) {
+        try {
+          viewer.terrainProvider = await CesiumTerrainProvider.fromUrl(
+            appConfig.terrain_url,
+          );
+          terrainBtn.style.background = "#666";
+        } catch (e) {
+          console.error("Failed to load terrain:", e);
+          terrainActive = false;
+        }
+      } else {
+        viewer.terrainProvider = new EllipsoidTerrainProvider();
+        terrainBtn.style.background = "#444";
+      }
+    });
+  }
 
   document.getElementById("toggleUnitList").addEventListener("click", () => {
     document.getElementById("unitListPanel").classList.toggle("hidden");

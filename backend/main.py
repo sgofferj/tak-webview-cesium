@@ -150,9 +150,30 @@ else:
 
 
 @app.get("/config")
+
+
 async def get_config() -> dict[str, Any]:
+
+
     """Provides dynamic configuration to the frontend."""
-    return {"center_alert": CENTER_ALERT, "iconsets": iconsets_cache}
+
+
+    return {
+
+
+        "center_alert": CENTER_ALERT,
+
+
+        "iconsets": iconsets_cache,
+
+
+        "terrain_url": os.getenv("TERRAIN_URL")
+
+
+    }
+
+
+
 
 
 def create_heartbeat() -> bytes:
