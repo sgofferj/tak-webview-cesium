@@ -5,9 +5,11 @@ import logging
 import os
 import re
 import ssl
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from typing import Any
 
+from anyio import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import HTTPConnection
@@ -38,6 +40,7 @@ class Settings(BaseSettings):
     tak_uid: str | None = None
 
     # App Behavior
+    app_title: str = "TAK Cesium Map"
     log_cots: bool = False
     center_alert: bool = False
     port: int = 8000
@@ -89,9 +92,10 @@ def load_iconsets(directory: str, mount_prefix: str) -> None:
                 name = iconset_el.get("name")
                 if uid:
                     rel_path = os.path.relpath(root, directory)
-                    url_path = (
-                        mount_prefix if rel_path == "." else f"{mount_prefix}/{rel_path}"
-                    )
+                    if rel_path == ".":
+                        url_path = mount_prefix
+                    else:
+                        url_path = f"{mount_prefix}/{rel_path}"
 
                     iconsets_cache[uid] = {
                         "name": name or "Unknown",
@@ -175,7 +179,8 @@ class TAKClient:
 
         return (
             f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            f'<event version="2.0" uid="{self.config.tak_uid}" type="{self.config.tak_type}" '
+            f'<event version="2.0" uid="{self.config.tak_uid}" '
+            f'type="{self.config.tak_type}" '
             f'time="{now_str}" start="{now_str}" stale="{stale_str}" how="h-g-i-g-o">'
             f'<point lat="0.0" lon="0.0" hae="0.0" ce="9999999" le="9999999"/>'
             f'<detail><contact callsign="{self.config.tak_callsign}"/></detail>'
@@ -221,9 +226,9 @@ class TAKClient:
                     data["course"] = float(track.get("course", 0))
                     data["speed"] = float(track.get("speed", 0))
 
-                remarks = detail.find("remarks")
-                if remarks is not None:
-                    data["remarks"] = remarks.text or ""
+                remarks_el = detail.find("remarks")
+                if remarks_el is not None:
+                    data["remarks"] = remarks_el.text or ""
 
                 link = detail.find("link")
                 if link is not None:
@@ -243,12 +248,11 @@ class TAKClient:
                             data["callsign"] = emergency.text
 
                 # Squawk fallback
-                if not data.get("squawk") and data["remarks"]:
-                    match = re.search(
-                        r"Squawk:\s*([0-7]{4}|unknown)", data["remarks"], re.I
-                    )
-                    if match:
-                        data["squawk"] = match.group(1)
+                remarks = data.get("remarks")
+                if not data.get("squawk") and isinstance(remarks, str) and remarks:
+                    re_match = re.search(r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I)
+                    if re_match:
+                        data["squawk"] = re_match.group(1)
 
             return data
         except Exception as e:
@@ -256,7 +260,7 @@ class TAKClient:
                 logger.debug("CoT Parse Error: %s", e)
             return None
 
-    async def run(self):
+    async def run(self) -> None:
         self.running = True
         ssl_ctx = self._setup_ssl()
         if not ssl_ctx:
@@ -306,7 +310,7 @@ class TAKClient:
             logger.error("Failed to load certificates: %s", e)
             return None
 
-    async def _send_heartbeats(self, writer: asyncio.StreamWriter):
+    async def _send_heartbeats(self, writer: asyncio.StreamWriter) -> None:
         while self.running:
             try:
                 writer.write(self.create_heartbeat())
@@ -315,7 +319,7 @@ class TAKClient:
             except Exception:
                 break
 
-    async def _process_stream(self, reader: asyncio.StreamReader):
+    async def _process_stream(self, reader: asyncio.StreamReader) -> None:
         buffer = b""
         while self.running:
             try:
@@ -374,6 +378,7 @@ app.add_middleware(
 @app.get("/config")
 async def get_config() -> dict[str, Any]:
     return {
+        "app_title": settings.app_title,
         "center_alert": settings.center_alert,
         "iconsets": iconsets_cache,
         "terrain_url": settings.terrain_url,
@@ -402,7 +407,9 @@ if os.path.exists(static_dir):
             app.mount(f"/{sub}", StaticFiles(directory=d), name=sub)
 
 if os.path.exists(settings.iconsets_dir):
-    app.mount("/iconsets", StaticFiles(directory=settings.iconsets_dir), name="iconsets")
+    app.mount(
+        "/iconsets", StaticFiles(directory=settings.iconsets_dir), name="iconsets"
+    )
 
 if os.path.exists(settings.user_iconsets_dir):
     app.mount(
@@ -414,16 +421,16 @@ if os.path.exists(settings.user_iconsets_dir):
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str) -> Any:
-    if os.path.exists(static_dir):
+    if await Path(static_dir).exists():
         file_path = os.path.join(static_dir, full_path)
-        if os.path.isfile(file_path):
+        if await Path(file_path).is_file():
             return FileResponse(file_path)
 
     if full_path.startswith(("ws", "api", "config", "iconsets")):
         return {"error": "Not Found"}
 
     index_path = os.path.join(static_dir, "index.html")
-    if os.path.exists(index_path):
+    if await Path(index_path).exists():
         return FileResponse(index_path)
 
     return {"message": "TAK Cesium Backend Running"}

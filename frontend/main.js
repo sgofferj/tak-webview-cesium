@@ -18,6 +18,8 @@ import {
   HeadingPitchRange,
   Math as CesiumMath,
   Ellipsoid,
+  Rectangle,
+  WebMercatorTilingScheme,
   CesiumTerrainProvider,
   EllipsoidTerrainProvider,
   buildModuleUrl,
@@ -83,7 +85,7 @@ async function loadTranslations() {
 }
 
 function applyStaticTranslations() {
-  document.title = i18n.title;
+  document.title = appConfig.app_title || i18n.title;
   document.getElementById("filterInput").placeholder = i18n.filterPlaceholder;
   document.getElementById("clearFilter").innerText = i18n.clearButton;
   document.getElementById("resetView").innerText = i18n.resetViewButton;
@@ -137,6 +139,8 @@ if (ionToken) {
   Ion.defaultAccessToken = ionToken;
 }
 
+const finnishRectangle = Rectangle.fromDegrees(19.0, 59.0, 32.0, 71.0);
+
 const finnishLayers = [
   {
     name: "Finnish Background",
@@ -189,6 +193,7 @@ async function init() {
         creationFunction: function () {
           return ArcGisMapServerImageryProvider.fromUrl(
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer",
+            { enablePickFeatures: false },
           );
         },
       }),
@@ -202,14 +207,28 @@ async function init() {
         tooltip: layer.name,
         category: "Finland",
         creationFunction: function () {
-          return new WebMapServiceImageryProvider({
-            url: layer.url,
-            layers: layer.layers,
-            parameters: {
-              transparent: layer.name.includes("Background") ? "false" : "true",
-              format: "image/png",
-            },
-          });
+          const providers = [];
+          // Add OSM as a fallback base layer
+          providers.push(
+            new OpenStreetMapImageryProvider({
+              url: "https://a.tile.openstreetmap.org/",
+            }),
+          );
+          // Add the Finnish layer on top
+          providers.push(
+            new WebMapServiceImageryProvider({
+              url: layer.url,
+              layers: layer.layers,
+              rectangle: finnishRectangle,
+              tilingScheme: new WebMercatorTilingScheme(),
+              enablePickFeatures: false,
+              parameters: {
+                transparent: "true",
+                format: "image/png",
+              },
+            }),
+          );
+          return providers;
         },
       }),
     );
@@ -338,6 +357,14 @@ window.filterByTag = function (tag) {
   }
 };
 
+function calculateTrailVisibility(uid) {
+  const state = entityState[uid];
+  if (!state || !state.trailEntity) return false;
+  const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
+  const isVisible = calculateVisibility(state.lastData);
+  return isVisible && (showAllTrails || isSelected);
+}
+
 function setupEvents() {
   viewer.selectedEntityChanged.addEventListener((entity) => {
     const infoBox = document.querySelector(".cesium-infoBox");
@@ -346,9 +373,8 @@ function setupEvents() {
     }
     Object.keys(entityState).forEach((uid) => {
       const state = entityState[uid];
-      const isSelected = entity && entity.id === uid;
       if (state.trailEntity) {
-        state.trailEntity.show = showAllTrails || isSelected;
+        state.trailEntity.show = calculateTrailVisibility(uid);
       }
     });
     if (entity) {
@@ -433,12 +459,10 @@ function setupEvents() {
     e.target.innerText = showAllTrails
       ? i18n.trailsButtonOn
       : i18n.trailsButtonOff;
-    const selected = viewer.selectedEntity;
     Object.keys(entityState).forEach((uid) => {
       const state = entityState[uid];
       if (state.trailEntity) {
-        state.trailEntity.show =
-          showAllTrails || (selected && selected.id === uid);
+        state.trailEntity.show = calculateTrailVisibility(uid);
       }
     });
   });
@@ -469,6 +493,9 @@ function applyFilter() {
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
     state.entity.show = calculateVisibility(state.lastData);
+    if (state.trailEntity) {
+      state.trailEntity.show = calculateTrailVisibility(uid);
+    }
   });
   throttledUpdateUnitList();
 }
@@ -934,7 +961,7 @@ function updateEntity(data) {
         }),
         disableDepthTestDistance: 200000,
       },
-      show: showAllTrails,
+      show: calculateTrailVisibility(uid),
     });
 
     state = {
