@@ -24,14 +24,14 @@ repos:
 
       - id: frontend-lint
         name: Frontend Lint (ESLint)
-        entry: bash -c "cd frontend && /usr/bin/node ./node_modules/.bin/eslint . --ext .js"
+        entry: bash -c "cd frontend && npm run lint"
         language: system
         types: [javascript]
         pass_filenames: false
 
       - id: frontend-test
         name: Frontend Tests (Vitest)
-        entry: bash -c "cd frontend && /usr/bin/node ./node_modules/.bin/vitest run"
+        entry: bash -c "cd frontend && npm run test"
         language: system
         types: [javascript]
         pass_filenames: false
