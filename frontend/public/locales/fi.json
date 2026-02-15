@@ -22,6 +22,7 @@
   "categoryAircraft": "✈️ Lentokoneet (ADSB)",
   "categoryVessels": "🚢 Alukset (AIS)",
   "categoryOther": "🎖️ Muut yksiköt",
+  "worldLayersLabel": "Maailmankartat",
   "noActiveUnits": "Ei aktiivisia yksiköitä",
   "emergencyBanner": "!!! HÄTÄTILA: {type} !!!",
   "emergency911Badge": "911",
@@ -33,6 +34,7 @@
   "allAffiliations": "Kaikki kuuluvuudet",
   "emergencyLabel": "Hätätila",
   "terrainLabel": "Maasto",
+  "ellipsoidLabel": "WGS84 Ellipsoidi",
   "squawk7500": "KAAPPAUS",
   "squawk7600": "RADIORIKKO",
   "squawk7700": "HÄTÄTILA"
