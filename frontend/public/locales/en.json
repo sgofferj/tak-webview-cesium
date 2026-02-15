@@ -32,6 +32,7 @@
   "affiliationFilterLabel": "Filter Affiliation:",
   "allAffiliations": "All Affiliations",
   "emergencyLabel": "Emergency",
+  "terrainLabel": "Terrain",
   "squawk7500": "HIJACK",
   "squawk7600": "RADIO FAILURE",
   "squawk7700": "EMERGENCY"
