@@ -9,6 +9,7 @@ import {
   WebMapServiceImageryProvider,
   ProviderViewModel,
   OpenStreetMapImageryProvider,
+  ArcGisMapServerImageryProvider,
   LabelStyle,
   DistanceDisplayCondition,
   CallbackProperty,
@@ -19,55 +20,22 @@ import {
   Ellipsoid,
   CesiumTerrainProvider,
   EllipsoidTerrainProvider,
+  buildModuleUrl,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import ms from "milsymbol";
-import { cotToSidc, renderGoogleIcon } from "./utils.js";
+import {
+  cotToSidc,
+  renderGoogleIcon,
+  getAffiliationColor,
+  getSquawkLabel,
+  affilMap,
+  throttle,
+} from "./utils.js";
 
 // --- GLOBAL CONFIG & TRANSLATIONS ---
 let i18n = {};
 let appConfig = { center_alert: false };
-
-const affilMap = (i18n) => ({
-  f: i18n.affiliationFriendly,
-  a: i18n.affiliationFriendly,
-  h: i18n.affiliationHostile,
-  s: i18n.affiliationHostile,
-  j: i18n.affiliationHostile,
-  k: i18n.affiliationHostile,
-  n: i18n.affiliationNeutral,
-  u: i18n.affiliationUnknown,
-  p: i18n.affiliationUnknown,
-  o: i18n.affiliationUnknown,
-});
-
-function getAffiliationColor(type) {
-  const et = type.split("-");
-  const affil = et[1] ? et[1].toLowerCase() : "u";
-  switch (affil) {
-    case "f":
-    case "a":
-      return Color.CYAN;
-    case "h":
-    case "s":
-    case "j":
-    case "k":
-      return Color.RED;
-    case "n":
-      return Color.GREEN;
-    default:
-      return Color.YELLOW;
-  }
-}
-
-function getSquawkLabel(squawk, i18n) {
-  if (!squawk) return null;
-  const s = squawk.toString();
-  if (s === "7500") return i18n.squawk7500 || "HIJACK";
-  if (s === "7600") return i18n.squawk7600 || "RADIO FAILURE";
-  if (s === "7700") return i18n.squawk7700 || "EMERGENCY";
-  return null;
-}
 
 async function loadConfig() {
   try {
@@ -125,10 +93,6 @@ function applyStaticTranslations() {
   document.getElementById("toggleUnitList").innerText = i18n.unitsButton;
   document.getElementById("toggleUnitList").title = i18n.unitsTitle;
   document.getElementById("unitListHeader").innerText = i18n.activeUnitsHeader;
-  document.getElementById("toggleTerrain").innerText =
-    i18n.terrainLabel || "Terrain";
-  document.getElementById("toggleTerrain").title =
-    i18n.terrainLabel || "Terrain";
 
   const affilSelect = document.getElementById("affiliationFilter");
   affilSelect.options[0].text = i18n.allAffiliations;
@@ -207,11 +171,25 @@ async function init() {
         name: "OpenStreetMap",
         iconUrl: "https://a.tile.openstreetmap.org/0/0/0.png",
         tooltip: "OpenStreetMap",
-        category: "Other",
+        category: i18n.worldLayersLabel || "World Layers",
         creationFunction: function () {
           return new OpenStreetMapImageryProvider({
             url: "https://a.tile.openstreetmap.org/",
           });
+        },
+      }),
+    );
+    imageryViewModels.push(
+      new ProviderViewModel({
+        name: "ESRI World Topo",
+        iconUrl:
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/0/0/0",
+        tooltip: "ESRI World Topographical Map",
+        category: i18n.worldLayersLabel || "World Layers",
+        creationFunction: function () {
+          return ArcGisMapServerImageryProvider.fromUrl(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer",
+          );
         },
       }),
     );
@@ -227,12 +205,45 @@ async function init() {
           return new WebMapServiceImageryProvider({
             url: layer.url,
             layers: layer.layers,
-            parameters: { transparent: "true", format: "image/png" },
+            parameters: {
+              transparent: layer.name.includes("Background") ? "false" : "true",
+              format: "image/png",
+            },
           });
         },
       }),
     );
   });
+
+  const terrainViewModels = [];
+  if (appConfig.terrain_url) {
+    terrainViewModels.push(
+      new ProviderViewModel({
+        name: i18n.ellipsoidLabel || "WGS84 Ellipsoid",
+        iconUrl: buildModuleUrl(
+          "Widgets/Images/TerrainProviders/Ellipsoid.png",
+        ),
+        tooltip: "WGS84 Ellipsoid",
+        category: "Terrain",
+        creationFunction: function () {
+          return new EllipsoidTerrainProvider();
+        },
+      }),
+    );
+    terrainViewModels.push(
+      new ProviderViewModel({
+        name: i18n.terrainLabel || "Terrain",
+        iconUrl: buildModuleUrl(
+          "Widgets/Images/TerrainProviders/CesiumWorldTerrain.png",
+        ),
+        tooltip: "Custom Terrain",
+        category: "Terrain",
+        creationFunction: function () {
+          return CesiumTerrainProvider.fromUrl(appConfig.terrain_url);
+        },
+      }),
+    );
+  }
 
   viewer = new Viewer("cesiumContainer", {
     terrainProvider: undefined,
@@ -249,7 +260,9 @@ async function init() {
     selectionIndicator: true,
     navigationHelpButton: false,
     sceneModePicker: true,
-    terrainProviderViewModels: [],
+    terrainProviderViewModels: terrainViewModels,
+    selectedTerrainProviderViewModel:
+      terrainViewModels.length > 0 ? terrainViewModels[0] : undefined,
     terrainExaggeration: appConfig.terrain_exaggeration || 1.0,
     terrainExaggerationRelativeHeight: 0.0,
   });
@@ -430,34 +443,9 @@ function setupEvents() {
     });
   });
 
-  if (appConfig.terrain_url) {
-    const terrainBtn = document.getElementById("toggleTerrain");
-    terrainBtn.classList.remove("hidden");
-    let terrainActive = false;
-    terrainBtn.addEventListener("click", async () => {
-      terrainActive = !terrainActive;
-      if (terrainActive) {
-        try {
-          viewer.terrainProvider = await CesiumTerrainProvider.fromUrl(
-            appConfig.terrain_url,
-          );
-          viewer.scene.terrainExaggeration =
-            appConfig.terrain_exaggeration || 1.0;
-          terrainBtn.style.background = "#666";
-        } catch (e) {
-          console.error("Failed to load terrain:", e);
-          terrainActive = false;
-        }
-      } else {
-        viewer.terrainProvider = new EllipsoidTerrainProvider();
-        terrainBtn.style.background = "#444";
-      }
-    });
-  }
-
   document.getElementById("toggleUnitList").addEventListener("click", () => {
     document.getElementById("unitListPanel").classList.toggle("hidden");
-    updateUnitListUI();
+    throttledUpdateUnitList();
   });
 
   document.getElementById("showInfo").addEventListener("click", async () => {
@@ -482,7 +470,7 @@ function applyFilter() {
     const state = entityState[uid];
     state.entity.show = calculateVisibility(state.lastData);
   });
-  updateUnitListUI();
+  throttledUpdateUnitList();
 }
 
 window.toggleCollapse = function (key) {
@@ -588,6 +576,8 @@ function updateUnitListUI() {
     html ||
     `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
 }
+
+const throttledUpdateUnitList = throttle(updateUnitListUI, 1000);
 
 window.zoomToUnit = function (uid) {
   const state = entityState[uid];
@@ -981,13 +971,7 @@ function updateEntity(data) {
     entity.show = calculateVisibility(data);
   }
 
-  if (!window._unitListUpdatePending) {
-    window._unitListUpdatePending = true;
-    setTimeout(() => {
-      updateUnitListUI();
-      window._unitListUpdatePending = false;
-    }, 1000);
-  }
+  throttledUpdateUnitList();
 }
 
 function removeEntity(uid) {
@@ -1000,7 +984,7 @@ function removeEntity(uid) {
   if (state.directionArrow) viewer.entities.remove(state.directionArrow);
 
   delete entityState[uid];
-  updateUnitListUI();
+  throttledUpdateUnitList();
 }
 
 // Periodic cleanup for stale entities

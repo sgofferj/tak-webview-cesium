@@ -22,6 +22,7 @@
   "categoryAircraft": "✈️ Flygplan (ADSB)",
   "categoryVessels": "🚢 Fartyg (AIS)",
   "categoryOther": "🎖️ Övriga enheter",
+  "worldLayersLabel": "Världskartor",
   "noActiveUnits": "Inga aktiva enheter",
   "emergencyBanner": "!!! NÖDLÄGE: {type} !!!",
   "emergency911Badge": "911",
@@ -33,6 +34,7 @@
   "allAffiliations": "Alla tillhörigheter",
   "emergencyLabel": "Nödläge",
   "terrainLabel": "Terräng",
+  "ellipsoidLabel": "WGS84 Ellipsoid",
   "squawk7500": "KAPNING",
   "squawk7600": "RADIOFEL",
   "squawk7700": "NÖDSITUATION"
