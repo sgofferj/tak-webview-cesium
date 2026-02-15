@@ -1,3 +1,5 @@
+import { Color } from "cesium";
+
 // CoT Type to MIL-STD-2525 SIDC mapping
 export function cotToSidc(type) {
   if (!type) return "u-u-g-u---------";
@@ -18,6 +20,60 @@ export function cotToSidc(type) {
     "-",
     "-",
   ].join("");
+}
+
+export const affilMap = (i18n) => ({
+  f: i18n.affiliationFriendly,
+  a: i18n.affiliationFriendly,
+  h: i18n.affiliationHostile,
+  s: i18n.affiliationHostile,
+  j: i18n.affiliationHostile,
+  k: i18n.affiliationHostile,
+  n: i18n.affiliationNeutral,
+  u: i18n.affiliationUnknown,
+  p: i18n.affiliationUnknown,
+  o: i18n.affiliationUnknown,
+});
+
+export function getAffiliationColor(type) {
+  const et = type.split("-");
+  const affil = et[1] ? et[1].toLowerCase() : "u";
+  switch (affil) {
+    case "f":
+    case "a":
+      return Color.CYAN;
+    case "h":
+    case "s":
+    case "j":
+    case "k":
+      return Color.RED;
+    case "n":
+      return Color.GREEN;
+    default:
+      return Color.YELLOW;
+  }
+}
+
+export function getSquawkLabel(squawk, i18n) {
+  if (!squawk) return null;
+  const s = squawk.toString();
+  if (s === "7500") return i18n.squawk7500 || "HIJACK";
+  if (s === "7600") return i18n.squawk7600 || "RADIO FAILURE";
+  if (s === "7700") return i18n.squawk7700 || "EMERGENCY";
+  return null;
+}
+
+export function throttle(func, limit) {
+  let inThrottle;
+  return function () {
+    const args = arguments;
+    const context = this;
+    if (!inThrottle) {
+      func.apply(context, args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  };
 }
 
 // Google Material Symbols SVG Paths (960x960 coordinate system)

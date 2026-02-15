@@ -22,6 +22,7 @@
   "categoryAircraft": "✈️ Flugzeuge (ADSB)",
   "categoryVessels": "🚢 Schiffe (AIS)",
   "categoryOther": "🎖️ Andere Einheiten",
+  "worldLayersLabel": "Weltkarten",
   "noActiveUnits": "Keine aktiven Einheiten",
   "emergencyBanner": "!!! NOTFALL: {type} !!!",
   "emergency911Badge": "911",
@@ -33,6 +34,7 @@
   "allAffiliations": "Alle Zugehörigkeiten",
   "emergencyLabel": "Notfall",
   "terrainLabel": "Gelände",
+  "ellipsoidLabel": "WGS84-Ellipsoid",
   "squawk7500": "ENTFÜHRUNG",
   "squawk7600": "FUNKAUSFALL",
   "squawk7700": "NOTFALL"
