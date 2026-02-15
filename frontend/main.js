@@ -104,7 +104,11 @@ async function loadTranslations() {
       i18n = await fetchLang("en");
     } catch (e2) {
       console.error("Critical: English translation also failed.", e2);
-      i18n = { title: "TAK Cesium Map", filterPlaceholder: "Filter..." };
+      i18n = {
+        title: "TAK Cesium Map",
+        filterPlaceholder: "Filter...",
+        terrainLabel: "Terrain",
+      };
     }
   }
   applyStaticTranslations();
@@ -121,6 +125,10 @@ function applyStaticTranslations() {
   document.getElementById("toggleUnitList").innerText = i18n.unitsButton;
   document.getElementById("toggleUnitList").title = i18n.unitsTitle;
   document.getElementById("unitListHeader").innerText = i18n.activeUnitsHeader;
+  document.getElementById("toggleTerrain").innerText =
+    i18n.terrainLabel || "Terrain";
+  document.getElementById("toggleTerrain").title =
+    i18n.terrainLabel || "Terrain";
 
   const affilSelect = document.getElementById("affiliationFilter");
   affilSelect.options[0].text = i18n.allAffiliations;
@@ -617,7 +625,8 @@ function updateEntity(data) {
   if (iconsetpath) {
     // Check if iconsetpath is a known UID
     // Format is often "uid/path/to/icon.png" or just "uid"
-    const parts = iconsetpath.split("/");
+    // Filter out empty parts in case of leading/trailing slashes
+    const parts = iconsetpath.split("/").filter((p) => p.length > 0);
     const setUid = parts.shift();
     const iconFile = parts.join("/");
 
@@ -626,9 +635,9 @@ function updateEntity(data) {
       if (iconFile) {
         // If the iconFile part contains the full path from the CoT, use it.
         // Some producers include "Public Safety Air/" in the iconFile part.
-        iconsetUrl = `${set.url_path}/${iconFile}`;
+        iconsetUrl = encodeURI(`${set.url_path}/${iconFile}`);
       } else if (set.type_map && set.type_map[type]) {
-        iconsetUrl = `${set.url_path}/${set.type_map[type]}`;
+        iconsetUrl = encodeURI(`${set.url_path}/${set.type_map[type]}`);
       } else if (setUid === "66f14976-4b62-4023-8edb-d8d2ebeaa336") {
         // Mapping for Public Safety Air (fallback for legacy behavior or partial matches)
         const et = type.split("-");
@@ -658,7 +667,7 @@ function updateEntity(data) {
 
   let rgbColor = "white";
   let cesiumColor = Color.WHITE;
-  let affiliationColor = getAffiliationColor(type);
+  const affiliationColor = getAffiliationColor(type);
 
   if (color) {
     const argb = parseInt(color);
@@ -667,22 +676,9 @@ function updateEntity(data) {
     const b = argb & 0xff;
     rgbColor = `rgb(${r},${g},${b})`;
     cesiumColor = Color.fromBytes(r, g, b, 255);
-  } else {
-    cesiumColor = affiliationColor;
   }
 
-  if (uid.toLowerCase().includes("gdacs")) {
-    customIconName = "fire";
-    if (iconsetpath) {
-      if (iconsetpath.includes("firedept")) customIconName = "fire";
-      else if (iconsetpath.includes("sunny")) customIconName = "sunny";
-      else if (iconsetpath.includes("earthquake"))
-        customIconName = "earthquake";
-      else if (iconsetpath.includes("thunderstorm")) customIconName = "cyclone";
-      else if (iconsetpath.includes("water")) customIconName = "flood";
-      else if (iconsetpath.includes("volcano")) customIconName = "volcano";
-    }
-  }
+  const effectiveColor = color ? cesiumColor : affiliationColor;
 
   const clampedAlt = alt > 9000000 ? 0 : alt;
   const position = Cartesian3.fromDegrees(lon, lat, clampedAlt || 0);
@@ -772,6 +768,7 @@ function updateEntity(data) {
         );
         state.lastIconUrl = iconCanvas.toDataURL();
       }
+      state.entity.billboard.color = cesiumColor;
       state.lastStateKey = stateKey;
       state.lastRgbColor = rgbColor;
     }
@@ -848,7 +845,7 @@ function updateEntity(data) {
               ];
             }, false),
             width: 2,
-            material: cesiumColor,
+            material: effectiveColor,
             disableDepthTestDistance: 200000,
           },
         });
@@ -874,6 +871,7 @@ function updateEntity(data) {
         verticalOrigin: VerticalOrigin.CENTER,
         eyeOffset: new Cartesian3(0, 0, -10),
         disableDepthTestDistance: 200000,
+        color: cesiumColor,
       },
       label: {
         text: callsign,
@@ -942,7 +940,7 @@ function updateEntity(data) {
         material: new PolylineGlowMaterialProperty({
           glowPower: 0.25,
           taperPower: 1.0,
-          color: cesiumColor,
+          color: effectiveColor,
         }),
         disableDepthTestDistance: 200000,
       },

@@ -1,0 +1,659 @@
+<iconset version="1" name="Generic Icons" defaultGroup="LetterPins" skipResize="false" uid="ad78aafb-83a6-4c07-b2b9-a897a8b6a38f">
+  <icon name="O Pin Invert.png" groupName="LetterPins"/>
+  <icon name="T Pin Invert.png" groupName="LetterPins"/>
+  <icon name="C Pin.png" groupName="LetterPins"/>
+  <icon name="M Pin.png" groupName="LetterPins"/>
+  <icon name="N Pin.png" groupName="LetterPins"/>
+  <icon name="V Pin.png" groupName="LetterPins"/>
+  <icon name="I Pin.png" groupName="LetterPins"/>
+  <icon name="K Pin.png" groupName="LetterPins"/>
+  <icon name="N Pin Invert.png" groupName="LetterPins"/>
+  <icon name="L Pin.png" groupName="LetterPins"/>
+  <icon name="D Pin.png" groupName="LetterPins"/>
+  <icon name="Y Pin Invert.png" groupName="LetterPins"/>
+  <icon name="T Pin.png" groupName="LetterPins"/>
+  <icon name="X Pin Invert.png" groupName="LetterPins"/>
+  <icon name="E Pin Invert.png" groupName="LetterPins"/>
+  <icon name="A Pin.png" groupName="LetterPins"/>
+  <icon name="C Pin Invert.png" groupName="LetterPins"/>
+  <icon name="B Pin.png" groupName="LetterPins"/>
+  <icon name="J Pin.png" groupName="LetterPins"/>
+  <icon name="I Pin Invert.png" groupName="LetterPins"/>
+  <icon name="B Pin Invert.png" groupName="LetterPins"/>
+  <icon name="G Pin Invert.png" groupName="LetterPins"/>
+  <icon name="R Pin Invert.png" groupName="LetterPins"/>
+  <icon name="U Pin Invert.png" groupName="LetterPins"/>
+  <icon name="U Pin.png" groupName="LetterPins"/>
+  <icon name="M Pin Invert.png" groupName="LetterPins"/>
+  <icon name="S Pin.png" groupName="LetterPins"/>
+  <icon name="S Pin Invert.png" groupName="LetterPins"/>
+  <icon name="P Pin.png" groupName="LetterPins"/>
+  <icon name="Y Pin.png" groupName="LetterPins"/>
+  <icon name="O Pin.png" groupName="LetterPins"/>
+  <icon name="V Pin Invert.png" groupName="LetterPins"/>
+  <icon name="Q Pin Invert.png" groupName="LetterPins"/>
+  <icon name="Z Pin.png" groupName="LetterPins"/>
+  <icon name="Q Pin.png" groupName="LetterPins"/>
+  <icon name="K Pin Invert.png" groupName="LetterPins"/>
+  <icon name="G Pin.png" groupName="LetterPins"/>
+  <icon name="P Pin Invert.png" groupName="LetterPins"/>
+  <icon name="A Pin Invert.png" groupName="LetterPins"/>
+  <icon name="X Pin.png" groupName="LetterPins"/>
+  <icon name="W Pin Invert.png" groupName="LetterPins"/>
+  <icon name="F Pin.png" groupName="LetterPins"/>
+  <icon name="H Pin.png" groupName="LetterPins"/>
+  <icon name="W Pin.png" groupName="LetterPins"/>
+  <icon name="E Pin.png" groupName="LetterPins"/>
+  <icon name="Z Pin Invert.png" groupName="LetterPins"/>
+  <icon name="J Pin Invert.png" groupName="LetterPins"/>
+  <icon name="F Pin Invert.png" groupName="LetterPins"/>
+  <icon name="L Pin Invert.png" groupName="LetterPins"/>
+  <icon name="H Pin Invert.png" groupName="LetterPins"/>
+  <icon name="D Pin Invert.png" groupName="LetterPins"/>
+  <icon name="R Pin.png" groupName="LetterPins"/>
+  <icon name="wht-square-lv.png" groupName="Markers"/>
+  <icon name="wht-square-lv Invert.png" groupName="Markers"/>
+  <icon name="wht-star Invert.png" groupName="Markers"/>
+  <icon name="wht-diamond Invert.png" groupName="Markers"/>
+  <icon name="wht-stars-lv.png" groupName="Markers"/>
+  <icon name="wht-stars-lv Invert.png" groupName="Markers"/>
+  <icon name="wht-blank.png" groupName="Markers"/>
+  <icon name="wht-diamond-lv Invert.png" groupName="Markers"/>
+  <icon name="wht-blank-lv Invert.png" groupName="Markers"/>
+  <icon name="wht-circle Invert.png" groupName="Markers"/>
+  <icon name="wht-diamond.png" groupName="Markers"/>
+  <icon name="wht-square.png" groupName="Markers"/>
+  <icon name="wht-diamond-lv.png" groupName="Markers"/>
+  <icon name="wht-blank-lv.png" groupName="Markers"/>
+  <icon name="wht-circle-lv Invert.png" groupName="Markers"/>
+  <icon name="wht-stars.png" groupName="Markers"/>
+  <icon name="wht-circle.png" groupName="Markers"/>
+  <icon name="wht-circle-lv.png" groupName="Markers"/>
+  <icon name="wht-square Invert.png" groupName="Markers"/>
+  <icon name="wht-blank Invert.png" groupName="Markers"/>
+  <icon name="76 Pin.png" groupName="NumPins"/>
+  <icon name="73 Pin Invert.png" groupName="NumPins"/>
+  <icon name="16 Pin Invert.png" groupName="NumPins"/>
+  <icon name="90 Pin.png" groupName="NumPins"/>
+  <icon name="47 Pin Invert.png" groupName="NumPins"/>
+  <icon name="39 Pin Invert.png" groupName="NumPins"/>
+  <icon name="32 Pin Invert.png" groupName="NumPins"/>
+  <icon name="81 Pin.png" groupName="NumPins"/>
+  <icon name="36 Pin Invert.png" groupName="NumPins"/>
+  <icon name="80 Pin.png" groupName="NumPins"/>
+  <icon name="49 Pin.png" groupName="NumPins"/>
+  <icon name="34 Pin.png" groupName="NumPins"/>
+  <icon name="52 Pin Invert.png" groupName="NumPins"/>
+  <icon name="23 Pin Invert.png" groupName="NumPins"/>
+  <icon name="09 Pin.png" groupName="NumPins"/>
+  <icon name="40 Pin Invert.png" groupName="NumPins"/>
+  <icon name="31 Pin Invert.png" groupName="NumPins"/>
+  <icon name="44 Pin.png" groupName="NumPins"/>
+  <icon name="71 Pin.png" groupName="NumPins"/>
+  <icon name="77 Pin Invert.png" groupName="NumPins"/>
+  <icon name="85 Pin Invert.png" groupName="NumPins"/>
+  <icon name="17 Pin.png" groupName="NumPins"/>
+  <icon name="48 Pin.png" groupName="NumPins"/>
+  <icon name="96 Pin Invert.png" groupName="NumPins"/>
+  <icon name="71 Pin Invert.png" groupName="NumPins"/>
+  <icon name="32 Pin.png" groupName="NumPins"/>
+  <icon name="25 Pin.png" groupName="NumPins"/>
+  <icon name="11 Pin.png" groupName="NumPins"/>
+  <icon name="20 Pin.png" groupName="NumPins"/>
+  <icon name="29 Pin.png" groupName="NumPins"/>
+  <icon name="28 Pin.png" groupName="NumPins"/>
+  <icon name="61 Pin Invert.png" groupName="NumPins"/>
+  <icon name="51 Pin Invert.png" groupName="NumPins"/>
+  <icon name="56 Pin.png" groupName="NumPins"/>
+  <icon name="95 Pin.png" groupName="NumPins"/>
+  <icon name="03 Pin Invert.png" groupName="NumPins"/>
+  <icon name="16 Pin.png" groupName="NumPins"/>
+  <icon name="45 Pin.png" groupName="NumPins"/>
+  <icon name="10 Pin Invert.png" groupName="NumPins"/>
+  <icon name="13 Pin Invert.png" groupName="NumPins"/>
+  <icon name="57 Pin Invert.png" groupName="NumPins"/>
+  <icon name="19 Pin Invert.png" groupName="NumPins"/>
+  <icon name="62 Pin Invert.png" groupName="NumPins"/>
+  <icon name="76 Pin Invert.png" groupName="NumPins"/>
+  <icon name="03 Pin.png" groupName="NumPins"/>
+  <icon name="35 Pin.png" groupName="NumPins"/>
+  <icon name="30 Pin Invert.png" groupName="NumPins"/>
+  <icon name="10 Pin.png" groupName="NumPins"/>
+  <icon name="74 Pin.png" groupName="NumPins"/>
+  <icon name="97 Pin.png" groupName="NumPins"/>
+  <icon name="22 Pin Invert.png" groupName="NumPins"/>
+  <icon name="65 Pin.png" groupName="NumPins"/>
+  <icon name="49 Pin Invert.png" groupName="NumPins"/>
+  <icon name="25 Pin Invert.png" groupName="NumPins"/>
+  <icon name="01 Pin.png" groupName="NumPins"/>
+  <icon name="24 Pin Invert.png" groupName="NumPins"/>
+  <icon name="08 Pin.png" groupName="NumPins"/>
+  <icon name="95 Pin Invert.png" groupName="NumPins"/>
+  <icon name="97 Pin Invert.png" groupName="NumPins"/>
+  <icon name="54 Pin Invert.png" groupName="NumPins"/>
+  <icon name="12 Pin Invert.png" groupName="NumPins"/>
+  <icon name="72 Pin.png" groupName="NumPins"/>
+  <icon name="21 Pin.png" groupName="NumPins"/>
+  <icon name="05 Pin.png" groupName="NumPins"/>
+  <icon name="70 Pin Invert.png" groupName="NumPins"/>
+  <icon name="07 Pin Invert.png" groupName="NumPins"/>
+  <icon name="88 Pin.png" groupName="NumPins"/>
+  <icon name="04 Pin Invert.png" groupName="NumPins"/>
+  <icon name="40 Pin.png" groupName="NumPins"/>
+  <icon name="68 Pin Invert.png" groupName="NumPins"/>
+  <icon name="46 Pin Invert.png" groupName="NumPins"/>
+  <icon name="64 Pin Invert.png" groupName="NumPins"/>
+  <icon name="98 Pin.png" groupName="NumPins"/>
+  <icon name="00 Pin Invert.png" groupName="NumPins"/>
+  <icon name="41 Pin Invert.png" groupName="NumPins"/>
+  <icon name="63 Pin Invert.png" groupName="NumPins"/>
+  <icon name="37 Pin Invert.png" groupName="NumPins"/>
+  <icon name="41 Pin.png" groupName="NumPins"/>
+  <icon name="72 Pin Invert.png" groupName="NumPins"/>
+  <icon name="14 Pin.png" groupName="NumPins"/>
+  <icon name="73 Pin.png" groupName="NumPins"/>
+  <icon name="22 Pin.png" groupName="NumPins"/>
+  <icon name="87 Pin Invert.png" groupName="NumPins"/>
+  <icon name="09 Pin Invert.png" groupName="NumPins"/>
+  <icon name="37 Pin.png" groupName="NumPins"/>
+  <icon name="01 Pin Invert.png" groupName="NumPins"/>
+  <icon name="84 Pin Invert.png" groupName="NumPins"/>
+  <icon name="13 Pin.png" groupName="NumPins"/>
+  <icon name="43 Pin Invert.png" groupName="NumPins"/>
+  <icon name="82 Pin.png" groupName="NumPins"/>
+  <icon name="59 Pin.png" groupName="NumPins"/>
+  <icon name="81 Pin Invert.png" groupName="NumPins"/>
+  <icon name="78 Pin Invert.png" groupName="NumPins"/>
+  <icon name="61 Pin.png" groupName="NumPins"/>
+  <icon name="07 Pin.png" groupName="NumPins"/>
+  <icon name="33 Pin Invert.png" groupName="NumPins"/>
+  <icon name="05  Pin Invert.png" groupName="NumPins"/>
+  <icon name="75 Pin Invert.png" groupName="NumPins"/>
+  <icon name="56 Pin Invert.png" groupName="NumPins"/>
+  <icon name="78 Pin.png" groupName="NumPins"/>
+  <icon name="86 Pin.png" groupName="NumPins"/>
+  <icon name="12 Pin.png" groupName="NumPins"/>
+  <icon name="29 Pin Invert.png" groupName="NumPins"/>
+  <icon name="33 Pin.png" groupName="NumPins"/>
+  <icon name="23 Pin.png" groupName="NumPins"/>
+  <icon name="94 Pin Invert.png" groupName="NumPins"/>
+  <icon name="15 Pin.png" groupName="NumPins"/>
+  <icon name="18 Pin Invert.png" groupName="NumPins"/>
+  <icon name="21 Pin Invert.png" groupName="NumPins"/>
+  <icon name="54 Pin.png" groupName="NumPins"/>
+  <icon name="91 Pin Invert.png" groupName="NumPins"/>
+  <icon name="52 Pin.png" groupName="NumPins"/>
+  <icon name="84 Pin.png" groupName="NumPins"/>
+  <icon name="30 Pin.png" groupName="NumPins"/>
+  <icon name="44 Pin Invert.png" groupName="NumPins"/>
+  <icon name="26 Pin.png" groupName="NumPins"/>
+  <icon name="85 Pin.png" groupName="NumPins"/>
+  <icon name="93 Pin.png" groupName="NumPins"/>
+  <icon name="83 Pin.png" groupName="NumPins"/>
+  <icon name="48 Pin Invert.png" groupName="NumPins"/>
+  <icon name="86 Pin Invert.png" groupName="NumPins"/>
+  <icon name="79 Pin.png" groupName="NumPins"/>
+  <icon name="17 Pin Invert.png" groupName="NumPins"/>
+  <icon name="87 Pin.png" groupName="NumPins"/>
+  <icon name="35 Pin Invert.png" groupName="NumPins"/>
+  <icon name="50 Pin.png" groupName="NumPins"/>
+  <icon name="27 Pin.png" groupName="NumPins"/>
+  <icon name="63 Pin.png" groupName="NumPins"/>
+  <icon name="53 Pin Invert.png" groupName="NumPins"/>
+  <icon name="83 Pin Invert.png" groupName="NumPins"/>
+  <icon name="68 Pin.png" groupName="NumPins"/>
+  <icon name="51 Pin.png" groupName="NumPins"/>
+  <icon name="55 Pin.png" groupName="NumPins"/>
+  <icon name="82 Pin Invert.png" groupName="NumPins"/>
+  <icon name="74 Pin Invert.png" groupName="NumPins"/>
+  <icon name="90 Pin Invert.png" groupName="NumPins"/>
+  <icon name="24 Pin.png" groupName="NumPins"/>
+  <icon name="67 Pin Invert.png" groupName="NumPins"/>
+  <icon name="91 Pin.png" groupName="NumPins"/>
+  <icon name="06 Pin Invert.png" groupName="NumPins"/>
+  <icon name="39 Pin.png" groupName="NumPins"/>
+  <icon name="66 Pin.png" groupName="NumPins"/>
+  <icon name="04 Pin.png" groupName="NumPins"/>
+  <icon name="34 Pin Invert.png" groupName="NumPins"/>
+  <icon name="58 Pin.png" groupName="NumPins"/>
+  <icon name="89 Pin Invert.png" groupName="NumPins"/>
+  <icon name="96 Pin.png" groupName="NumPins"/>
+  <icon name="28 Pin Invert.png" groupName="NumPins"/>
+  <icon name="20 Pin Invert.png" groupName="NumPins"/>
+  <icon name="92 Pin.png" groupName="NumPins"/>
+  <icon name="93 Pin Invert.png" groupName="NumPins"/>
+  <icon name="59 Pin Invert.png" groupName="NumPins"/>
+  <icon name="38 Pin Invert.png" groupName="NumPins"/>
+  <icon name="42 Pin.png" groupName="NumPins"/>
+  <icon name="88 Pin Invert.png" groupName="NumPins"/>
+  <icon name="08 Pin Invert.png" groupName="NumPins"/>
+  <icon name="57 Pin.png" groupName="NumPins"/>
+  <icon name="53 Pin.png" groupName="NumPins"/>
+  <icon name="94 Pin.png" groupName="NumPins"/>
+  <icon name="55 Pin Invert.png" groupName="NumPins"/>
+  <icon name="98 Pin Invert.png" groupName="NumPins"/>
+  <icon name="69 Pin Invert.png" groupName="NumPins"/>
+  <icon name="47 Pin.png" groupName="NumPins"/>
+  <icon name="26 Pin Invert.png" groupName="NumPins"/>
+  <icon name="64 Pin.png" groupName="NumPins"/>
+  <icon name="79 Pin Invert.png" groupName="NumPins"/>
+  <icon name="00 Pin.png" groupName="NumPins"/>
+  <icon name="66 Pin Invert.png" groupName="NumPins"/>
+  <icon name="60 Pin.png" groupName="NumPins"/>
+  <icon name="06 Pin.png" groupName="NumPins"/>
+  <icon name="02 Pin.png" groupName="NumPins"/>
+  <icon name="36 Pin.png" groupName="NumPins"/>
+  <icon name="92 Pin Invert.png" groupName="NumPins"/>
+  <icon name="77 Pin.png" groupName="NumPins"/>
+  <icon name="65 Pin Invert.png" groupName="NumPins"/>
+  <icon name="46 Pin.png" groupName="NumPins"/>
+  <icon name="18 Pin.png" groupName="NumPins"/>
+  <icon name="31 Pin.png" groupName="NumPins"/>
+  <icon name="38 Pin.png" groupName="NumPins"/>
+  <icon name="42 Pin Invert.png" groupName="NumPins"/>
+  <icon name="11 Pin Invert.png" groupName="NumPins"/>
+  <icon name="45 Pin Invert.png" groupName="NumPins"/>
+  <icon name="62 Pin.png" groupName="NumPins"/>
+  <icon name="58 Pin Invert.png" groupName="NumPins"/>
+  <icon name="27 Pin Invert.png" groupName="NumPins"/>
+  <icon name="99 Pin Invert.png" groupName="NumPins"/>
+  <icon name="14 Pin Invert.png" groupName="NumPins"/>
+  <icon name="50 Pin Invert.png" groupName="NumPins"/>
+  <icon name="15 Pin Invert.png" groupName="NumPins"/>
+  <icon name="69 Pin.png" groupName="NumPins"/>
+  <icon name="89 Pin.png" groupName="NumPins"/>
+  <icon name="02 Pin Invert.png" groupName="NumPins"/>
+  <icon name="60 Pin Invert.png" groupName="NumPins"/>
+  <icon name="43 Pin.png" groupName="NumPins"/>
+  <icon name="80 Pin Invert.png" groupName="NumPins"/>
+  <icon name="70 Pin.png" groupName="NumPins"/>
+  <icon name="67 Pin.png" groupName="NumPins"/>
+  <icon name="99 Pin.png" groupName="NumPins"/>
+  <icon name="75 Pin.png" groupName="NumPins"/>
+  <icon name="19 Pin.png" groupName="NumPins"/>
+  <icon name="247.png" groupName="Pointers"/>
+  <icon name="315.png" groupName="Pointers"/>
+  <icon name="240.png" groupName="Pointers"/>
+  <icon name="022.png" groupName="Pointers"/>
+  <icon name="120.png" groupName="Pointers"/>
+  <icon name="330.png" groupName="Pointers"/>
+  <icon name="135.png" groupName="Pointers"/>
+  <icon name="270.png" groupName="Pointers"/>
+  <icon name="000.png" groupName="Pointers"/>
+  <icon name="225.png" groupName="Pointers"/>
+  <icon name="030.png" groupName="Pointers"/>
+  <icon name="300.png" groupName="Pointers"/>
+  <icon name="202.png" groupName="Pointers"/>
+  <icon name="060.png" groupName="Pointers"/>
+  <icon name="150.png" groupName="Pointers"/>
+  <icon name="210.png" groupName="Pointers"/>
+  <icon name="045.png" groupName="Pointers"/>
+  <icon name="180.png" groupName="Pointers"/>
+  <icon name="112.png" groupName="Pointers"/>
+  <icon name="292.png" groupName="Pointers"/>
+  <icon name="track-none.png" groupName="Pointers"/>
+  <icon name="157.png" groupName="Pointers"/>
+  <icon name="337.png" groupName="Pointers"/>
+  <icon name="067.png" groupName="Pointers"/>
+  <icon name="090.png" groupName="Pointers"/>
+  <icon name="truck.png" groupName="Shapes"/>
+  <icon name="info_circle.png" groupName="Shapes"/>
+  <icon name="mechanic.png" groupName="Shapes"/>
+  <icon name="square.png" groupName="Shapes"/>
+  <icon name="camera.png" groupName="Shapes"/>
+  <icon name="partly_cloudy.png" groupName="Shapes"/>
+  <icon name="swimming.png" groupName="Shapes"/>
+  <icon name="volcano.png" groupName="Shapes"/>
+  <icon name="cabs.png" groupName="Shapes"/>
+  <icon name="homegardenbusiness.png" groupName="Shapes"/>
+  <icon name="euro.png" groupName="Shapes"/>
+  <icon name="golf.png" groupName="Shapes"/>
+  <icon name="airports.png" groupName="Shapes"/>
+  <icon name="capital_big.png" groupName="Shapes"/>
+  <icon name="info-i.png" groupName="Shapes"/>
+  <icon name="sailing.png" groupName="Shapes"/>
+  <icon name="earthquake.png" groupName="Shapes"/>
+  <icon name="ranger_station.png" groupName="Shapes"/>
+  <icon name="picnic.png" groupName="Shapes"/>
+  <icon name="toilets.png" groupName="Shapes"/>
+  <icon name="hiker.png" groupName="Shapes"/>
+  <icon name="snowflake_simple.png" groupName="Shapes"/>
+  <icon name="convenience.png" groupName="Shapes"/>
+  <icon name="phone.png" groupName="Shapes"/>
+  <icon name="bus.png" groupName="Shapes"/>
+  <icon name="woman.png" groupName="Shapes"/>
+  <icon name="rainy.png" groupName="Shapes"/>
+  <icon name="parking_lot.png" groupName="Shapes"/>
+  <icon name="police.png" groupName="Shapes"/>
+  <icon name="sunny.png" groupName="Shapes"/>
+  <icon name="dollar.png" groupName="Shapes"/>
+  <icon name="man.png" groupName="Shapes"/>
+  <icon name="tram.png" groupName="Shapes"/>
+  <icon name="firedept.png" groupName="Shapes"/>
+  <icon name="wheel_chair_accessible.png" groupName="Shapes"/>
+  <icon name="triangle.png" groupName="Shapes"/>
+  <icon name="movies.png" groupName="Shapes"/>
+  <icon name="shopping.png" groupName="Shapes"/>
+  <icon name="cycling.png" groupName="Shapes"/>
+  <icon name="polygon.png" groupName="Shapes"/>
+  <icon name="trail.png" groupName="Shapes"/>
+  <icon name="forbidden.png" groupName="Shapes"/>
+  <icon name="campfire.png" groupName="Shapes"/>
+  <icon name="motorcycling.png" groupName="Shapes"/>
+  <icon name="yen.png" groupName="Shapes"/>
+  <icon name="target.png" groupName="Shapes"/>
+  <icon name="campground.png" groupName="Shapes"/>
+  <icon name="subway.png" groupName="Shapes"/>
+  <icon name="ferry.png" groupName="Shapes"/>
+  <icon name="caution.png" groupName="Shapes"/>
+  <icon name="lodging.png" groupName="Shapes"/>
+  <icon name="dining.png" groupName="Shapes"/>
+  <icon name="play.png" groupName="Shapes"/>
+  <icon name="schools.png" groupName="Shapes"/>
+  <icon name="coffee.png" groupName="Shapes"/>
+  <icon name="flag.png" groupName="Shapes"/>
+  <icon name="snack_bar.png" groupName="Shapes"/>
+  <icon name="donut.png" groupName="Shapes"/>
+  <icon name="ski.png" groupName="Shapes"/>
+  <icon name="poi.png" groupName="Shapes"/>
+  <icon name="water.png" groupName="Shapes"/>
+  <icon name="parks.png" groupName="Shapes"/>
+  <icon name="rail.png" groupName="Shapes"/>
+  <icon name="marina.png" groupName="Shapes"/>
+  <icon name="placemark_square.png" groupName="Shapes"/>
+  <icon name="horsebackriding.png" groupName="Shapes"/>
+  <icon name="falling_rocks.png" groupName="Shapes"/>
+  <icon name="star.png" groupName="Shapes"/>
+  <icon name="electronics.png" groupName="Shapes"/>
+  <icon name="mountains.png" groupName="Shapes"/>
+  <icon name="post_office.png" groupName="Shapes"/>
+  <icon name="placemark_circle.png" groupName="Shapes"/>
+  <icon name="church.png" groupName="Shapes"/>
+  <icon name="heliport.png" groupName="Shapes"/>
+  <icon name="realestate.png" groupName="Shapes"/>
+  <icon name="arts.png" groupName="Shapes"/>
+  <icon name="capital_small.png" groupName="Shapes"/>
+  <icon name="grocery.png" groupName="Shapes"/>
+  <icon name="hospitals.png" groupName="Shapes"/>
+  <icon name="salon.png" groupName="Shapes"/>
+  <icon name="pharmacy_rx.png" groupName="Shapes"/>
+  <icon name="open-diamond.png" groupName="Shapes"/>
+  <icon name="gas_stations.png" groupName="Shapes"/>
+  <icon name="fishing.png" groupName="Shapes"/>
+  <icon name="webcam.png" groupName="Shapes"/>
+  <icon name="thunderstorm.png" groupName="Shapes"/>
+  <icon name="bars.png" groupName="Shapes"/>
+  <icon name="road_shield1.png" groupName="ShapesClr"/>
+  <icon name="ruler.png" groupName="ShapesClr"/>
+  <icon name="capital_big_highlight.png" groupName="ShapesClr"/>
+  <icon name="placemark_circle_highlight.png" groupName="ShapesClr"/>
+  <icon name="info.png" groupName="ShapesClr"/>
+  <icon name="terrain.png" groupName="ShapesClr"/>
+  <icon name="road_shield2.png" groupName="ShapesClr"/>
+  <icon name="placemark_square_highlight.png" groupName="ShapesClr"/>
+  <icon name="shaded_dot.png" groupName="ShapesClr"/>
+  <icon name="capital_small_highlight.png" groupName="ShapesClr"/>
+  <icon name="highway.png" groupName="ShapesClr"/>
+  <icon name="road_shield3.png" groupName="ShapesClr"/>
+  <icon name="K Square.png" groupName="SqrLetters"/>
+  <icon name="Z Square Invert.png" groupName="SqrLetters"/>
+  <icon name="C Square Invert.png" groupName="SqrLetters"/>
+  <icon name="X Square.png" groupName="SqrLetters"/>
+  <icon name="U Square Invert.png" groupName="SqrLetters"/>
+  <icon name="A Square Invert.png" groupName="SqrLetters"/>
+  <icon name="L Square Invert.png" groupName="SqrLetters"/>
+  <icon name="B Square Invert.png" groupName="SqrLetters"/>
+  <icon name="J Square.png" groupName="SqrLetters"/>
+  <icon name="G Square.png" groupName="SqrLetters"/>
+  <icon name="E Square.png" groupName="SqrLetters"/>
+  <icon name="H Square Invert.png" groupName="SqrLetters"/>
+  <icon name="Y Square Invert.png" groupName="SqrLetters"/>
+  <icon name="I Square.png" groupName="SqrLetters"/>
+  <icon name="W Square.png" groupName="SqrLetters"/>
+  <icon name="N Square Invert.png" groupName="SqrLetters"/>
+  <icon name="Y Square.png" groupName="SqrLetters"/>
+  <icon name="D Square Invert.png" groupName="SqrLetters"/>
+  <icon name="Q Square.png" groupName="SqrLetters"/>
+  <icon name="K Square Invert.png" groupName="SqrLetters"/>
+  <icon name="M Square.png" groupName="SqrLetters"/>
+  <icon name="L Square.png" groupName="SqrLetters"/>
+  <icon name="M Square Invert.png" groupName="SqrLetters"/>
+  <icon name="O Square Invert.png" groupName="SqrLetters"/>
+  <icon name="X Square Invert.png" groupName="SqrLetters"/>
+  <icon name="W Square Invert.png" groupName="SqrLetters"/>
+  <icon name="P Square Invert.png" groupName="SqrLetters"/>
+  <icon name="P Square.png" groupName="SqrLetters"/>
+  <icon name="Z Square.png" groupName="SqrLetters"/>
+  <icon name="S Square Invert.png" groupName="SqrLetters"/>
+  <icon name="T Square Invert.png" groupName="SqrLetters"/>
+  <icon name="J Square Invert.png" groupName="SqrLetters"/>
+  <icon name="N Square.png" groupName="SqrLetters"/>
+  <icon name="F Square.png" groupName="SqrLetters"/>
+  <icon name="A Square.png" groupName="SqrLetters"/>
+  <icon name="I Square Invert.png" groupName="SqrLetters"/>
+  <icon name="T Square.png" groupName="SqrLetters"/>
+  <icon name="R Square Invert.png" groupName="SqrLetters"/>
+  <icon name="E Square Invert.png" groupName="SqrLetters"/>
+  <icon name="H Square.png" groupName="SqrLetters"/>
+  <icon name="F Square Invert.png" groupName="SqrLetters"/>
+  <icon name="D Square.png" groupName="SqrLetters"/>
+  <icon name="Q Square Invert.png" groupName="SqrLetters"/>
+  <icon name="O Square.png" groupName="SqrLetters"/>
+  <icon name="R Square.png" groupName="SqrLetters"/>
+  <icon name="G Square Invert.png" groupName="SqrLetters"/>
+  <icon name="B Square.png" groupName="SqrLetters"/>
+  <icon name="C Square.png" groupName="SqrLetters"/>
+  <icon name="U Square.png" groupName="SqrLetters"/>
+  <icon name="S Square.png" groupName="SqrLetters"/>
+  <icon name="V Square.png" groupName="SqrLetters"/>
+  <icon name="V Square Invert.png" groupName="SqrLetters"/>
+  <icon name="62 Square Invert.png" groupName="SqrNum"/>
+  <icon name="39 Square Invert.png" groupName="SqrNum"/>
+  <icon name="79 Square Invert.png" groupName="SqrNum"/>
+  <icon name="65 Square.png" groupName="SqrNum"/>
+  <icon name="13 Square Invert.png" groupName="SqrNum"/>
+  <icon name="78 Square.png" groupName="SqrNum"/>
+  <icon name="33 Square.png" groupName="SqrNum"/>
+  <icon name="98 Square Invert.png" groupName="SqrNum"/>
+  <icon name="16 Square Invert.png" groupName="SqrNum"/>
+  <icon name="53 Square Invert.png" groupName="SqrNum"/>
+  <icon name="69 Square Invert.png" groupName="SqrNum"/>
+  <icon name="19 Square.png" groupName="SqrNum"/>
+  <icon name="11 Square Invert.png" groupName="SqrNum"/>
+  <icon name="95 Square Invert.png" groupName="SqrNum"/>
+  <icon name="78 Square Invert.png" groupName="SqrNum"/>
+  <icon name="04 Square Invert.png" groupName="SqrNum"/>
+  <icon name="25 Square.png" groupName="SqrNum"/>
+  <icon name="42 Square Invert.png" groupName="SqrNum"/>
+  <icon name="30 Square Invert.png" groupName="SqrNum"/>
+  <icon name="23 Square.png" groupName="SqrNum"/>
+  <icon name="16 Square.png" groupName="SqrNum"/>
+  <icon name="71 Square Invert.png" groupName="SqrNum"/>
+  <icon name="05 Square Invert.png" groupName="SqrNum"/>
+  <icon name="10 Square.png" groupName="SqrNum"/>
+  <icon name="57 Square.png" groupName="SqrNum"/>
+  <icon name="99 Square.png" groupName="SqrNum"/>
+  <icon name="26 Square Invert.png" groupName="SqrNum"/>
+  <icon name="79 Square.png" groupName="SqrNum"/>
+  <icon name="86 Square Invert.png" groupName="SqrNum"/>
+  <icon name="11 Square.png" groupName="SqrNum"/>
+  <icon name="93 Square Invert.png" groupName="SqrNum"/>
+  <icon name="04 Square.png" groupName="SqrNum"/>
+  <icon name="24 Square.png" groupName="SqrNum"/>
+  <icon name="80 Square Invert.png" groupName="SqrNum"/>
+  <icon name="32 Square Invert.png" groupName="SqrNum"/>
+  <icon name="65 Square Invert.png" groupName="SqrNum"/>
+  <icon name="61 Square Invert.png" groupName="SqrNum"/>
+  <icon name="45 Square Invert.png" groupName="SqrNum"/>
+  <icon name="82 Square Invert.png" groupName="SqrNum"/>
+  <icon name="85 Square.png" groupName="SqrNum"/>
+  <icon name="76 Square.png" groupName="SqrNum"/>
+  <icon name="31 Square.png" groupName="SqrNum"/>
+  <icon name="81 Square.png" groupName="SqrNum"/>
+  <icon name="55 Square Invert.png" groupName="SqrNum"/>
+  <icon name="00 Square Invert.png" groupName="SqrNum"/>
+  <icon name="29 Square.png" groupName="SqrNum"/>
+  <icon name="88 Square.png" groupName="SqrNum"/>
+  <icon name="83 Square Invert.png" groupName="SqrNum"/>
+  <icon name="83 Square.png" groupName="SqrNum"/>
+  <icon name="41 Square Invert.png" groupName="SqrNum"/>
+  <icon name="58 Square.png" groupName="SqrNum"/>
+  <icon name="54 Square.png" groupName="SqrNum"/>
+  <icon name="08 Square.png" groupName="SqrNum"/>
+  <icon name="22 Square Invert.png" groupName="SqrNum"/>
+  <icon name="82 Square.png" groupName="SqrNum"/>
+  <icon name="47 Square.png" groupName="SqrNum"/>
+  <icon name="30 Square.png" groupName="SqrNum"/>
+  <icon name="09 Square Invert.png" groupName="SqrNum"/>
+  <icon name="67 Square.png" groupName="SqrNum"/>
+  <icon name="00 Square.png" groupName="SqrNum"/>
+  <icon name="99 Square Invert.png" groupName="SqrNum"/>
+  <icon name="34 Square.png" groupName="SqrNum"/>
+  <icon name="49 Square Invert.png" groupName="SqrNum"/>
+  <icon name="44 Square.png" groupName="SqrNum"/>
+  <icon name="06 Square.png" groupName="SqrNum"/>
+  <icon name="89 Square Invert.png" groupName="SqrNum"/>
+  <icon name="41 Square.png" groupName="SqrNum"/>
+  <icon name="52 Square.png" groupName="SqrNum"/>
+  <icon name="97 Square.png" groupName="SqrNum"/>
+  <icon name="64 Square Invert.png" groupName="SqrNum"/>
+  <icon name="12 Square Invert.png" groupName="SqrNum"/>
+  <icon name="87 Square.png" groupName="SqrNum"/>
+  <icon name="80 Square.png" groupName="SqrNum"/>
+  <icon name="36 Square Invert.png" groupName="SqrNum"/>
+  <icon name="50 Square Invert.png" groupName="SqrNum"/>
+  <icon name="91 Square.png" groupName="SqrNum"/>
+  <icon name="18 Square Invert.png" groupName="SqrNum"/>
+  <icon name="36 Square.png" groupName="SqrNum"/>
+  <icon name="66 Square Invert.png" groupName="SqrNum"/>
+  <icon name="92 Square.png" groupName="SqrNum"/>
+  <icon name="21 Square Invert.png" groupName="SqrNum"/>
+  <icon name="15 Square.png" groupName="SqrNum"/>
+  <icon name="90 Square.png" groupName="SqrNum"/>
+  <icon name="58 Square Invert.png" groupName="SqrNum"/>
+  <icon name="17 Square Invert.png" groupName="SqrNum"/>
+  <icon name="72 Square.png" groupName="SqrNum"/>
+  <icon name="57 Square Invert.png" groupName="SqrNum"/>
+  <icon name="29 Square Invert.png" groupName="SqrNum"/>
+  <icon name="49 Square.png" groupName="SqrNum"/>
+  <icon name="07 Square.png" groupName="SqrNum"/>
+  <icon name="84 Square.png" groupName="SqrNum"/>
+  <icon name="12 Square.png" groupName="SqrNum"/>
+  <icon name="23 Square Invert.png" groupName="SqrNum"/>
+  <icon name="75 Square.png" groupName="SqrNum"/>
+  <icon name="28 Square.png" groupName="SqrNum"/>
+  <icon name="18 Square.png" groupName="SqrNum"/>
+  <icon name="47 Square Invert.png" groupName="SqrNum"/>
+  <icon name="46 Square Invert.png" groupName="SqrNum"/>
+  <icon name="39 Square.png" groupName="SqrNum"/>
+  <icon name="03 Square Invert.png" groupName="SqrNum"/>
+  <icon name="19 Square Invert.png" groupName="SqrNum"/>
+  <icon name="73 Square.png" groupName="SqrNum"/>
+  <icon name="35 Square.png" groupName="SqrNum"/>
+  <icon name="60 Square.png" groupName="SqrNum"/>
+  <icon name="22 Square.png" groupName="SqrNum"/>
+  <icon name="34 Square Invert.png" groupName="SqrNum"/>
+  <icon name="70 Square.png" groupName="SqrNum"/>
+  <icon name="40 Square Invert.png" groupName="SqrNum"/>
+  <icon name="92 Square Invert.png" groupName="SqrNum"/>
+  <icon name="08 Square Invert.png" groupName="SqrNum"/>
+  <icon name="44 Square Invert.png" groupName="SqrNum"/>
+  <icon name="77 Square Invert.png" groupName="SqrNum"/>
+  <icon name="68 Square Invert.png" groupName="SqrNum"/>
+  <icon name="45 Square.png" groupName="SqrNum"/>
+  <icon name="05 Square.png" groupName="SqrNum"/>
+  <icon name="07 Square Invert.png" groupName="SqrNum"/>
+  <icon name="25 Square Invert.png" groupName="SqrNum"/>
+  <icon name="Blank Square.png" groupName="SqrNum"/>
+  <icon name="74 Square.png" groupName="SqrNum"/>
+  <icon name="93 Square.png" groupName="SqrNum"/>
+  <icon name="20 Square.png" groupName="SqrNum"/>
+  <icon name="91 Square Invert.png" groupName="SqrNum"/>
+  <icon name="43 Square Invert.png" groupName="SqrNum"/>
+  <icon name="98 Square.png" groupName="SqrNum"/>
+  <icon name="06 Square Invert.png" groupName="SqrNum"/>
+  <icon name="32 Square.png" groupName="SqrNum"/>
+  <icon name="69 Square.png" groupName="SqrNum"/>
+  <icon name="88 Square Invert.png" groupName="SqrNum"/>
+  <icon name="31 Square Invert.png" groupName="SqrNum"/>
+  <icon name="74 Square Invert.png" groupName="SqrNum"/>
+  <icon name="81 Square Invert.png" groupName="SqrNum"/>
+  <icon name="38 Square Invert.png" groupName="SqrNum"/>
+  <icon name="97 Square Invert.png" groupName="SqrNum"/>
+  <icon name="51 Square Invert.png" groupName="SqrNum"/>
+  <icon name="75 Square Invert.png" groupName="SqrNum"/>
+  <icon name="56 Square Invert.png" groupName="SqrNum"/>
+  <icon name="84 Square Invert.png" groupName="SqrNum"/>
+  <icon name="59 Square.png" groupName="SqrNum"/>
+  <icon name="61 Square.png" groupName="SqrNum"/>
+  <icon name="43 Square.png" groupName="SqrNum"/>
+  <icon name="59 Square Invert.png" groupName="SqrNum"/>
+  <icon name="09 Square.png" groupName="SqrNum"/>
+  <icon name="40 Square.png" groupName="SqrNum"/>
+  <icon name="01 Square.png" groupName="SqrNum"/>
+  <icon name="70 Square Invert.png" groupName="SqrNum"/>
+  <icon name="20 Square Invert.png" groupName="SqrNum"/>
+  <icon name="50 Square.png" groupName="SqrNum"/>
+  <icon name="54 Square Invert.png" groupName="SqrNum"/>
+  <icon name="46 Square.png" groupName="SqrNum"/>
+  <icon name="27 Square Invert.png" groupName="SqrNum"/>
+  <icon name="37 Square.png" groupName="SqrNum"/>
+  <icon name="38 Square.png" groupName="SqrNum"/>
+  <icon name="01 Square Invert.png" groupName="SqrNum"/>
+  <icon name="14 Square Invert.png" groupName="SqrNum"/>
+  <icon name="53 Square.png" groupName="SqrNum"/>
+  <icon name="66 Square.png" groupName="SqrNum"/>
+  <icon name="14 Square.png" groupName="SqrNum"/>
+  <icon name="85 Square Invert.png" groupName="SqrNum"/>
+  <icon name="71 Square.png" groupName="SqrNum"/>
+  <icon name="96 Square Invert.png" groupName="SqrNum"/>
+  <icon name="21 Square.png" groupName="SqrNum"/>
+  <icon name="28 Square Invert.png" groupName="SqrNum"/>
+  <icon name="63 Square.png" groupName="SqrNum"/>
+  <icon name="51 Square.png" groupName="SqrNum"/>
+  <icon name="35 Square Invert.png" groupName="SqrNum"/>
+  <icon name="86 Square.png" groupName="SqrNum"/>
+  <icon name="87 Square Invert.png" groupName="SqrNum"/>
+  <icon name="64 Square.png" groupName="SqrNum"/>
+  <icon name="42 Square.png" groupName="SqrNum"/>
+  <icon name="96 Square.png" groupName="SqrNum"/>
+  <icon name="17 Square.png" groupName="SqrNum"/>
+  <icon name="52 Square Invert.png" groupName="SqrNum"/>
+  <icon name="15 Square Invert.png" groupName="SqrNum"/>
+  <icon name="55 Square.png" groupName="SqrNum"/>
+  <icon name="72 Square Invert.png" groupName="SqrNum"/>
+  <icon name="67 Square Invert.png" groupName="SqrNum"/>
+  <icon name="60 Square Invert.png" groupName="SqrNum"/>
+  <icon name="26 Square.png" groupName="SqrNum"/>
+  <icon name="73 Square Invert.png" groupName="SqrNum"/>
+  <icon name="03 Square.png" groupName="SqrNum"/>
+  <icon name="94 Square Invert.png" groupName="SqrNum"/>
+  <icon name="68 Square.png" groupName="SqrNum"/>
+  <icon name="02 Square Invert.png" groupName="SqrNum"/>
+  <icon name="94 Square.png" groupName="SqrNum"/>
+  <icon name="77 Square.png" groupName="SqrNum"/>
+  <icon name="95 Square.png" groupName="SqrNum"/>
+  <icon name="10 Square Invert.png" groupName="SqrNum"/>
+  <icon name="63 Square Invert.png" groupName="SqrNum"/>
+  <icon name="56 Square.png" groupName="SqrNum"/>
+  <icon name="89 Square.png" groupName="SqrNum"/>
+  <icon name="48 Square Invert.png" groupName="SqrNum"/>
+  <icon name="90 Square Invert.png" groupName="SqrNum"/>
+  <icon name="33 Square Invert.png" groupName="SqrNum"/>
+  <icon name="37 Square Invert.png" groupName="SqrNum"/>
+  <icon name="24 Square Invert.png" groupName="SqrNum"/>
+  <icon name="76 Square Invert.png" groupName="SqrNum"/>
+  <icon name="27 Square.png" groupName="SqrNum"/>
+  <icon name="02 Square.png" groupName="SqrNum"/>
+  <icon name="48 Square.png" groupName="SqrNum"/>
+  <icon name="13 Square.png" groupName="SqrNum"/>
+  <icon name="62 Square.png" groupName="SqrNum"/>
+  <icon name="purple-pushpin.png" groupName="Tacks"/>
+  <icon name="red-pushpin.png" groupName="Tacks"/>
+  <icon name="ylw-pushpin.png" groupName="Tacks"/>
+  <icon name="ltblu-pushpin.png" groupName="Tacks"/>
+  <icon name="pink-pushpin.png" groupName="Tacks"/>
+  <icon name="grn-pushpin.png" groupName="Tacks"/>
+  <icon name="1wht-pushpin.png" groupName="Tacks"/>
+  <icon name="blue-pushpin.png" groupName="Tacks"/>
+</iconset>
