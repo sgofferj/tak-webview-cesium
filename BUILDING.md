@@ -133,6 +133,37 @@ The application will be available at `http://localhost:8000`.
 
 The project includes a GitHub Action to build and push images for both `amd64` and `arm64` architectures.
 
+## Custom Imagery Configuration
+
+You can configure custom map layers by creating a `customlayers.json` file in the project root. This file is a JSON array of layer objects.
+
+Example `customlayers.json`:
+```json
+[
+  {
+    "name": "My WMS Layer",
+    "type": "wms",
+    "url": "https://example.com/wms?",
+    "layers": "my_layer_name",
+    "attribution": "© My Provider"
+  },
+  {
+    "name": "OpenStreetMap",
+    "type": "xyz",
+    "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "attribution": "© OpenStreetMap contributors"
+  }
+]
+```
+
+### Supported Layer Types
+- `wms`: Web Map Service.
+- `xyz` / `tms`: Tiled map services using `{z}/{x}/{y}` templates.
+- `arcgis`: ArcGIS MapServer layers.
+
+### Automatic Extent Discovery
+For `wms` layers, if you omit the `rectangle` field, the backend will automatically attempt to fetch the layer's extent using a `GetCapabilities` request. You can also manually specify it as `[minLon, minLat, maxLon, maxLat]`.
+
 ## Environment Configuration
 
 Copy `.env.example` to `.env` in both `backend` and `frontend` directories (or use a root `.env` if using Docker) and fill in your TAK Server details and Cesium Ion token.
