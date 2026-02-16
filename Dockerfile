@@ -4,8 +4,6 @@ WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
-# VITE_WS_HOST is not strictly needed if serving from the same host/port, 
-# but we'll keep it for flexibility. If empty, the frontend uses window.location.host.
 ARG VITE_WS_HOST=""
 ENV VITE_WS_HOST=$VITE_WS_HOST
 ARG VITE_CESIUM_ION_TOKEN=""
@@ -16,21 +14,22 @@ RUN npm run build
 FROM python:3.11-slim
 WORKDIR /app
 
-# Install poetry
-RUN pip install poetry
-
 # Copy backend dependency files
-COPY backend/pyproject.toml backend/poetry.lock* ./
-RUN poetry config virtualenvs.create false \
-    && poetry install --no-interaction --no-ansi --no-root
-
-# Copy frontend build to a 'static' folder the backend expects
-COPY --from=frontend-build /frontend/dist ./static
+COPY backend/pyproject.toml ./
+RUN pip install poetry && poetry config virtualenvs.create false \
+    && poetry install --no-interaction --no-ansi --no-root --no-directory
 
 # Copy backend source code
-COPY backend/ .
+COPY backend/main.py ./
+COPY backend/app ./app
 
-# Copy iconsets from frontend to the location the backend expects
+# Copy frontend build to the location backend expects (frontend/dist relative to project root)
+# The backend app/main.py expects static_dir = BASE_DIR/frontend/dist
+# where BASE_DIR is project root.
+# In the container, /app is the project root.
+COPY --from=frontend-build /frontend/dist ./frontend/dist
+
+# Copy iconsets
 COPY frontend/iconsets /iconsets
 
 # Ensure necessary directories exist
