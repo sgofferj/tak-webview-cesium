@@ -374,6 +374,8 @@ export function updateEntity(data) {
         state.entity.billboard.pixelOffset = new Cartesian2(0, 0);
         state.lastIconUrl = iconsetUrl;
         iconCanvas = null;
+        // TINT: Only if color was provided in COT
+        state.entity.billboard.color = color ? cesiumColor : Color.WHITE;
       } else {
         const isAircraft = type.split("-")[2] === "A";
         const symbolOptions = { size: 21, padding: 5 };
@@ -389,6 +391,8 @@ export function updateEntity(data) {
         iconCanvas = symbol.asCanvas();
         iconAnchor = symbol.getAnchor();
         iconSize = symbol.getSize();
+        // NO TINT for milsymbol (color is in canvas)
+        state.entity.billboard.color = Color.WHITE;
       }
 
       if (iconCanvas) {
@@ -401,7 +405,6 @@ export function updateEntity(data) {
         );
         state.lastIconUrl = iconCanvas.toDataURL();
       }
-      state.entity.billboard.color = cesiumColor;
       state.lastStateKey = stateKey;
       state.lastRgbColor = rgbColor;
     }
@@ -500,7 +503,8 @@ export function updateEntity(data) {
         verticalOrigin: VerticalOrigin.CENTER,
         eyeOffset: new Cartesian3(0, 0, -10),
         disableDepthTestDistance: 200000,
-        color: cesiumColor,
+        // Set initial color based on data
+        color: iconsetUrl ? (color ? cesiumColor : Color.WHITE) : Color.WHITE,
       },
       label: {
         text: callsign,
