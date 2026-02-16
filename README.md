@@ -7,6 +7,7 @@ A unified web application for visualizing Cursor-on-Target (CoT) data from a TAK
 - **Real-time Visualization:** View CoT data from TAK Server in a 3D CesiumJS environment.
 - **MIL-STD-2525 Support:** Rendering of standard military symbols using `milsymbol`.
 - **Custom Iconsets:** Support for TAK iconsets and custom imagery.
+- **Dynamic Layer Configuration:** Configure multiple imagery providers (WMS, XYZ, ArcGIS) via a JSON file with automatic extent discovery.
 - **Incident & Emergency Handling:** Visual alerts and centering for emergency messages.
 - **Internationalization:** Multi-language support for the user interface.
 - **Flexible Imagery:** Support for various imagery providers, including Finnish national mapping data.

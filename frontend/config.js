@@ -1,12 +1,14 @@
-export let i18n = {};
-export let appConfig = { center_alert: false };
+export const i18n = {};
+export const appConfig = { center_alert: false };
 
 export async function loadConfig() {
   try {
     const response = await fetch("/config");
     if (response.ok) {
-      appConfig = await response.json();
-      console.log("App Config Loaded:", appConfig);
+      const data = await response.json();
+      console.log("App Config Received:", data);
+      // Mutate the object to ensure live bindings in all modules
+      Object.assign(appConfig, data);
       window.availableIconsets = appConfig.iconsets || {};
     }
   } catch (e) {
@@ -23,18 +25,20 @@ export async function loadTranslations() {
   };
 
   try {
-    i18n = await fetchLang(lang);
+    const translations = await fetchLang(lang);
+    Object.assign(i18n, translations);
   } catch (e) {
     console.warn(`${e.message}, falling back to English.`);
     try {
-      i18n = await fetchLang("en");
+      const translations = await fetchLang("en");
+      Object.assign(i18n, translations);
     } catch (e2) {
       console.error("Critical: English translation also failed.", e2);
-      i18n = {
+      Object.assign(i18n, {
         title: "TAK Cesium Map",
         filterPlaceholder: "Filter...",
         terrainLabel: "Terrain",
-      };
+      });
     }
   }
   applyStaticTranslations();
@@ -43,21 +47,23 @@ export async function loadTranslations() {
 function applyStaticTranslations() {
   document.title = appConfig.app_title || i18n.title;
   const elements = {
-    filterInput: (el) => (el.placeholder = i18n.filterPlaceholder),
-    clearFilter: (el) => (el.innerText = i18n.clearButton),
+    filterInput: (el) =>
+      (el.placeholder = i18n.filterPlaceholder || "Filter..."),
+    clearFilter: (el) => (el.innerText = i18n.clearButton || "Clear"),
     resetView: (el) => {
-      el.innerText = i18n.resetViewButton;
-      el.title = i18n.resetViewTitle;
+      el.innerText = i18n.resetViewButton || "Reset View";
+      el.title = i18n.resetViewTitle || "Reset to default view";
     },
     toggleTrails: (el) => {
-      el.innerText = i18n.trailsButtonOff;
-      el.title = i18n.trailsTitle;
+      el.innerText = i18n.trailsButtonOff || "Trails Off";
+      el.title = i18n.trailsTitle || "Toggle unit trails";
     },
     toggleUnitList: (el) => {
-      el.innerText = i18n.unitsButton;
-      el.title = i18n.unitsTitle;
+      el.innerText = i18n.unitsButton || "Units";
+      el.title = i18n.unitsTitle || "Toggle unit list";
     },
-    unitListHeader: (el) => (el.innerText = i18n.activeUnitsHeader),
+    unitListHeader: (el) =>
+      (el.innerText = i18n.activeUnitsHeader || "Active Units"),
   };
 
   for (const [id, action] of Object.entries(elements)) {
@@ -68,11 +74,11 @@ function applyStaticTranslations() {
   const affilSelect = document.getElementById("affiliationFilter");
   if (affilSelect) {
     const texts = [
-      i18n.allAffiliations,
-      i18n.affiliationFriendly,
-      i18n.affiliationHostile,
-      i18n.affiliationNeutral,
-      i18n.affiliationUnknown,
+      i18n.allAffiliations || "All",
+      i18n.affiliationFriendly || "Friendly",
+      i18n.affiliationHostile || "Hostile",
+      i18n.affiliationNeutral || "Neutral",
+      i18n.affiliationUnknown || "Unknown",
     ];
     for (let i = 0; i < texts.length; i++) {
       if (affilSelect.options[i]) affilSelect.options[i].text = texts[i];

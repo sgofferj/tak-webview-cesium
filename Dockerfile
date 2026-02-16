@@ -19,9 +19,9 @@ COPY backend/pyproject.toml ./
 RUN pip install poetry && poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --no-root --no-directory
 
-# Copy backend source code
 COPY backend/main.py ./
 COPY backend/app ./app
+COPY customlayers.json ./
 
 # Copy frontend build to the location backend expects (frontend/dist relative to project root)
 # The backend app/main.py expects static_dir = BASE_DIR/frontend/dist
