@@ -1,6 +1,7 @@
 from typing import Any
 
-from main import Settings, TAKClient
+from app.config import Settings
+from app.tak_client import TAKClient
 
 
 def test_parse_cot_valid_xml() -> None:
