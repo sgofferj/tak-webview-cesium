@@ -85,6 +85,10 @@ class TAKClient:
                 if link is not None:
                     data["link_url"] = link.get("url")
 
+                color_el = detail.find("color")
+                if color_el is not None:
+                    data["color"] = color_el.get("argb")
+
                 usericon = detail.find("usericon")
                 if usericon is not None:
                     data["iconsetpath"] = usericon.get("iconsetpath")
