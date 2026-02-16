@@ -28,37 +28,12 @@ export const entityState = {};
 export let currentFilter = "";
 export let currentAffiliationFilter = "all";
 export let showAllTrails = false;
-export let followedEntityUid = null;
 export const collapsedStates = new Set([
   "incidents",
   "aircraft",
   "vessels",
   "other",
 ]);
-
-export function setFollowedEntity(uid) {
-  followedEntityUid = uid;
-  if (uid && entityState[uid]) {
-    viewer.trackedEntity = entityState[uid].entity;
-  } else {
-    viewer.trackedEntity = undefined;
-    followedEntityUid = null;
-  }
-  updateFollowButtonUI();
-}
-
-function updateFollowButtonUI() {
-  const btn = document.getElementById("toggleFollow");
-  if (btn) {
-    if (followedEntityUid) {
-      btn.style.background = "#4a4";
-      btn.style.borderColor = "#6c6";
-    } else {
-      btn.style.background = "#444";
-      btn.style.borderColor = "#555";
-    }
-  }
-}
 
 export function setFilters(filter, affiliation) {
   if (filter !== undefined) currentFilter = filter.toLowerCase();

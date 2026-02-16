@@ -5,29 +5,38 @@ import {
   ProviderViewModel,
   OpenStreetMapImageryProvider,
   ArcGisMapServerImageryProvider,
+  UrlTemplateImageryProvider,
   WebMercatorTilingScheme,
   CesiumTerrainProvider,
   EllipsoidTerrainProvider,
   buildModuleUrl,
   Cartesian3,
   Rectangle,
+  Credit,
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
 
 export let viewer;
 
 export async function initViewer() {
+  console.log("Initializing Viewer. Current appConfig:", appConfig);
+
   const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
   if (ionToken) {
     Ion.defaultAccessToken = ionToken;
   }
 
   const imageryViewModels = [];
+
+  // 1. ALWAYS ADD WORLD LAYERS FIRST (so they appear on top)
   if (!ionToken) {
+    console.log("Adding standard World Layers.");
     imageryViewModels.push(
       new ProviderViewModel({
         name: "OpenStreetMap",
-        iconUrl: "https://a.tile.openstreetmap.org/0/0/0.png",
+        iconUrl: buildModuleUrl(
+          "Widgets/Images/ImageryProviders/openStreetMap.png",
+        ),
         tooltip: "OpenStreetMap",
         category: i18n.worldLayersLabel || "World Layers",
         creationFunction: () =>
@@ -52,31 +61,90 @@ export async function initViewer() {
     );
   }
 
-  if (appConfig.imagery_layers) {
+  // 2. ADD CUSTOM LAYERS
+  if (appConfig.imagery_layers && appConfig.imagery_layers.length > 0) {
+    console.log("Processing custom layers from config...");
     appConfig.imagery_layers.forEach((layer) => {
+      // Avoid duplicating OSM if it's in the custom config
+      if (
+        layer.name === "OpenStreetMap" ||
+        layer.url.includes("openstreetmap.org")
+      ) {
+        return;
+      }
+
+      console.log(
+        `Configuring layer: ${layer.name} (Category: ${layer.category || "Custom"})`,
+      );
       let rect = Rectangle.MAX_VALUE;
       if (layer.rectangle && layer.rectangle.length === 4) {
         rect = Rectangle.fromDegrees(...layer.rectangle);
       }
+
+      const credit = layer.attribution
+        ? new Credit(layer.attribution)
+        : undefined;
+      const fallbackIcon = buildModuleUrl(
+        "Widgets/Images/ImageryProviders/openStreetMap.png",
+      );
+
       imageryViewModels.push(
         new ProviderViewModel({
           name: layer.name,
-          iconUrl: layer.icon,
+          iconUrl: layer.icon || fallbackIcon,
           tooltip: layer.name,
           category: layer.category || "Custom",
-          creationFunction: () => [
-            new OpenStreetMapImageryProvider({
-              url: "https://a.tile.openstreetmap.org/",
-            }),
-            new WebMapServiceImageryProvider({
-              url: layer.url,
-              layers: layer.layers,
-              rectangle: rect,
-              tilingScheme: new WebMercatorTilingScheme(),
-              enablePickFeatures: false,
-              parameters: { transparent: "true", format: "image/png" },
-            }),
-          ],
+          creationFunction: () => {
+            console.log(
+              `Creating imagery provider for: ${layer.name} (${layer.type})`,
+            );
+            try {
+              switch (layer.type) {
+                case "wms":
+                  return [
+                    new OpenStreetMapImageryProvider({
+                      url: "https://a.tile.openstreetmap.org/",
+                    }),
+                    new WebMapServiceImageryProvider({
+                      url: layer.url,
+                      layers: layer.layers,
+                      rectangle: rect,
+                      tilingScheme: new WebMercatorTilingScheme(),
+                      enablePickFeatures: false,
+                      credit: credit,
+                      parameters: { transparent: "true", format: "image/png" },
+                    }),
+                  ];
+                case "xyz":
+                case "tms":
+                  return new UrlTemplateImageryProvider({
+                    url: layer.url,
+                    rectangle: rect,
+                    credit: credit,
+                  });
+                case "arcgis":
+                  return ArcGisMapServerImageryProvider.fromUrl(layer.url, {
+                    enablePickFeatures: false,
+                    credit: credit,
+                  });
+                default:
+                  console.warn(
+                    `Unknown imagery type: ${layer.type} for layer ${layer.name}`,
+                  );
+                  return new OpenStreetMapImageryProvider({
+                    url: "https://a.tile.openstreetmap.org/",
+                  });
+              }
+            } catch (e) {
+              console.error(
+                `Failed to create imagery provider for ${layer.name}:`,
+                e,
+              );
+              return new OpenStreetMapImageryProvider({
+                url: "https://a.tile.openstreetmap.org/",
+              });
+            }
+          },
         }),
       );
     });
@@ -109,6 +177,11 @@ export async function initViewer() {
     );
   }
 
+  console.log(
+    "Instantiating Cesium Viewer with",
+    imageryViewModels.length,
+    "imagery providers.",
+  );
   viewer = new Viewer("cesiumContainer", {
     terrainProvider: undefined,
     baseLayerPicker: true,
