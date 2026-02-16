@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .connection import manager
 from .iconsets import iconsets_cache, load_iconsets
+from .layers import layers_cache, load_layers
 from .tak_client import TAKClient
 
 # Configure logging
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     
     load_iconsets(settings.iconsets_dir, "/iconsets")
     load_iconsets(settings.user_iconsets_dir, "/user_iconsets")
+    await load_layers()
 
     client = TAKClient(settings, manager.broadcast)
     tak_task = asyncio.create_task(client.run())
@@ -61,13 +63,14 @@ app.add_middleware(
 
 @app.get("/config")
 async def get_config() -> dict[str, Any]:
+    logger.debug("Serving configuration with %s imagery layers", len(layers_cache))
     return {
         "app_title": settings.app_title,
         "center_alert": settings.center_alert,
         "iconsets": iconsets_cache,
         "terrain_url": settings.terrain_url,
         "terrain_exaggeration": settings.terrain_exaggeration,
-        "imagery_layers": settings.imagery_layers,
+        "imagery_layers": layers_cache,
     }
 
 @app.websocket("/ws")

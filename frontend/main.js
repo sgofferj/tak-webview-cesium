@@ -5,10 +5,8 @@ import { initViewer, viewer } from "./viewer.js";
 import {
   entityState,
   showAllTrails,
-  followedEntityUid,
   setFilters,
   setShowAllTrails,
-  setFollowedEntity,
   calculateTrailVisibility,
   throttledUpdateUnitList,
 } from "./state.js";
@@ -81,21 +79,6 @@ function setupEvents() {
     }
   });
 
-  // Track if user manually breaks tracking
-  viewer.scene.postRender.addEventListener(() => {
-    if (followedEntityUid && !viewer.trackedEntity) {
-      setFollowedEntity(null);
-    }
-  });
-
-  document.getElementById("toggleFollow").addEventListener("click", () => {
-    if (followedEntityUid) {
-      setFollowedEntity(null);
-    } else if (viewer.selectedEntity) {
-      setFollowedEntity(viewer.selectedEntity.id);
-    }
-  });
-
   document.getElementById("filterInput").addEventListener("input", (e) => {
     setFilters(e.target.value, undefined);
   });
@@ -110,7 +93,7 @@ function setupEvents() {
     setFilters("", "all");
   });
   document.getElementById("resetView").addEventListener("click", () => {
-    setFollowedEntity(null);
+    viewer.trackedEntity = undefined;
     const center = viewer.camera.positionCartographic;
     viewer.camera.flyTo({
       destination: Cartesian3.fromRadians(

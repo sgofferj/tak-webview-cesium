@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,38 +26,36 @@ class Settings(BaseSettings):
     log_cots: bool = False
     center_alert: bool = False
     port: int = 8000
-    trusted_proxies: list[str] = Field(default_factory=list)
+    # Use Any to prevent pydantic-settings from auto-parsing JSON for list types
+    trusted_proxies: Any = Field(default_factory=list)
+
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def parse_trusted_proxies(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            # If it's a JSON-like string, try to parse it
+            if v.strip().startswith("[") and v.strip().endswith("]"):
+                import json
+                try:
+                    res = json.loads(v)
+                    if isinstance(res, list):
+                        return [str(item).strip() for item in res]
+                except json.JSONDecodeError:
+                    pass
+            # Fallback to comma-separated
+            return [item.strip() for item in v.split(",") if item.strip()]
+        if isinstance(v, list):
+            return [str(item).strip() for item in v]
+        return v or []
 
     # UI / Map
     terrain_url: str | None = None
     terrain_exaggeration: float = 1.0
-    imagery_layers: list[dict[str, Any]] = Field(default_factory=lambda: [
-        {
-            "name": "Finnish Background",
-            "url": "https://tiles.kartat.kapsi.fi/taustakartta?",
-            "layers": "taustakartta",
-            "rectangle": [19.0, 59.0, 32.0, 71.0],
-            "icon": "https://tiles.kartat.kapsi.fi/taustakartta?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=taustakartta&WIDTH=100&HEIGHT=100&FORMAT=image/png&SRS=EPSG:3857&BBOX=2770000,8420000,2780000,8430000",
-        },
-        {
-            "name": "Finnish Topo",
-            "url": "https://tiles.kartat.kapsi.fi/peruskartta?",
-            "layers": "peruskartta",
-            "rectangle": [19.0, 59.0, 32.0, 71.0],
-            "icon": "https://tiles.kartat.kapsi.fi/peruskartta?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=peruskartta&WIDTH=100&HEIGHT=100&FORMAT=image/png&SRS=EPSG:3857&BBOX=2770000,8420000,2780000,8430000",
-        },
-        {
-            "name": "Finnish Aerial",
-            "url": "https://tiles.kartat.kapsi.fi/ortokuva?",
-            "layers": "ortokuva",
-            "rectangle": [19.0, 59.0, 32.0, 71.0],
-            "icon": "https://tiles.kartat.kapsi.fi/ortokuva?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=ortokuva&WIDTH=100&HEIGHT=100&FORMAT=image/png&SRS=EPSG:3857&BBOX=2770000,8420000,2780000,8430000",
-        }
-    ])
 
     # Paths
     iconsets_dir: str = "/iconsets"
     user_iconsets_dir: str = "/user_iconsets"
+    layers_config_file: str = "customlayers.json"
 
     def __init__(self, **values: Any):
         super().__init__(**values)
