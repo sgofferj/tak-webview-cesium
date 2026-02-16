@@ -378,7 +378,8 @@ export function updateEntity(data) {
         state.entity.billboard.color = color ? cesiumColor : Color.WHITE;
       } else {
         const isAircraft = type.split("-")[2] === "A";
-        const symbolOptions = { size: 21, padding: 5 };
+        // size: 21 + padding: 10 = total 41x41 canvas
+        const symbolOptions = { size: 21, padding: 10 };
         const label = getSquawkLabel(squawk, i18n);
         if (label) symbolOptions.staffComments = label;
         if (isAircraft && course !== null && course !== undefined) {
@@ -397,11 +398,13 @@ export function updateEntity(data) {
 
       if (iconCanvas) {
         state.entity.billboard.image = iconCanvas;
-        state.entity.billboard.width = undefined;
-        state.entity.billboard.height = undefined;
+        // Reducing the scale factor from 1.33 to 1.1 to match iconset weight
+        const scale = 1.1;
+        state.entity.billboard.width = iconSize.width * scale;
+        state.entity.billboard.height = iconSize.height * scale;
         state.entity.billboard.pixelOffset = new Cartesian2(
-          iconSize.width / 2 - iconAnchor.x,
-          iconSize.height / 2 - iconAnchor.y,
+          (iconSize.width / 2 - iconAnchor.x) * scale,
+          (iconSize.height / 2 - iconAnchor.y) * scale,
         );
         state.lastIconUrl = iconCanvas.toDataURL();
       }
@@ -535,7 +538,7 @@ export function updateEntity(data) {
       iconCanvas = null;
     } else {
       const isAircraft = type.split("-")[2] === "A";
-      const symbolOptions = { size: 21, padding: 5 };
+      const symbolOptions = { size: 21, padding: 10 };
       const label = getSquawkLabel(squawk, i18n);
       if (label) symbolOptions.staffComments = label;
       if (isAircraft && course !== null && course !== undefined) {
@@ -552,11 +555,12 @@ export function updateEntity(data) {
 
     if (iconCanvas) {
       entity.billboard.image = iconCanvas;
-      entity.billboard.width = undefined;
-      entity.billboard.height = undefined;
+      const scale = 1.1;
+      entity.billboard.width = iconSize.width * scale;
+      entity.billboard.height = iconSize.height * scale;
       entity.billboard.pixelOffset = new Cartesian2(
-        iconSize.width / 2 - iconAnchor.x,
-        iconSize.height / 2 - iconAnchor.y,
+        (iconSize.width / 2 - iconAnchor.x) * scale,
+        (iconSize.height / 2 - iconAnchor.y) * scale,
       );
     }
 
