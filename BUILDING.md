@@ -30,19 +30,9 @@ These variables control the backend connection to the TAK Server and the local A
 | `CENTER_ALERT` | Automatically zoom and alert on new emergency messages. | `false` |
 | `TRUSTED_PROXIES` | Comma-separated list of IP addresses/CIDRs to trust for X-Forwarded-For logging. | `127.0.0.1` |
 | `PORT` | The port the web server listens on inside the container. | `8000` |
-
-### Frontend Configuration (Build-time)
-These variables are baked into the frontend during the Docker build process.
-
-| Variable | Description | Default |
-|----------|-------------|---------|
 | `CESIUM_ION_TOKEN` | Your Cesium Ion access token for Bing Maps and high-res terrain. | (Empty) |
-| `VITE_WS_HOST` | Override the WebSocket host if the frontend needs to connect to a different port/IP. | (Defaults to window.location.host) |
-
-### Docker Compose Configuration
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `WEB_PORT` | The host port mapped to the container's web server. | `8000` |
+| `LOGO` | Path to a custom logo file within the container. | (Empty) |
+| `LOGO_POSITION` | Position of the logo: `top_left`, `top_center`, `top_right`, `bottom_left`, `bottom_center`, `bottom_right`. | `bottom_right` |
 
 ## Local Development Setup
 
@@ -110,15 +100,48 @@ The project is designed to be deployed as a single, unified Docker container.
 ### 1. Build the Image
 ```bash
 # In the project root
-docker compose build
+docker build -t tak-cesium-webview .
 ```
 
 ### 2. Run the Container
+You can run it directly with `docker run` or use `docker compose`.
+
+#### Using Docker Compose
+You can create a `docker-compose.yml` file to manage the container:
+
+```yaml
+services:
+  tak-webview:
+    image: tak-cesium-webview:latest
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      - CESIUM_ION_TOKEN=${CESIUM_ION_TOKEN:-}
+      - LOGO=${LOGO:-}
+      - LOGO_POSITION=${LOGO_POSITION:-bottom_right}
+    env_file:
+      - .env
+    volumes:
+      - ./certs:/app/certs:ro
+      - ./frontend/iconsets:/iconsets
+      - ./user_iconsets:/user_iconsets
+    restart: unless-stopped
+```
+
+Then run:
 ```bash
 docker compose up -d
 ```
 
-The application will be available at `http://localhost:8000`.
+#### Using Docker Run
+```bash
+docker run -d \
+  -p 8000:8000 \
+  -e TAK_HOST=192.168.1.10 \
+  -e CESIUM_ION_TOKEN=your_token \
+  -v ./certs:/app/certs:ro \
+  tak-cesium-webview
+```
 
 ## Deployment
 

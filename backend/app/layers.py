@@ -77,13 +77,13 @@ async def load_layers() -> None:
     
     # Search logic
     config_path = config_filename
-    if not os.path.exists(config_path):
+    if not await Path(config_path).exists():
         parent_path = os.path.join("..", config_filename)
-        if os.path.exists(parent_path):
+        if await Path(parent_path).exists():
             config_path = parent_path
             logger.info("Found config at %s", config_path)
 
-    if not os.path.exists(config_path):
+    if not await Path(config_path).exists():
         logger.warning(
             "Layer config file %s not found in . or .. . Using OSM fallback.",
             config_filename,
