@@ -256,6 +256,41 @@
       .emergency-active {
         animation: emergency-blink 0.8s infinite !important;
       }
+
+      /* Branding Logo */
+      #brandingLogo {
+        position: absolute;
+        z-index: 999;
+        max-width: 200px;
+        max-height: 100px;
+        pointer-events: none;
+      }
+      .logo-top_left {
+        top: 10px;
+        left: 10px;
+      }
+      .logo-top_center {
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .logo-top_right {
+        top: 10px;
+        right: 10px;
+      }
+      .logo-bottom_left {
+        bottom: 10px;
+        left: 10px;
+      }
+      .logo-bottom_center {
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .logo-bottom_right {
+        bottom: 10px;
+        right: 10px;
+      }
     </style>
   </head>
   <body>
@@ -288,6 +323,8 @@
       <div id="unitListHeader"></div>
       <div id="unitListContent"></div>
     </div>
+
+    <img id="brandingLogo" class="hidden" alt="Branding" />
 
     <script type="module" src="/main.js"></script>
   </body>

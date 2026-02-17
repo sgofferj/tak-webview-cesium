@@ -18,13 +18,32 @@ For instructions on how to build, configure, and deploy the application, please 
 
 ### Quick Start (Docker)
 
-If you have Docker and Docker Compose installed:
+If you have Docker installed, you can run the application by creating a `docker-compose.yml` file:
+
+```yaml
+services:
+  tak-webview:
+    image: ghcr.io/sgofferj/tak-webview-cesium:latest
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    environment:
+      - CESIUM_ION_TOKEN=${CESIUM_ION_TOKEN:-}
+      - LOGO=${LOGO:-}
+      - LOGO_POSITION=${LOGO_POSITION:-bottom_right}
+    env_file:
+      - .env
+    volumes:
+      - ./certs:/app/certs:ro
+      - ./frontend/iconsets:/iconsets
+      - ./user_iconsets:/user_iconsets
+    restart: unless-stopped
+```
 
 1. Place your `cert.pem` and `cert.key` in the `./certs` directory.
 2. Create a `.env` file (see [BUILDING.md](./BUILDING.md) for details).
 3. Run:
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    ```
 
 ---
