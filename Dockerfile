@@ -4,10 +4,6 @@ WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
-ARG VITE_WS_HOST=""
-ENV VITE_WS_HOST=$VITE_WS_HOST
-ARG VITE_CESIUM_ION_TOKEN=""
-ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN
 RUN npm run build
 
 # Stage 2: Backend and combined serving
