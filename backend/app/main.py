@@ -31,7 +31,7 @@ static_dir = os.path.join(BASE_DIR, "frontend", "dist")
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     logger.info("Static directory: %s", static_dir)
-    if not os.path.exists(static_dir):
+    if not await Path(static_dir).exists():
         logger.error("Static directory NOT FOUND!")
     
     load_iconsets(settings.iconsets_dir, "/iconsets")
@@ -71,7 +71,16 @@ async def get_config() -> dict[str, Any]:
         "terrain_url": settings.terrain_url,
         "terrain_exaggeration": settings.terrain_exaggeration,
         "imagery_layers": layers_cache,
+        "cesium_ion_token": settings.cesium_ion_token,
+        "logo": settings.logo,
+        "logo_position": settings.logo_position,
     }
+
+@app.get("/logo")
+async def get_logo() -> Any:
+    if settings.logo and await Path(settings.logo).exists():
+        return FileResponse(settings.logo)
+    return {"error": "No logo configured"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:

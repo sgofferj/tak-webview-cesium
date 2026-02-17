@@ -10,6 +10,16 @@ export async function loadConfig() {
       // Mutate the object to ensure live bindings in all modules
       Object.assign(appConfig, data);
       window.availableIconsets = appConfig.iconsets || {};
+
+      if (appConfig.logo) {
+        const logoImg = document.getElementById("brandingLogo");
+        if (logoImg) {
+          logoImg.src = "/logo";
+          logoImg.classList.remove("hidden");
+          const pos = appConfig.logo_position || "bottom_right";
+          logoImg.classList.add(`logo-${pos}`);
+        }
+      }
     }
   } catch (e) {
     console.warn("Failed to load server config, using defaults.");

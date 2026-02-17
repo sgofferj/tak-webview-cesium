@@ -30,3 +30,5 @@ certs/*.p12
 static/
 frontend/dist/
 backend/dist/
+
+todo.md

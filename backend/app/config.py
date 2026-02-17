@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # UI / Map
     terrain_url: str | None = None
     terrain_exaggeration: float = 1.0
+    cesium_ion_token: str | None = None
+    logo: str | None = None
+    logo_position: str = "bottom_right"
 
     # Paths
     iconsets_dir: str = "/iconsets"

@@ -7,7 +7,7 @@ import {
   LabelStyle,
   DistanceDisplayCondition,
   CallbackProperty,
-  PolylineGlowMaterialProperty,
+  PolylineOutlineMaterialProperty,
   ColorMaterialProperty,
   HeadingPitchRange,
   Math as CesiumMath,
@@ -254,7 +254,7 @@ window.zoomToUnit = function (uid) {
   if (state) {
     viewer.selectedEntity = state.entity;
     viewer.flyTo(state.entity, {
-      offset: new HeadingPitchRange(0, -Math.PI / 2, 200000),
+      offset: new HeadingPitchRange(0, -Math.PI / 2, 100000),
     });
   }
 };
@@ -328,7 +328,7 @@ export function updateEntity(data) {
   const clampedAlt = alt > 9000000 ? 0 : alt;
   const position = Cartesian3.fromDegrees(lon, lat, clampedAlt || 0);
   const camHeight = viewer.camera.positionCartographic.height;
-  const showAltOnIcon = camHeight < 200000 && type.split("-")[2] === "A";
+  const showAltOnIcon = camHeight < 100000 && type.split("-")[2] === "A";
 
   const stateKey = iconsetUrl
     ? `icon-${iconsetUrl}-${rgbColor}`
@@ -348,7 +348,7 @@ export function updateEntity(data) {
       const currentlyActive = emergency && emergency.status === "active";
       if (currentlyActive && !previouslyActive) {
         viewer.flyTo(state.entity, {
-          offset: new HeadingPitchRange(0, -Math.PI / 2, 200000),
+          offset: new HeadingPitchRange(0, -Math.PI / 2, 100000),
         });
         viewer.selectedEntity = state.entity;
         const infoBox = document.querySelector(".cesium-infoBox");
@@ -482,7 +482,7 @@ export function updateEntity(data) {
             }, false),
             width: 2,
             material: effectiveColor,
-            disableDepthTestDistance: 200000,
+            disableDepthTestDistance: 100000,
           },
         });
       }
@@ -500,12 +500,12 @@ export function updateEntity(data) {
       id: uid,
       name: callsign,
       position: position,
-      viewFrom: new Cartesian3(0, 0, 200000),
+      viewFrom: new Cartesian3(0, 0, 100000),
       billboard: {
         horizontalOrigin: HorizontalOrigin.CENTER,
         verticalOrigin: VerticalOrigin.CENTER,
         eyeOffset: new Cartesian3(0, 0, -10),
-        disableDepthTestDistance: 200000,
+        disableDepthTestDistance: 100000,
         // Set initial color based on data
         color: iconsetUrl ? (color ? cesiumColor : Color.WHITE) : Color.WHITE,
       },
@@ -523,8 +523,8 @@ export function updateEntity(data) {
         horizontalOrigin: HorizontalOrigin.CENTER,
         pixelOffset: new Cartesian2(0, 20),
         eyeOffset: new Cartesian3(0, 0, -20),
-        disableDepthTestDistance: 200000,
-        distanceDisplayCondition: new DistanceDisplayCondition(0, 200000),
+        disableDepthTestDistance: 100000,
+        distanceDisplayCondition: new DistanceDisplayCondition(0, 100000),
       },
       description: description,
     });
@@ -566,14 +566,14 @@ export function updateEntity(data) {
 
     const trailEntity = viewer.entities.add({
       polyline: {
-        positions: new CallbackProperty(() => history, false),
-        width: 4,
-        material: new PolylineGlowMaterialProperty({
-          glowPower: 0.25,
-          taperPower: 1.0,
+        positions: new CallbackProperty(() => [...history], false),
+        width: 3,
+        material: new PolylineOutlineMaterialProperty({
           color: effectiveColor,
+          outlineWidth: 2,
+          outlineColor: Color.BLACK.withAlpha(0.5),
         }),
-        disableDepthTestDistance: 200000,
+        disableDepthTestDistance: 100000,
       },
       show: calculateTrailVisibility(uid),
     });
@@ -602,7 +602,7 @@ export function updateEntity(data) {
 
     if (appConfig.center_alert && emergency && emergency.status === "active") {
       viewer.flyTo(entity, {
-        offset: new HeadingPitchRange(0, -Math.PI / 2, 200000),
+        offset: new HeadingPitchRange(0, -Math.PI / 2, 100000),
       });
       viewer.selectedEntity = entity;
       const infoBox = document.querySelector(".cesium-infoBox");

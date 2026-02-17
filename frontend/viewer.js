@@ -21,7 +21,7 @@ export let viewer;
 export async function initViewer() {
   console.log("Initializing Viewer. Current appConfig:", appConfig);
 
-  const ionToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
+  const ionToken = appConfig.cesium_ion_token;
   if (ionToken) {
     Ion.defaultAccessToken = ionToken;
   }
@@ -204,7 +204,7 @@ export async function initViewer() {
     terrainExaggerationRelativeHeight: 0.0,
   });
 
-  let initialDestination = Cartesian3.fromDegrees(24.9384, 60.1699, 2000000.0);
+  let initialDestination = Cartesian3.fromDegrees(24.9384, 60.1699, 1000000.0);
   if (appConfig.imagery_layers && appConfig.imagery_layers.length > 0) {
     const firstLayer = appConfig.imagery_layers[0];
     if (firstLayer.rectangle && firstLayer.rectangle.length === 4) {
@@ -213,7 +213,7 @@ export async function initViewer() {
       initialDestination = Cartesian3.fromRadians(
         center.longitude,
         center.latitude,
-        2000000.0,
+        1000000.0,
       );
     }
   }
