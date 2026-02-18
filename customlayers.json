@@ -19,12 +19,19 @@
     "icon": "https://tiles.kartat.kapsi.fi/peruskartta?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=peruskartta&WIDTH=100&HEIGHT=100&FORMAT=image/png&SRS=EPSG:3857&BBOX=2770000,8420000,2780000,8430000"
   },
   {
-    "name": "Finnish Aerial",
-    "type": "wms",
-    "url": "https://tiles.kartat.kapsi.fi/ortokuva?",
-    "layers": "ortokuva",
-    "attribution": "Maanmittauslaitos",
-    "category": "Finland",
-    "icon": "https://tiles.kartat.kapsi.fi/ortokuva?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=ortokuva&WIDTH=100&HEIGHT=100&FORMAT=image/png&SRS=EPSG:3857&BBOX=2770000,8420000,2780000,8430000"
+    "name": "OpenSeaMap",
+    "type": "xyz",
+    "url": "https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png",
+    "attribution": "OpenSeaMap",
+    "category": "Overlays",
+    "is_overlay": true
+  },
+  {
+    "name": "OpenAIP",
+    "type": "xyz",
+    "url": "https://{s}.tile.maps.openaip.net/geowebcache/service/tms/1.0.0/openaip_basemap@EPSG%3A900913@png/{z}/{x}/{y}.png",
+    "attribution": "OpenAIP",
+    "category": "Overlays",
+    "is_overlay": true
   }
 ]

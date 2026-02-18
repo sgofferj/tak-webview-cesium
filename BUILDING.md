@@ -28,6 +28,8 @@ These variables control the backend connection to the TAK Server and the local A
 | `TERRAIN_URL` | URL to a Cesium terrain provider (quantized-mesh or heightmap). | (Empty) |
 | `LOG_COTS` | Set to `true` to log incoming CoT messages to the console. | `false` |
 | `CENTER_ALERT` | Automatically zoom and alert on new emergency messages. | `false` |
+| `INITIAL_LAT` | Latitude for initial map startup. | `60.1699` |
+| `INITIAL_LON` | Longitude for initial map startup. | `24.9384` |
 | `TRUSTED_PROXIES` | Comma-separated list of IP addresses/CIDRs to trust for X-Forwarded-For logging. | `127.0.0.1` |
 | `PORT` | The port the web server listens on inside the container. | `8000` |
 | `CESIUM_ION_TOKEN` | Your Cesium Ion access token for Bing Maps and high-res terrain. | (Empty) |
@@ -117,6 +119,8 @@ services:
       - "${WEB_PORT:-8000}:8000"
     environment:
       - CESIUM_ION_TOKEN=${CESIUM_ION_TOKEN:-}
+      - INITIAL_LAT=${INITIAL_LAT:-60.1699}
+      - INITIAL_LON=${INITIAL_LON:-24.9384}
       - LOGO=${LOGO:-}
       - LOGO_POSITION=${LOGO_POSITION:-bottom_right}
     env_file:

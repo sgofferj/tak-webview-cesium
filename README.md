@@ -7,10 +7,38 @@ A unified web application for visualizing Cursor-on-Target (CoT) data from a TAK
 - **Real-time Visualization:** View CoT data from TAK Server in a 3D CesiumJS environment.
 - **MIL-STD-2525 Support:** Rendering of standard military symbols using `milsymbol`.
 - **Custom Iconsets:** Support for TAK iconsets and custom imagery.
-- **Dynamic Layer Configuration:** Configure multiple imagery providers (WMS, XYZ, ArcGIS) via a JSON file with automatic extent discovery.
+- **Dynamic Layer Configuration:** Configure multiple base maps (WMS, XYZ, ArcGIS) with automatic extent discovery.
+- **Stackable Overlays:** Support for multiple simultaneous transparent overlay layers (e.g., OpenSeaMap, OpenAIP) on top of any base map.
 - **Incident & Emergency Handling:** Visual alerts and centering for emergency messages.
 - **Internationalization:** Multi-language support for the user interface.
-- **Flexible Imagery:** Support for various imagery providers, including Finnish national mapping data.
+- **Traffic Optimization:** Minified binary communication (MessagePack) and frequency throttling.
+
+## Custom Layers & Overlays
+
+You can configure your map layers in `customlayers.json`. Layers can be categorized and marked as overlays to allow for simultaneous display.
+
+### Example `customlayers.json`
+
+```json
+[
+  {
+    "name": "Finnish Topo",
+    "type": "wms",
+    "url": "https://tiles.kartat.kapsi.fi/peruskartta?",
+    "layers": "peruskartta",
+    "attribution": "Maanmittauslaitos",
+    "category": "Finland"
+  },
+  {
+    "name": "OpenSeaMap",
+    "type": "xyz",
+    "url": "https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png",
+    "attribution": "OpenSeaMap",
+    "category": "Overlays",
+    "is_overlay": true
+  }
+]
+```
 
 ## Getting Started
 
@@ -28,6 +56,8 @@ services:
       - "${WEB_PORT:-8000}:8000"
     environment:
       - CESIUM_ION_TOKEN=${CESIUM_ION_TOKEN:-}
+      - INITIAL_LAT=${INITIAL_LAT:-60.1699}
+      - INITIAL_LON=${INITIAL_LON:-24.9384}
       - LOGO=${LOGO:-}
       - LOGO_POSITION=${LOGO_POSITION:-bottom_right}
     env_file:
