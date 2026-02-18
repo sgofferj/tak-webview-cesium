@@ -2,14 +2,11 @@ import {
   Viewer,
   Ion,
   WebMapServiceImageryProvider,
-  ProviderViewModel,
-  OpenStreetMapImageryProvider,
-  ArcGisMapServerImageryProvider,
   UrlTemplateImageryProvider,
+  ArcGisMapServerImageryProvider,
   WebMercatorTilingScheme,
   CesiumTerrainProvider,
   EllipsoidTerrainProvider,
-  buildModuleUrl,
   Cartesian3,
   Rectangle,
   Credit,
@@ -17,6 +14,81 @@ import {
 import { appConfig, i18n } from "./config.js";
 
 export let viewer;
+const activeOverlays = new Map();
+let currentBaseLayer = null;
+
+async function createImageryProvider(layer) {
+  let rect = Rectangle.MAX_VALUE;
+  if (layer.rectangle && layer.rectangle.length === 4) {
+    rect = Rectangle.fromDegrees(...layer.rectangle);
+  }
+
+  const credit = layer.attribution ? new Credit(layer.attribution) : undefined;
+
+  switch (layer.type) {
+    case "wms":
+      return new WebMapServiceImageryProvider({
+        url: layer.url,
+        layers: layer.layers,
+        rectangle: rect,
+        tilingScheme: new WebMercatorTilingScheme(),
+        enablePickFeatures: false,
+        credit: credit,
+        parameters: { transparent: "true", format: "image/png" },
+      });
+    case "xyz":
+    case "tms":
+      return new UrlTemplateImageryProvider({
+        url: layer.url,
+        rectangle: rect,
+        credit: credit,
+        subdomains: layer.subdomains || ["a", "b", "c"],
+      });
+    case "arcgis":
+      return await ArcGisMapServerImageryProvider.fromUrl(layer.url, {
+        enablePickFeatures: false,
+        credit: credit,
+      });
+    default:
+      // Fallback to OSM
+      return new UrlTemplateImageryProvider({
+        url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        credit: "© OpenStreetMap contributors",
+      });
+  }
+}
+
+export async function setBaseLayer(layerConfig) {
+  const provider = await createImageryProvider(layerConfig);
+  if (currentBaseLayer) {
+    viewer.imageryLayers.remove(currentBaseLayer);
+  }
+  // Base layer is always the bottom-most layer (index 0)
+  currentBaseLayer = viewer.imageryLayers.addImageryProvider(provider, 0);
+}
+
+export async function toggleOverlayLayer(layerConfig, active) {
+  if (active) {
+    if (!activeOverlays.has(layerConfig.name)) {
+      const provider = await createImageryProvider(layerConfig);
+      const cesiumLayer = viewer.imageryLayers.addImageryProvider(provider);
+      activeOverlays.set(layerConfig.name, cesiumLayer);
+    }
+  } else {
+    const cesiumLayer = activeOverlays.get(layerConfig.name);
+    if (cesiumLayer) {
+      viewer.imageryLayers.remove(cesiumLayer);
+      activeOverlays.delete(layerConfig.name);
+    }
+  }
+}
+
+export function clearOverlayLayers() {
+  activeOverlays.forEach((cesiumLayer) => {
+    viewer.imageryLayers.remove(cesiumLayer);
+  });
+  activeOverlays.clear();
+}
 
 export async function initViewer() {
   console.log("Initializing Viewer. Current appConfig:", appConfig);
@@ -26,169 +98,29 @@ export async function initViewer() {
     Ion.defaultAccessToken = ionToken;
   }
 
-  const imageryViewModels = [];
-
-  // 1. ALWAYS ADD WORLD LAYERS FIRST (so they appear on top)
-  if (!ionToken) {
-    console.log("Adding standard World Layers.");
-    imageryViewModels.push(
-      new ProviderViewModel({
-        name: "OpenStreetMap",
-        iconUrl: buildModuleUrl(
-          "Widgets/Images/ImageryProviders/openStreetMap.png",
-        ),
-        tooltip: "OpenStreetMap",
-        category: i18n.worldLayersLabel || "World Layers",
-        creationFunction: () =>
-          new OpenStreetMapImageryProvider({
-            url: "https://a.tile.openstreetmap.org/",
-          }),
-      }),
-    );
-    imageryViewModels.push(
-      new ProviderViewModel({
-        name: "ESRI World Topo",
-        iconUrl:
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/0/0/0",
-        tooltip: "ESRI World Topographical Map",
-        category: i18n.worldLayersLabel || "World Layers",
-        creationFunction: () =>
-          ArcGisMapServerImageryProvider.fromUrl(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer",
-            { enablePickFeatures: false },
-          ),
-      }),
-    );
-  }
-
-  // 2. ADD CUSTOM LAYERS
-  if (appConfig.imagery_layers && appConfig.imagery_layers.length > 0) {
-    console.log("Processing custom layers from config...");
-    appConfig.imagery_layers.forEach((layer) => {
-      // Avoid duplicating OSM if it's in the custom config
-      if (
-        layer.name === "OpenStreetMap" ||
-        layer.url.includes("openstreetmap.org")
-      ) {
-        return;
-      }
-
-      console.log(
-        `Configuring layer: ${layer.name} (Category: ${layer.category || "Custom"})`,
-      );
-      let rect = Rectangle.MAX_VALUE;
-      if (layer.rectangle && layer.rectangle.length === 4) {
-        rect = Rectangle.fromDegrees(...layer.rectangle);
-      }
-
-      const credit = layer.attribution
-        ? new Credit(layer.attribution)
-        : undefined;
-      const fallbackIcon = buildModuleUrl(
-        "Widgets/Images/ImageryProviders/openStreetMap.png",
-      );
-
-      imageryViewModels.push(
-        new ProviderViewModel({
-          name: layer.name,
-          iconUrl: layer.icon || fallbackIcon,
-          tooltip: layer.name,
-          category: layer.category || "Custom",
-          creationFunction: () => {
-            console.log(
-              `Creating imagery provider for: ${layer.name} (${layer.type})`,
-            );
-            try {
-              switch (layer.type) {
-                case "wms":
-                  return [
-                    new OpenStreetMapImageryProvider({
-                      url: "https://a.tile.openstreetmap.org/",
-                    }),
-                    new WebMapServiceImageryProvider({
-                      url: layer.url,
-                      layers: layer.layers,
-                      rectangle: rect,
-                      tilingScheme: new WebMercatorTilingScheme(),
-                      enablePickFeatures: false,
-                      credit: credit,
-                      parameters: { transparent: "true", format: "image/png" },
-                    }),
-                  ];
-                case "xyz":
-                case "tms":
-                  return new UrlTemplateImageryProvider({
-                    url: layer.url,
-                    rectangle: rect,
-                    credit: credit,
-                  });
-                case "arcgis":
-                  return ArcGisMapServerImageryProvider.fromUrl(layer.url, {
-                    enablePickFeatures: false,
-                    credit: credit,
-                  });
-                default:
-                  console.warn(
-                    `Unknown imagery type: ${layer.type} for layer ${layer.name}`,
-                  );
-                  return new OpenStreetMapImageryProvider({
-                    url: "https://a.tile.openstreetmap.org/",
-                  });
-              }
-            } catch (e) {
-              console.error(
-                `Failed to create imagery provider for ${layer.name}:`,
-                e,
-              );
-              return new OpenStreetMapImageryProvider({
-                url: "https://a.tile.openstreetmap.org/",
-              });
-            }
-          },
-        }),
-      );
-    });
-  }
+  // Use a simple initial imagery provider to avoid startup failure
+  const initialImagery = new UrlTemplateImageryProvider({
+    url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    credit: "© OpenStreetMap contributors",
+  });
 
   const terrainViewModels = [];
   if (appConfig.terrain_url) {
-    terrainViewModels.push(
-      new ProviderViewModel({
-        name: i18n.ellipsoidLabel || "WGS84 Ellipsoid",
-        iconUrl: buildModuleUrl(
-          "Widgets/Images/TerrainProviders/Ellipsoid.png",
-        ),
-        tooltip: "WGS84 Ellipsoid",
-        category: "Terrain",
-        creationFunction: () => new EllipsoidTerrainProvider(),
-      }),
-    );
-    terrainViewModels.push(
-      new ProviderViewModel({
-        name: i18n.terrainLabel || "Terrain",
-        iconUrl: buildModuleUrl(
-          "Widgets/Images/TerrainProviders/CesiumWorldTerrain.png",
-        ),
-        tooltip: "Custom Terrain",
-        category: "Terrain",
-        creationFunction: () =>
-          CesiumTerrainProvider.fromUrl(appConfig.terrain_url),
-      }),
-    );
+    terrainViewModels.push({
+      name: i18n.ellipsoidLabel || "WGS84 Ellipsoid",
+      creationFunction: () => new EllipsoidTerrainProvider(),
+    });
+    terrainViewModels.push({
+      name: i18n.terrainLabel || "Terrain",
+      creationFunction: () =>
+        CesiumTerrainProvider.fromUrl(appConfig.terrain_url),
+    });
   }
 
-  console.log(
-    "Instantiating Cesium Viewer with",
-    imageryViewModels.length,
-    "imagery providers.",
-  );
   viewer = new Viewer("cesiumContainer", {
     terrainProvider: undefined,
-    baseLayerPicker: true,
-    imageryProviderViewModels:
-      imageryViewModels.length > 0 ? imageryViewModels : undefined,
-    selectedImageryProviderViewModel:
-      imageryViewModels.length > 0 ? imageryViewModels[0] : undefined,
+    baseLayerPicker: false,
+    imageryProvider: initialImagery,
     animation: false,
     timeline: false,
     geocoder: false,
@@ -197,14 +129,18 @@ export async function initViewer() {
     selectionIndicator: true,
     navigationHelpButton: false,
     sceneModePicker: true,
-    terrainProviderViewModels: terrainViewModels,
-    selectedTerrainProviderViewModel:
-      terrainViewModels.length > 0 ? terrainViewModels[0] : undefined,
     terrainExaggeration: appConfig.terrain_exaggeration || 1.0,
     terrainExaggerationRelativeHeight: 0.0,
   });
 
-  let initialDestination = Cartesian3.fromDegrees(24.9384, 60.1699, 1000000.0);
+  currentBaseLayer = viewer.imageryLayers.get(0);
+
+  let initialDestination = Cartesian3.fromDegrees(
+    appConfig.initial_lon || 24.9384,
+    appConfig.initial_lat || 60.1699,
+    1000000.0,
+  );
+
   if (appConfig.imagery_layers && appConfig.imagery_layers.length > 0) {
     const firstLayer = appConfig.imagery_layers[0];
     if (firstLayer.rectangle && firstLayer.rectangle.length === 4) {

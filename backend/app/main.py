@@ -67,10 +67,17 @@ async def get_config() -> dict[str, Any]:
     return {
         "app_title": settings.app_title,
         "center_alert": settings.center_alert,
+        "initial_lat": settings.initial_lat,
+        "initial_lon": settings.initial_lon,
         "iconsets": iconsets_cache,
         "terrain_url": settings.terrain_url,
         "terrain_exaggeration": settings.terrain_exaggeration,
-        "imagery_layers": layers_cache,
+        "imagery_layers": [
+            layer for layer in layers_cache if not layer.get("is_overlay")
+        ],
+        "overlay_layers": [
+            layer for layer in layers_cache if layer.get("is_overlay")
+        ],
         "cesium_ion_token": settings.cesium_ion_token,
         "logo": settings.logo,
         "logo_position": settings.logo_position,

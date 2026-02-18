@@ -49,6 +49,8 @@ class Settings(BaseSettings):
         return v or []
 
     # UI / Map
+    initial_lat: float = 60.1699
+    initial_lon: float = 24.9384
     terrain_url: str | None = None
     terrain_exaggeration: float = 1.0
     cesium_ion_token: str | None = None
