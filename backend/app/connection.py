@@ -44,16 +44,19 @@ class ConnectionManager:
             self.active_connections.remove(websocket)
             logger.info("Client disconnected: %s", get_client_ip(websocket))
 
-    async def broadcast(self, message: str) -> None:
+    async def broadcast(self, message: str | bytes) -> None:
         if not self.active_connections:
             return
         await asyncio.gather(
             *(self._send_safe(conn, message) for conn in self.active_connections)
         )
 
-    async def _send_safe(self, websocket: WebSocket, message: str) -> None:
+    async def _send_safe(self, websocket: WebSocket, message: str | bytes) -> None:
         try:
-            await websocket.send_text(message)
+            if isinstance(message, bytes):
+                await websocket.send_bytes(message)
+            else:
+                await websocket.send_text(message)
         except Exception:
             # Connection likely closed, will be handled by disconnect
             pass

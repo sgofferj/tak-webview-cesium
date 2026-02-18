@@ -1,3 +1,4 @@
+import { decode } from "@msgpack/msgpack";
 import { updateEntity } from "./state.js";
 
 export function startWebSocket() {
@@ -6,6 +7,7 @@ export function startWebSocket() {
   const wsPath = import.meta.env.VITE_WS_PATH || "/ws";
   const wsUrl = `${protocol}//${wsHost}${wsPath}`;
   const ws = new WebSocket(wsUrl);
+  ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
     console.log("Connected to Backend WebSocket");
@@ -13,7 +15,12 @@ export function startWebSocket() {
 
   ws.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data);
+      let data;
+      if (event.data instanceof ArrayBuffer) {
+        data = decode(event.data);
+      } else {
+        data = JSON.parse(event.data);
+      }
       updateEntity(data);
     } catch (e) {
       console.error("Error parsing WS message", e);

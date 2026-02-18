@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     port: int = 8000
     # Use Any to prevent pydantic-settings from auto-parsing JSON for list types
     trusted_proxies: Any = Field(default_factory=list)
+    
+    # Traffic Optimization
+    ws_throttle: float = 0.5  # Max 2 updates per second per UID
+    use_msgpack: bool = True
 
     @field_validator("trusted_proxies", mode="before")
     @classmethod

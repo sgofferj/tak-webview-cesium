@@ -35,6 +35,24 @@ export const collapsedStates = new Set([
   "other",
 ]);
 
+const REVERSE_KEY_MAP = {
+  i: "uid",
+  t: "type",
+  c: "callsign",
+  la: "lat",
+  lo: "lon",
+  al: "alt",
+  s: "stale",
+  r: "remarks",
+  sq: "squawk",
+  co: "course",
+  sp: "speed",
+  l: "link_url",
+  cl: "color",
+  ip: "iconsetpath",
+  e: "emergency",
+};
+
 export function setFilters(filter, affiliation) {
   if (filter !== undefined) currentFilter = filter.toLowerCase();
   if (affiliation !== undefined) currentAffiliationFilter = affiliation;
@@ -52,6 +70,7 @@ export function setShowAllTrails(val) {
 }
 
 export function calculateVisibility(data) {
+  if (!data || !data.type) return false;
   const filter = currentFilter.trim();
 
   let showByAffil = true;
@@ -163,6 +182,8 @@ export function updateUnitListUI() {
     const state = entityState[uid];
     if (!state.entity.show) return;
     const data = state.lastData;
+    if (!data || !data.type) return;
+
     const uidLower = uid.toLowerCase();
     const remarksLower = (data.remarks || "").toLowerCase();
 
@@ -259,9 +280,30 @@ window.zoomToUnit = function (uid) {
   }
 };
 
-export function updateEntity(data) {
+export function updateEntity(incomingData) {
+  // Suggestion 5: Key Minification - Reverse mapping
+  const data = {};
+  for (const key in incomingData) {
+    const mapped = REVERSE_KEY_MAP[key] || key;
+    data[mapped] = incomingData[key];
+  }
+
+  const { uid } = data;
+  let state = entityState[uid];
+
+  // Merge with existing state (allows for future delta updates)
+  if (state) {
+    data.uid = uid;
+    Object.assign(state.lastData, data);
+  } else if (!data.type) {
+    // Cannot create new entity without a type
+    return;
+  }
+
+  // Use merged data
+  const fullData = state ? state.lastData : data;
+
   const {
-    uid,
     callsign,
     type,
     lat,
@@ -273,7 +315,8 @@ export function updateEntity(data) {
     course,
     squawk,
     stale,
-  } = data;
+  } = fullData;
+
   const upperType = (type || "").toUpperCase();
   let sidc = cotToSidc(upperType);
   let iconsetUrl = null;
@@ -333,9 +376,8 @@ export function updateEntity(data) {
   const stateKey = iconsetUrl
     ? `icon-${iconsetUrl}-${rgbColor}`
     : `${sidc}-${color}-${showAltOnIcon ? Math.round(clampedAlt) : "noalt"}`;
-  const description = createDescription(data);
+  const description = createDescription(fullData);
 
-  let state = entityState[uid];
   if (state) {
     state.entity.position = position;
     state.entity.description = description;
@@ -361,7 +403,6 @@ export function updateEntity(data) {
       if (infoBox) infoBox.classList.remove("emergency-active");
     }
 
-    state.lastData = data;
     state.history.push(position);
     if (state.history.length > 100) state.history.shift();
 
@@ -493,7 +534,7 @@ export function updateEntity(data) {
       }
     }
     state.entity.billboard.rotation = 0;
-    state.entity.show = calculateVisibility(data);
+    state.entity.show = calculateVisibility(fullData);
   } else {
     const history = [position];
     const entity = viewer.entities.add({
@@ -591,7 +632,7 @@ export function updateEntity(data) {
     entityState[uid] = state;
 
     const currentAffilMap = affilMap(i18n);
-    const et = data.type.split("-");
+    const et = fullData.type.split("-");
     const affilCode = et[1] ? et[1].toLowerCase() : "u";
     const affilLabel = currentAffilMap[affilCode] || i18n.affiliationUnknown;
     let cat = "other";
@@ -609,7 +650,7 @@ export function updateEntity(data) {
       if (infoBox) infoBox.classList.add("emergency-active");
     }
 
-    entity.show = calculateVisibility(data);
+    entity.show = calculateVisibility(fullData);
   }
   throttledUpdateUnitList();
 }
