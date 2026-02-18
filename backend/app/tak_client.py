@@ -5,13 +5,35 @@ import logging
 import os
 import re
 import ssl
+import time
 from typing import Any
 
+import msgpack  # type: ignore
 from lxml import etree
 
 from .config import Settings
 
 logger = logging.getLogger("tak-webview.tak_client")
+
+# Key mapping for minification
+KEY_MAP = {
+    "uid": "i",
+    "type": "t",
+    "callsign": "c",
+    "lat": "la",
+    "lon": "lo",
+    "alt": "al",
+    "stale": "s",
+    "remarks": "r",
+    "squawk": "sq",
+    "course": "co",
+    "speed": "sp",
+    "link_url": "l",
+    "color": "cl",
+    "iconsetpath": "ip",
+    "emergency": "e",
+}
+
 
 class TAKClient:
     def __init__(self, config: Settings, broadcast_callback: Any):
@@ -19,6 +41,8 @@ class TAKClient:
         self.broadcast = broadcast_callback
         self.running = False
         self._task: asyncio.Task[None] | None = None
+        # State tracking for throttling
+        self._last_send_time: dict[str, float] = {}
 
     def create_heartbeat(self) -> bytes:
         now = datetime.datetime.now(datetime.UTC)
@@ -51,15 +75,15 @@ class TAKClient:
             if point is None:
                 return None
 
+            # Suggestion 3: Coordinate Rounding (6 decimal places ~11cm)
             data = {
                 "uid": uid,
                 "type": ctype,
                 "callsign": uid,
-                "lat": float(point.get("lat", 0)),
-                "lon": float(point.get("lon", 0)),
-                "alt": float(point.get("hae", 0)),
+                "lat": round(float(point.get("lat", 0)), 6),
+                "lon": round(float(point.get("lon", 0)), 6),
+                "alt": round(float(point.get("hae", 0)), 1),
                 "stale": root.get("stale"),
-                "remarks": "",
             }
 
             detail = root.find("detail")
@@ -67,13 +91,15 @@ class TAKClient:
                 contact = detail.find("contact")
                 if contact is not None:
                     data["callsign"] = contact.get("callsign", uid)
-                    data["squawk"] = contact.get("track")
+                    track_val = contact.get("track")
+                    if track_val:
+                        data["squawk"] = track_val
 
                 track = detail.find("track")
                 if track is not None:
                     try:
-                        data["course"] = float(track.get("course", 0))
-                        data["speed"] = float(track.get("speed", 0))
+                        data["course"] = round(float(track.get("course", 0)), 1)
+                        data["speed"] = round(float(track.get("speed", 0)), 1)
                     except (ValueError, TypeError):
                         pass
 
@@ -118,6 +144,32 @@ class TAKClient:
             if self.config.log_cots:
                 logger.debug("CoT Parse Error: %s", e)
             return None
+
+    async def _broadcast_if_needed(self, data: dict[str, Any]) -> None:
+        uid = data["uid"]
+        now = time.time()
+
+        # Suggestion 2: Throttling (Frequency Capping)
+        is_emergency = (
+            data.get("emergency") and data["emergency"].get("status") == "active"
+        )
+        if not is_emergency:
+            last_send = self._last_send_time.get(uid, 0)
+            if now - last_send < self.config.ws_throttle:
+                return
+
+        self._last_send_time[uid] = now
+
+        # Suggestion 5: Key Minification
+        minified = {KEY_MAP.get(k, k): v for k, v in data.items()}
+
+        # Suggestion 4: MessagePack (Binary Serialization)
+        if self.config.use_msgpack:
+            payload = msgpack.packb(minified)
+        else:
+            payload = json.dumps(minified)
+
+        await self.broadcast(payload)
 
     async def run(self) -> None:
         self.running = True
@@ -201,6 +253,6 @@ class TAKClient:
                     buffer = buffer[idx:]
                     parsed = self.parse_cot(msg)
                     if parsed:
-                        await self.broadcast(json.dumps(parsed))
+                        await self._broadcast_if_needed(parsed)
             except Exception:
                 break
