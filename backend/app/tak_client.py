@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+# tak_client.py from https://github.com/sgofferj/tak-webview-cesium
+#
+# Copyright Stefan Gofferje
+#
+# Licensed under the Gnu General Public License Version 3 or higher (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
+
 import asyncio
 import datetime
 import json
@@ -6,14 +15,17 @@ import os
 import re
 import ssl
 import time
+from collections.abc import Callable
 from typing import Any
 
 import msgpack  # type: ignore
 from lxml import etree
 
-from .config import Settings
+from .config import Settings, settings
+from .connection import manager
 
-logger = logging.getLogger("tak-webview.tak_client")
+logger = logging.getLogger("tak-webview.tak")
+
 
 # Key mapping for minification
 KEY_MAP = {
@@ -36,29 +48,68 @@ KEY_MAP = {
 
 
 class TAKClient:
-    def __init__(self, config: Settings, broadcast_callback: Any):
+    def __init__(
+        self,
+        config: Settings = settings,
+        on_cot: Callable[[dict[str, Any]], Any] | None = None,
+    ) -> None:
         self.config = config
-        self.broadcast = broadcast_callback
-        self.running = False
-        self._task: asyncio.Task[None] | None = None
+        self.on_cot = on_cot
+        self._stop = False
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
         # State tracking for throttling
         self._last_send_time: dict[str, float] = {}
 
-    def create_heartbeat(self) -> bytes:
-        now = datetime.datetime.now(datetime.UTC)
-        stale = now + datetime.timedelta(seconds=60)
-        now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        stale_str = stale.strftime("%Y-%m-%dT%H:%M:%SZ")
+    def _get_ssl_context(self) -> ssl.SSLContext:
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        if self.config.tak_tls_ca_cert and os.path.exists(
+            self.config.tak_tls_ca_cert
+        ):
+            ctx.load_verify_locations(cafile=self.config.tak_tls_ca_cert)
+        else:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
 
-        return (
-            f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-            f'<event version="2.0" uid="{self.config.tak_uid}" '
-            f'type="{self.config.tak_type}" '
-            f'time="{now_str}" start="{now_str}" stale="{stale_str}" how="h-g-i-g-o">'
-            f'<point lat="0.0" lon="0.0" hae="0.0" ce="9999999" le="9999999"/>'
-            f'<detail><contact callsign="{self.config.tak_callsign}"/></detail>'
-            f"</event>"
-        ).encode()
+        ctx.load_cert_chain(
+            certfile=self.config.tak_tls_client_cert,
+            keyfile=self.config.tak_tls_client_key,
+        )
+        return ctx
+
+    async def _send_heartbeat(self) -> None:
+        while not self._stop:
+            if self._writer:
+                try:
+                    now = datetime.datetime.now(datetime.UTC)
+                    stale = now + datetime.timedelta(minutes=1)
+                    now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                    stale_str = stale.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                    cot = etree.Element("event")
+                    cot.set("version", "2.0")
+                    cot.set("uid", self.config.tak_uid_final)
+                    cot.set("type", "a-f-G-U-C")
+                    cot.set("how", "m-g")
+                    cot.set("time", now_str)
+                    cot.set("start", now_str)
+                    cot.set("stale", stale_str)
+
+                    detail = etree.SubElement(cot, "detail")
+                    contact = etree.SubElement(detail, "contact")
+                    contact.set("callsign", self.config.tak_callsign)
+
+                    # Add __group for TAK server
+                    group = etree.SubElement(detail, "__group")
+                    group.set("name", "Cyan")
+                    group.set("role", "Team Member")
+
+                    xml_str = etree.tostring(cot)
+                    self._writer.write(xml_str)
+                    await self._writer.drain()
+                except Exception as e:
+                    logger.error(f"Failed to send heartbeat: {e}")
+            await asyncio.sleep(60)
 
     def parse_cot(self, xml_data: bytes) -> dict[str, Any] | None:
         try:
@@ -75,7 +126,7 @@ class TAKClient:
             if point is None:
                 return None
 
-            # Suggestion 3: Coordinate Rounding (6 decimal places ~11cm)
+            # Coordinate Rounding (6 decimal places ~11cm)
             data = {
                 "uid": uid,
                 "type": ctype,
@@ -134,8 +185,14 @@ class TAKClient:
 
                 # Squawk fallback
                 remarks = data.get("remarks")
-                if not data.get("squawk") and isinstance(remarks, str) and remarks:
-                    re_match = re.search(r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I)
+                if (
+                    not data.get("squawk")
+                    and isinstance(remarks, str)
+                    and remarks
+                ):
+                    re_match = re.search(
+                        r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I
+                    )
                     if re_match:
                         data["squawk"] = re_match.group(1)
 
@@ -149,7 +206,7 @@ class TAKClient:
         uid = data["uid"]
         now = time.time()
 
-        # Suggestion 2: Throttling (Frequency Capping)
+        # Throttling (Frequency Capping)
         is_emergency = (
             data.get("emergency") and data["emergency"].get("status") == "active"
         )
@@ -160,99 +217,64 @@ class TAKClient:
 
         self._last_send_time[uid] = now
 
-        # Suggestion 5: Key Minification
+        # Key Minification
         minified = {KEY_MAP.get(k, k): v for k, v in data.items()}
 
-        # Suggestion 4: MessagePack (Binary Serialization)
+        # MessagePack (Binary Serialization)
         if self.config.use_msgpack:
             payload = msgpack.packb(minified)
         else:
             payload = json.dumps(minified)
 
-        await self.broadcast(payload)
+        await manager.broadcast(payload)
 
     async def run(self) -> None:
-        self.running = True
-        ssl_ctx = self._setup_ssl()
-        if not ssl_ctx:
-            return
+        logger.info(
+            f"Connecting to TAK Server at "
+            f"{self.config.tak_host}:{self.config.tak_port}"
+        )
+        asyncio.create_task(self._send_heartbeat())
 
-        while self.running:
+        while not self._stop:
             try:
-                logger.info(
-                    "Connecting to TAK Server at %s:%s...",
-                    self.config.tak_host,
-                    self.config.tak_port,
+                ctx = self._get_ssl_context()
+                self._reader, self._writer = await asyncio.open_connection(
+                    self.config.tak_host, self.config.tak_port, ssl=ctx
                 )
-                reader, writer = await asyncio.open_connection(
-                    self.config.tak_host, self.config.tak_port, ssl=ssl_ctx
-                )
-                try:
-                    logger.info("Connected to TAK Server.")
-                    await asyncio.gather(
-                        self._send_heartbeats(writer), self._process_stream(reader)
-                    )
-                except Exception as e:
-                    logger.warning("Connection lost: %s", e)
-                finally:
-                    writer.close()
-                    try:
-                        await writer.wait_closed()
-                    except Exception:
-                        pass
-            except Exception as e:
-                if self.running:
-                    logger.error("TAK Connection error: %s. Retrying in 5s...", e)
-                    await asyncio.sleep(5)
+                logger.info("Connected to TAK Server")
 
-    def stop(self) -> None:
-        self.running = False
+                while not self._stop:
+                    # Read until end of event
+                    data = await self._reader.readuntil(b"</event>")
+                    if not data:
+                        break
 
-    def _setup_ssl(self) -> ssl.SSLContext | None:
-        if not (self.config.tak_tls_client_cert and self.config.tak_tls_client_key):
-            logger.error("Missing TLS certificates. Cannot start TAK Client.")
-            return None
+                    if self.config.log_cots:
+                        logger.debug(
+                            f"Received CoT: {data.decode(errors='replace')}"
+                        )
 
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        if self.config.tak_tls_ca_cert and os.path.exists(self.config.tak_tls_ca_cert):
-            ctx.load_verify_locations(cafile=self.config.tak_tls_ca_cert)
-        else:
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-
-        try:
-            ctx.load_cert_chain(
-                certfile=self.config.tak_tls_client_cert,
-                keyfile=self.config.tak_tls_client_key,
-            )
-            return ctx
-        except Exception as e:
-            logger.error("Failed to load certificates: %s", e)
-            return None
-
-    async def _send_heartbeats(self, writer: asyncio.StreamWriter) -> None:
-        while self.running:
-            try:
-                writer.write(self.create_heartbeat())
-                await writer.drain()
-                await asyncio.sleep(30)
-            except Exception:
-                break
-
-    async def _process_stream(self, reader: asyncio.StreamReader) -> None:
-        buffer = b""
-        while self.running:
-            try:
-                chunk = await reader.read(4096)
-                if not chunk:
-                    break
-                buffer += chunk
-                while b"</event>" in buffer:
-                    idx = buffer.find(b"</event>") + 8
-                    msg = buffer[:idx]
-                    buffer = buffer[idx:]
-                    parsed = self.parse_cot(msg)
+                    parsed = self.parse_cot(data)
                     if parsed:
+                        if self.on_cot:
+                            self.on_cot(parsed)
                         await self._broadcast_if_needed(parsed)
+
+            except Exception as e:
+                logger.error(f"Connection error: {e}. Retrying in 10s...")
+                self._writer = None
+                if not self._stop:
+                    await asyncio.sleep(10)
+
+    async def stop(self) -> None:
+        self._stop = True
+        if self._writer:
+            self._writer.close()
+            try:
+                await self._writer.wait_closed()
             except Exception:
-                break
+                pass
+            self._writer = None
+
+
+tak_client = TAKClient()
