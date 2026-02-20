@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+# layers.py from https://github.com/sgofferj/tak-webview-cesium
+#
+# Copyright Stefan Gofferje
+#
+# Licensed under the Gnu General Public License Version 3 or higher (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
+
 import json
 import logging
 import os
@@ -8,11 +17,12 @@ from anyio import Path
 from lxml import etree
 
 from .config import settings
+from .iconsets import iconsets_cache
 
 logger = logging.getLogger("tak-webview.layers")
 
-# Initialize as an empty list that we will mutate
 layers_cache: list[dict[str, Any]] = []
+overlay_layers_cache: list[dict[str, Any]] = []
 
 
 async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
@@ -50,7 +60,12 @@ async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
                     south = geo_box.findtext("{*}southBoundLatitude")
                     north = geo_box.findtext("{*}northBoundLatitude")
                     if all([west, east, south, north]):
-                        return [float(west), float(south), float(east), float(north)]
+                        return [
+                            float(west),
+                            float(south),
+                            float(east),
+                            float(north),
+                        ]
 
                 lat_lon_box = el.find(".//{*}LatLonBoundingBox")
                 if lat_lon_box is not None:
@@ -59,7 +74,12 @@ async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
                     maxx = lat_lon_box.get("maxx")
                     maxy = lat_lon_box.get("maxy")
                     if all([minx, miny, maxx, maxy]):
-                        return [float(minx), float(miny), float(maxx), float(maxy)]
+                        return [
+                            float(minx),
+                            float(miny),
+                            float(maxx),
+                            float(maxy),
+                        ]
 
         return None
     except Exception as e:
@@ -69,12 +89,9 @@ async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
 
 async def load_layers() -> None:
     """Loads customlayers.json and discovers missing extents."""
-    global layers_cache
+    global layers_cache, overlay_layers_cache
     config_filename = settings.layers_config_file
-    
-    # Debug current environment
-    logger.info("Current working directory: %s", os.getcwd())
-    
+
     # Search logic
     config_path = config_filename
     if not await Path(config_path).exists():
@@ -88,14 +105,16 @@ async def load_layers() -> None:
             "Layer config file %s not found in . or .. . Using OSM fallback.",
             config_filename,
         )
-        layers_cache.clear()
-        layers_cache.append({
-            "name": "OpenStreetMap",
-            "type": "xyz",
-            "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            "attribution": "© OpenStreetMap contributors",
-            "category": "World Layers"
-        })
+        layers_cache = [
+            {
+                "name": "OpenStreetMap",
+                "type": "xyz",
+                "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                "attribution": "© OpenStreetMap contributors",
+                "category": "World Layers",
+            }
+        ]
+        overlay_layers_cache = []
         return
 
     try:
@@ -103,18 +122,23 @@ async def load_layers() -> None:
         content = await path.read_text()
         layers = json.loads(content)
 
-        processed_layers = []
+        processed_base = []
+        processed_overlays = []
         for layer in layers:
             is_wms = layer.get("type") == "wms"
             has_rect = layer.get("rectangle")
             has_layers = layer.get("layers")
 
             if is_wms and not has_rect and has_layers:
-                logger.info("Auto-discovery of extent for: %s", layer.get("name"))
+                logger.info(
+                    "Auto-discovery of extent for: %s", layer.get("name")
+                )
                 extent = await fetch_wms_extent(layer["url"], layer["layers"])
                 if extent:
                     logger.info(
-                        "Discovered extent for %s: %s", layer.get("name"), extent
+                        "Discovered extent for %s: %s",
+                        layer.get("name"),
+                        extent,
                     )
                     layer["rectangle"] = extent
                 else:
@@ -122,12 +146,39 @@ async def load_layers() -> None:
                         "Could not discover extent for %s.", layer.get("name")
                     )
 
-            processed_layers.append(layer)
+            # Check for both "overlay" and "is_overlay" keys
+            if layer.get("overlay") or layer.get("is_overlay"):
+                # Normalize key for frontend
+                layer["overlay"] = True
+                processed_overlays.append(layer)
+            else:
+                processed_base.append(layer)
 
-        # Update the global list in-place
-        layers_cache.clear()
-        layers_cache.extend(processed_layers)
-        logger.info("Loaded %s imagery layers from %s", len(layers_cache), config_path)
+        layers_cache = processed_base
+        overlay_layers_cache = processed_overlays
+        logger.info(
+            "Loaded %s base maps and %s overlays from %s",
+            len(layers_cache),
+            len(overlay_layers_cache),
+            config_path,
+        )
     except Exception as e:
-        logger.error("Failed to load layers config: %s", e)
-        layers_cache.clear()
+        logger.error(f"Failed to load layers config: {e}")
+        layers_cache = []
+        overlay_layers_cache = []
+
+
+async def get_app_config() -> dict[str, Any]:
+    """Gather all frontend configuration."""
+    return {
+        "app_title": settings.app_title,
+        "center_alert": settings.center_alert,
+        "iconsets": iconsets_cache,
+        "terrain_url": settings.terrain_url,
+        "terrain_exaggeration": settings.terrain_exaggeration,
+        "imagery_layers": layers_cache,
+        "overlay_layers": overlay_layers_cache,
+        "cesium_ion_token": settings.cesium_ion_token,
+        "logo": settings.logo,
+        "logo_position": settings.logo_position,
+    }
