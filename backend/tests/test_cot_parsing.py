@@ -10,7 +10,7 @@ from app.tak_client import KEY_MAP, TAKClient
 
 def test_parse_cot_valid_xml() -> None:
     config = Settings()
-    client = TAKClient(config, lambda x: None)
+    client = TAKClient(config)
     xml_data = (
         b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         b'<event version="2.0" uid="test-uid" type="a-f-G-U-C-I" '
@@ -32,7 +32,7 @@ def test_parse_cot_valid_xml() -> None:
 
 def test_parse_cot_invalid_xml() -> None:
     config = Settings()
-    client = TAKClient(config, lambda x: None)
+    client = TAKClient(config)
     xml_data = b"invalid xml"
     parsed = client.parse_cot(xml_data)
     assert parsed is None
@@ -40,7 +40,7 @@ def test_parse_cot_invalid_xml() -> None:
 
 def test_parse_cot_emergency() -> None:
     config = Settings()
-    client = TAKClient(config, lambda x: None)
+    client = TAKClient(config)
     xml_data = (
         b'<?xml version="1.0" encoding="UTF-8"?><event uid="911-uid" '
         b'type="b-a-o-tbl"><point lat="61.0" lon="24.0" hae="100.0"/>'
