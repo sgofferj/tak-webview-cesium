@@ -1,3 +1,11 @@
+// config.js from https://github.com/sgofferj/tak-webview-cesium
+//
+// Copyright Stefan Gofferje
+//
+// Licensed under the Gnu General Public License Version 3 or higher (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
+
 export const i18n = {};
 export const appConfig = { center_alert: false };
 
@@ -22,7 +30,7 @@ export async function loadConfig() {
       }
     }
   } catch (e) {
-    console.warn("Failed to load server config, using defaults.");
+    console.warn("Failed to load server config, using defaults.", e);
   }
 }
 
