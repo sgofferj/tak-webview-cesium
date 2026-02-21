@@ -15,7 +15,7 @@ import os
 import re
 import ssl
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import msgpack  # type: ignore
@@ -51,7 +51,9 @@ class TAKClient:
     def __init__(
         self,
         config: Settings = settings,
-        on_cot: Callable[[dict[str, Any]], Any] | None = None,
+        on_cot: (
+            Callable[[Any], Any] | Callable[[Any], Awaitable[Any]] | None
+        ) = None,
     ) -> None:
         self.config = config
         self.on_cot = on_cot
@@ -257,7 +259,10 @@ class TAKClient:
                     parsed = self.parse_cot(data)
                     if parsed:
                         if self.on_cot:
-                            self.on_cot(parsed)
+                            if asyncio.iscoroutinefunction(self.on_cot):
+                                await self.on_cot(parsed)
+                            else:
+                                self.on_cot(parsed)
                         await self._broadcast_if_needed(parsed)
 
             except Exception as e:

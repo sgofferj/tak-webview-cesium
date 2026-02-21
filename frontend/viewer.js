@@ -19,7 +19,7 @@ import {
   Rectangle,
   Credit,
 } from "cesium";
-import { appConfig, i18n } from "./config.js";
+import { appConfig } from "./config.js";
 
 export let viewer;
 const activeOverlays = new Map();
@@ -75,6 +75,25 @@ export async function setBaseLayer(layerConfig) {
   currentBaseLayer = viewer.imageryLayers.addImageryProvider(provider, 0);
 }
 
+export async function setTerrain(isTerrain) {
+  try {
+    if (isTerrain && appConfig.terrain_url) {
+      console.log("Setting terrain provider to:", appConfig.terrain_url);
+      const provider = await CesiumTerrainProvider.fromUrl(
+        appConfig.terrain_url,
+      );
+      viewer.terrainProvider = provider;
+    } else {
+      console.log("Setting terrain provider to Ellipsoid");
+      viewer.terrainProvider = new EllipsoidTerrainProvider();
+    }
+  } catch (e) {
+    console.error("Failed to set terrain provider:", e);
+    // Fallback to Ellipsoid on error
+    viewer.terrainProvider = new EllipsoidTerrainProvider();
+  }
+}
+
 export async function toggleOverlayLayer(layerConfig, active) {
   if (active) {
     if (!activeOverlays.has(layerConfig.name)) {
@@ -112,21 +131,8 @@ export async function initViewer() {
     credit: "© OpenStreetMap contributors",
   });
 
-  const terrainViewModels = [];
-  if (appConfig.terrain_url) {
-    terrainViewModels.push({
-      name: i18n.ellipsoidLabel || "WGS84 Ellipsoid",
-      creationFunction: () => new EllipsoidTerrainProvider(),
-    });
-    terrainViewModels.push({
-      name: i18n.terrainLabel || "Terrain",
-      creationFunction: () =>
-        CesiumTerrainProvider.fromUrl(appConfig.terrain_url),
-    });
-  }
-
   viewer = new Viewer("cesiumContainer", {
-    terrainProvider: undefined,
+    terrainProvider: new EllipsoidTerrainProvider(),
     baseLayerPicker: false,
     imageryProvider: initialImagery,
     animation: false,
