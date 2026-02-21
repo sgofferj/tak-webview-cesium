@@ -13,6 +13,7 @@ import {
   initViewer,
   viewer,
   setBaseLayer,
+  setTerrain,
   toggleOverlayLayer,
   clearOverlayLayers,
 } from "./viewer.js";
@@ -67,6 +68,42 @@ function createLayerItem(l, isRadio, nameGroup, isActive) {
 function populateLayerPicker() {
   const baseMapGrid = document.getElementById("baseMapGrid");
   const overlayGrid = document.getElementById("overlayGrid");
+  const terrainGrid = document.getElementById("terrainGrid");
+  const terrainSection = document.getElementById("terrainSection");
+
+  // Populate Terrain
+  if (appConfig.terrain_url) {
+    const terrainOptions = [
+      {
+        name: i18n.ellipsoidLabel || "WGS84 Ellipsoid",
+        icon: buildModuleUrl("Widgets/Images/TerrainProviders/Ellipsoid.png"),
+        isTerrain: false,
+      },
+      {
+        name: i18n.terrainLabel || "Terrain",
+        icon: buildModuleUrl(
+          "Widgets/Images/TerrainProviders/CesiumWorldTerrain.png",
+        ),
+        isTerrain: true,
+      },
+    ];
+
+    terrainOptions.forEach((opt) => {
+      const isActive = opt.isTerrain === false; // Default to terrain OFF (Ellipsoid ON)
+      const item = createLayerItem(opt, true, "terrainLayer", isActive);
+      item.addEventListener("click", async () => {
+        terrainGrid
+          .querySelectorAll(".layer-item")
+          .forEach((el) => el.classList.remove("active"));
+        item.classList.add("active");
+        item.querySelector("input").checked = true;
+        await setTerrain(opt.isTerrain);
+      });
+      terrainGrid.appendChild(item);
+    });
+  } else {
+    terrainSection.classList.add("hidden");
+  }
 
   const baseMaps = [
     {
