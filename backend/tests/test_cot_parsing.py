@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import msgpack  # type: ignore
 import pytest
@@ -56,16 +57,10 @@ def test_parse_cot_emergency() -> None:
 @pytest.mark.asyncio
 async def test_broadcast_minified_msgpack() -> None:
     # Test minification (Suggestion 5) and MessagePack (Suggestion 4)
-    last_payload = None
-
-    async def mock_broadcast(payload: bytes) -> None:
-        nonlocal last_payload
-        last_payload = payload
-
     config = Settings()
     config.use_msgpack = True
     config.ws_throttle = 0  # Disable throttle for testing
-    client = TAKClient(config, mock_broadcast)
+    client = TAKClient(config)
 
     data = {
         "uid": "test-uid",
@@ -77,7 +72,12 @@ async def test_broadcast_minified_msgpack() -> None:
         "stale": "2024-02-13T14:28:17Z",
     }
 
-    await client._broadcast_if_needed(data)
+    with patch(
+        "app.tak_client.manager.broadcast", new_callable=AsyncMock
+    ) as mock_broadcast:
+        await client._broadcast_if_needed(data)
+        mock_broadcast.assert_called_once()
+        last_payload = mock_broadcast.call_args[0][0]
 
     assert last_payload is not None
     decoded = msgpack.unpackb(last_payload)
@@ -91,16 +91,10 @@ async def test_broadcast_minified_msgpack() -> None:
 @pytest.mark.asyncio
 async def test_broadcast_minified_json() -> None:
     # Test minification (Suggestion 5) with JSON fallback
-    last_payload = None
-
-    async def mock_broadcast(payload: str) -> None:
-        nonlocal last_payload
-        last_payload = payload
-
     config = Settings()
     config.use_msgpack = False
     config.ws_throttle = 0
-    client = TAKClient(config, mock_broadcast)
+    client = TAKClient(config)
 
     data = {
         "uid": "test-uid",
@@ -112,7 +106,12 @@ async def test_broadcast_minified_json() -> None:
         "stale": "2024-02-13T14:28:17Z",
     }
 
-    await client._broadcast_if_needed(data)
+    with patch(
+        "app.tak_client.manager.broadcast", new_callable=AsyncMock
+    ) as mock_broadcast:
+        await client._broadcast_if_needed(data)
+        mock_broadcast.assert_called_once()
+        last_payload = mock_broadcast.call_args[0][0]
 
     assert last_payload is not None
     decoded = json.loads(last_payload)

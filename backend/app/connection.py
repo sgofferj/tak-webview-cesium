@@ -22,7 +22,11 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.debug(f"Client connected. Active: {len(self.active_connections)}")
+        client_host = websocket.client.host if websocket.client else "unknown"
+        logger.info(
+            f"Client {client_host} connected. "
+            f"Active: {len(self.active_connections)}"
+        )
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:

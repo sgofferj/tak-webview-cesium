@@ -427,12 +427,18 @@
     <!-- Custom Layer Picker Button -->
     <button id="toggleLayerPicker" title="Layers">
       <svg viewBox="0 0 32 32">
-        <path d="M16 5.3125 L3.4375 11.59375 L16 17.875 L28.5625 11.59375 Z M3.4375 15.1875 L16 21.46875 L28.5625 15.1875 L28.5625 17.6875 L16 23.96875 L3.4375 17.6875 Z M3.4375 19.1875 L16 25.46875 L28.5625 19.1875 L28.5625 21.6875 L16 27.96875 L3.4375 21.6875 Z" />
+        <path
+          d="M16 5.3125 L3.4375 11.59375 L16 17.875 L28.5625 11.59375 Z M3.4375 15.1875 L16 21.46875 L28.5625 15.1875 L28.5625 17.6875 L16 23.96875 L3.4375 17.6875 Z M3.4375 19.1875 L16 25.46875 L28.5625 19.1875 L28.5625 21.6875 L16 27.96875 L3.4375 21.6875 Z"
+        />
       </svg>
     </button>
 
     <!-- Custom Layer Picker Panel -->
     <div id="layerPickerPanel" class="hidden">
+      <div id="terrainSection">
+        <div class="layer-section-header">Terrain</div>
+        <div id="terrainGrid" class="layer-grid"></div>
+      </div>
       <div class="layer-section-header">Base Maps</div>
       <div id="baseMapGrid" class="layer-grid"></div>
       <div class="layer-section-header">Overlays</div>

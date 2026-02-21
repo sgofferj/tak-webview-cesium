@@ -82,8 +82,10 @@ async def get_iconsets() -> dict[str, dict[str, Any]]:
 
 @app.get("/logo")
 async def get_logo() -> Response:
-    if settings.logo and os.path.exists(settings.logo):
-        return FileResponse(settings.logo)
+    if settings.logo:
+        logo_path = Path(settings.logo)
+        if await logo_path.exists():
+            return FileResponse(str(logo_path))
     return Response(status_code=404)
 
 
