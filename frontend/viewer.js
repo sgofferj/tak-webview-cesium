@@ -31,7 +31,9 @@ async function createImageryProvider(layer) {
     rect = Rectangle.fromDegrees(...layer.rectangle);
   }
 
-  const credit = layer.attribution ? new Credit(layer.attribution) : undefined;
+  const manualCredit = layer.attribution
+    ? new Credit(layer.attribution, false)
+    : undefined;
 
   switch (layer.type) {
     case "wms":
@@ -41,7 +43,7 @@ async function createImageryProvider(layer) {
         rectangle: rect,
         tilingScheme: new WebMercatorTilingScheme(),
         enablePickFeatures: false,
-        credit: credit,
+        credit: manualCredit,
         parameters: { transparent: "true", format: "image/png" },
       });
     case "xyz":
@@ -49,29 +51,42 @@ async function createImageryProvider(layer) {
       return new UrlTemplateImageryProvider({
         url: layer.url,
         rectangle: rect,
-        credit: credit,
+        credit: manualCredit,
         subdomains: layer.subdomains || ["a", "b", "c"],
       });
-    case "arcgis":
-      return await ArcGisMapServerImageryProvider.fromUrl(layer.url, {
+    case "arcgis": {
+      const provider = await ArcGisMapServerImageryProvider.fromUrl(layer.url, {
         enablePickFeatures: false,
-        credit: credit,
       });
+      // Override the server-provided credit if a manual one is available
+      if (manualCredit) {
+        Object.defineProperty(provider, "credit", {
+          get: () => manualCredit,
+        });
+      }
+      return provider;
+    }
     default:
       // Fallback to OSM
       return new UrlTemplateImageryProvider({
-        url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        credit: "© OpenStreetMap contributors",
+        url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        subdomains: ["a", "b", "c"],
+        credit: new Credit(
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+          false,
+        ),
       });
   }
 }
 
 export async function setBaseLayer(layerConfig) {
   const provider = await createImageryProvider(layerConfig);
+
   if (currentBaseLayer) {
     viewer.imageryLayers.remove(currentBaseLayer);
   }
-  // Base layer is always the bottom-most layer (index 0)
+
+  // Base layer is always at the bottom (index 0)
   currentBaseLayer = viewer.imageryLayers.addImageryProvider(provider, 0);
 }
 
@@ -127,8 +142,12 @@ export async function initViewer() {
 
   // Use a simple initial imagery provider to avoid startup failure
   const initialImagery = new UrlTemplateImageryProvider({
-    url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    credit: "© OpenStreetMap contributors",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    subdomains: ["a", "b", "c"],
+    credit: new Credit(
+      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+      false,
+    ),
   });
 
   viewer = new Viewer("cesiumContainer", {
