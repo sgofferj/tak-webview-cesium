@@ -403,6 +403,51 @@
         bottom: 10px;
         right: 10px;
       }
+
+      /* Hide Cesium logo */
+      .cesium-credit-logoContainer {
+        display: none !important;
+      }
+
+      /* Leaflet-style attribution */
+      .cesium-viewer-bottom {
+        background: rgba(255, 255, 255, 0.8) !important;
+        color: #333 !important;
+        font-family: "Helvetica Neue", Arial, Helvetica, sans-serif !important;
+        font-size: 13px !important;
+        padding: 2px 8px !important;
+        left: 0 !important;
+        right: auto !important;
+        bottom: 0 !important;
+        width: auto !important;
+        max-width: 50%;
+        border-top-right-radius: 4px;
+        z-index: 1000;
+        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        display: block !important;
+      }
+      .cesium-viewer-bottom a {
+        color: #0078a8 !important;
+        text-decoration: none !important;
+        font-weight: bold !important;
+        text-shadow: none !important;
+      }
+      .cesium-viewer-bottom a:hover {
+        text-decoration: underline !important;
+      }
+      .cesium-credit-expand-link {
+        display: inline-block !important;
+        color: #0078a8 !important;
+        text-decoration: underline !important;
+        cursor: pointer !important;
+        text-shadow: none !important;
+      }
+      .cesium-credit-textContainer {
+        display: none !important; /* Hide direct text so the expand link is used */
+      }
+      .cesium-credit-logoContainer {
+        display: none !important;
+      }
     </style>
   </head>
   <body>
