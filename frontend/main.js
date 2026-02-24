@@ -109,7 +109,9 @@ function populateLayerPicker() {
     {
       name: "OpenStreetMap",
       type: "xyz",
-      url: "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
       category: i18n.worldLayersLabel || "World Layers",
     },
     {

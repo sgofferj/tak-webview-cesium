@@ -30,5 +30,6 @@ certs/*.p12
 static/
 frontend/dist/
 backend/dist/
+GEMINI.md
 
 todo.md
