@@ -19,13 +19,18 @@ export function startWebSocket() {
 
   ws.onopen = () => {
     console.log("Connected to Backend WebSocket");
+    const conn = document.getElementById("statusConnection");
+    if (conn) {
+      conn.innerText = "Online";
+      conn.classList.add("conn-online");
+    }
   };
 
   ws.onmessage = (event) => {
     try {
       let data;
       if (event.data instanceof ArrayBuffer) {
-        data = decode(event.data);
+        data = decode(new Uint8Array(event.data));
       } else {
         data = JSON.parse(event.data);
       }
@@ -41,6 +46,13 @@ export function startWebSocket() {
 
   ws.onclose = () => {
     console.log("WebSocket Connection Closed");
+    const conn = document.getElementById("statusConnection");
+    if (conn) {
+      conn.innerText = "Disconnected";
+      conn.classList.remove("conn-online");
+    }
+    // Reconnect after 5s
+    setTimeout(startWebSocket, 5000);
   };
 
   return ws;

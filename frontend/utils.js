@@ -71,6 +71,30 @@ export function getSquawkLabel(squawk, i18n) {
   return null;
 }
 
+// Calculate destination point from start point, bearing and distance
+export function getDestination(lon, lat, bearing, distance) {
+  const R = 6371000; // Earth's radius in meters
+  const brng = (bearing * Math.PI) / 180;
+  const lat1 = (lat * Math.PI) / 180;
+  const lon1 = (lon * Math.PI) / 180;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(distance / R) +
+      Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng),
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1),
+      Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return {
+    lon: (lon2 * 180) / Math.PI,
+    lat: (lat2 * 180) / Math.PI,
+  };
+}
+
 export function throttle(func, limit) {
   let inThrottle;
   return function () {

@@ -44,6 +44,14 @@ KEY_MAP = {
     "color": "cl",
     "iconsetpath": "ip",
     "emergency": "e",
+    "xmpp": "x",
+    "mail": "m",
+    "phone": "p",
+    "battery": "b",
+    "how": "h",
+    "group_role": "gr",
+    "group_name": "gn",
+    "ce": "ce",
 }
 
 
@@ -51,9 +59,7 @@ class TAKClient:
     def __init__(
         self,
         config: Settings = settings,
-        on_cot: (
-            Callable[[Any], Any] | Callable[[Any], Awaitable[Any]] | None
-        ) = None,
+        on_cot: Callable[[Any], Any] | Callable[[Any], Awaitable[Any]] | None = None,
     ) -> None:
         self.config = config
         self.on_cot = on_cot
@@ -65,18 +71,40 @@ class TAKClient:
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        if self.config.tak_tls_ca_cert and os.path.exists(
-            self.config.tak_tls_ca_cert
-        ):
-            ctx.load_verify_locations(cafile=self.config.tak_tls_ca_cert)
+
+        # Only use ephemeral certs
+        cert_file = os.path.join(self.config.ephemeral_dir, self.config.ephemeral_cert)
+        key_file = os.path.join(self.config.ephemeral_dir, self.config.ephemeral_key)
+        ca_file = os.path.join(self.config.ephemeral_dir, self.config.ephemeral_ca)
+
+        logger.debug(f"SSL Context: cert={cert_file}, key={key_file}, ca={ca_file}")
+
+        if not os.path.exists(cert_file):
+            logger.error(f"Certificate file missing: {cert_file}")
+            raise FileNotFoundError(f"Certificate file missing: {cert_file}")
+        if not os.path.exists(key_file):
+            logger.error(f"Key file missing: {key_file}")
+            raise FileNotFoundError(f"Key file missing: {key_file}")
+
+        logger.info("Using ephemeral certificate")
+        from .auth import auth_manager
+
+        password = (
+            auth_manager.cert_password.encode("utf-8")
+            if auth_manager.cert_password
+            else None
+        )
+        ctx.load_cert_chain(certfile=cert_file, keyfile=key_file, password=password)
+        if os.path.exists(ca_file):
+            logger.debug(f"Loading CA from: {ca_file}")
+            ctx.load_verify_locations(cafile=ca_file)
         else:
+            logger.warning(
+                f"CA file not found: {ca_file}. Disabling hostname verification."
+            )
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-        ctx.load_cert_chain(
-            certfile=self.config.tak_tls_client_cert,
-            keyfile=self.config.tak_tls_client_key,
-        )
         return ctx
 
     async def _send_heartbeat(self) -> None:
@@ -109,7 +137,7 @@ class TAKClient:
                     xml_str = etree.tostring(cot)
                     self._writer.write(xml_str)
                     await self._writer.drain()
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     logger.error(f"Failed to send heartbeat: {e}")
             await asyncio.sleep(60)
 
@@ -129,13 +157,15 @@ class TAKClient:
                 return None
 
             # Coordinate Rounding (6 decimal places ~11cm)
-            data = {
+            data: dict[str, Any] = {
                 "uid": uid,
                 "type": ctype,
+                "how": root.get("how", "h-e"),
                 "callsign": uid,
                 "lat": round(float(point.get("lat", 0)), 6),
                 "lon": round(float(point.get("lon", 0)), 6),
                 "alt": round(float(point.get("hae", 0)), 1),
+                "ce": round(float(point.get("ce", 9999999)), 1),
                 "stale": root.get("stale"),
             }
 
@@ -147,6 +177,30 @@ class TAKClient:
                     track_val = contact.get("track")
                     if track_val:
                         data["squawk"] = track_val
+
+                    # Contact info
+                    val = contact.get("xmppUsername")
+                    if val: data["xmpp"] = val
+                    val = contact.get("emailAddress")
+                    if val: data["mail"] = val
+                    val = contact.get("phone")
+                    if val: data["phone"] = val
+
+                status_el = detail.find("status")
+                if status_el is not None:
+                    batt = status_el.get("battery")
+                    if batt is not None and batt != "":
+                        try:
+                            data["battery"] = int(batt)
+                        except (ValueError, TypeError):
+                            pass
+
+                group_el = detail.find("__group")
+                if group_el is not None:
+                    data["group_role"] = group_el.get("role")
+                    data["group_name"] = group_el.get("name")
+                else:
+                    data["group_role"] = data["group_name"] = None
 
                 track = detail.find("track")
                 if track is not None:
@@ -187,19 +241,17 @@ class TAKClient:
 
                 # Squawk fallback
                 remarks = data.get("remarks")
-                if (
-                    not data.get("squawk")
-                    and isinstance(remarks, str)
-                    and remarks
-                ):
-                    re_match = re.search(
-                        r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I
-                    )
+                if not data.get("squawk") and isinstance(remarks, str) and remarks:
+                    re_match = re.search(r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I)
                     if re_match:
                         data["squawk"] = re_match.group(1)
+            else:
+                # Detail is missing, clear all detail fields
+                data["battery"] = data["group_role"] = data["group_name"] = None
+                data["xmpp"] = data["mail"] = data["phone"] = None
 
             return data
-        except Exception as e:
+        except (etree.LxmlError, ValueError, TypeError) as e:
             if self.config.log_cots:
                 logger.debug("CoT Parse Error: %s", e)
             return None
@@ -231,9 +283,14 @@ class TAKClient:
         await manager.broadcast(payload)
 
     async def run(self) -> None:
+        self._stop = False
+        from .auth import auth_manager
+
+        # Use the enrolled server if we have one, otherwise fallback to config
+        tak_host = auth_manager.enrolled_server or self.config.tak_host
+
         logger.info(
-            f"Connecting to TAK Server at "
-            f"{self.config.tak_host}:{self.config.tak_port}"
+            f"Connecting to TAK Server at " f"{tak_host}:{self.config.tak_port}"
         )
         asyncio.create_task(self._send_heartbeat())
 
@@ -241,7 +298,7 @@ class TAKClient:
             try:
                 ctx = self._get_ssl_context()
                 self._reader, self._writer = await asyncio.open_connection(
-                    self.config.tak_host, self.config.tak_port, ssl=ctx
+                    tak_host, self.config.tak_port, ssl=ctx
                 )
                 logger.info("Connected to TAK Server")
 
@@ -252,9 +309,7 @@ class TAKClient:
                         break
 
                     if self.config.log_cots:
-                        logger.debug(
-                            f"Received CoT: {data.decode(errors='replace')}"
-                        )
+                        logger.debug(f"Received CoT: {data.decode(errors='replace')}")
 
                     parsed = self.parse_cot(data)
                     if parsed:
@@ -265,7 +320,12 @@ class TAKClient:
                                 self.on_cot(parsed)
                         await self._broadcast_if_needed(parsed)
 
-            except Exception as e:
+            except (
+                OSError,
+                ssl.SSLError,
+                asyncio.IncompleteReadError,
+                etree.LxmlError,
+            ) as e:
                 logger.error(f"Connection error: {e}. Retrying in 10s...")
                 self._writer = None
                 if not self._stop:
@@ -277,7 +337,7 @@ class TAKClient:
             self._writer.close()
             try:
                 await self._writer.wait_closed()
-            except Exception:
+            except (OSError, RuntimeError):
                 pass
             self._writer = None
 
