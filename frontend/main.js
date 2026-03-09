@@ -28,12 +28,166 @@ import {
 import { startWebSocket } from "./websocket.js";
 
 async function init() {
+  const authenticated = await checkAuth();
+  if (authenticated) {
+    await startApp();
+  }
+}
+
+async function startApp() {
   await loadConfig();
   await loadTranslations();
   await initViewer();
   setupEvents();
   populateLayerPicker();
   startWebSocket();
+}
+
+async function checkAuth() {
+  const overlay = document.getElementById("authOverlay");
+  const loginForm = document.getElementById("loginForm");
+  const enrollmentForm = document.getElementById("enrollmentForm");
+  const statusBar = document.getElementById("statusBar");
+
+  overlay.classList.remove("hidden");
+
+  try {
+    const resp = await fetch("/api/auth/status");
+    const status = await resp.json();
+
+    if (status.authenticated) {
+      overlay.classList.add("hidden");
+      statusBar.classList.remove("hidden");
+      updateStatus(status);
+      setupAuthEvents();
+      return true;
+    }
+
+    if (status.enrolled) {
+      loginForm.classList.remove("hidden");
+      enrollmentForm.classList.add("hidden");
+      document.getElementById("loginUser").focus();
+    } else {
+      enrollmentForm.classList.remove("hidden");
+      loginForm.classList.add("hidden");
+      document.getElementById("enrollServer").focus();
+    }
+    setupAuthEvents();
+    return false;
+  } catch (e) {
+    console.error("Auth check failed", e);
+    return false;
+  }
+}
+
+function updateStatus(status) {
+  if (status.cert) {
+    const cn = document.getElementById("certCN");
+    const expiry = document.getElementById("certExpiry");
+    cn.innerText = status.cert.cn;
+    expiry.innerText = status.cert.expiry.split("T")[0];
+    expiry.className = `status-${status.cert.status}`;
+  }
+}
+
+function setupAuthEvents() {
+  if (window.authListenersAttached) return;
+  window.authListenersAttached = true;
+
+  const message = document.getElementById("authMessage");
+
+  const triggerEnroll = async () => {
+    const server = document.getElementById("enrollServer").value;
+    const username = document.getElementById("enrollUser").value;
+    const password = document.getElementById("enrollPass").value;
+    const cert_password = document.getElementById("enrollCertPass").value;
+    message.classList.add("hidden");
+
+    try {
+      const resp = await fetch("/api/auth/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ server, username, password, cert_password }),
+      });
+      if (resp.ok) {
+        init(); // Re-run init to start app
+      } else {
+        const err = await resp.json();
+        message.innerText = err.detail || "Enrollment failed";
+        message.classList.remove("hidden");
+      }
+    } catch (e) {
+      message.innerText = "Connection error";
+      message.classList.remove("hidden");
+    }
+  };
+
+  const triggerLogin = async () => {
+    const username = document.getElementById("loginUser").value;
+    const password = document.getElementById("loginPass").value;
+    message.classList.add("hidden");
+
+    try {
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (resp.ok) {
+        init(); // Re-run init to start app
+      } else {
+        const err = await resp.json();
+        message.innerText = err.detail || "Login failed";
+        message.classList.remove("hidden");
+        if (resp.status === 401) checkAuth();
+      }
+    } catch (e) {
+      message.innerText = "Connection error";
+      message.classList.remove("hidden");
+    }
+  };
+
+  document
+    .getElementById("enrollButton")
+    .addEventListener("click", triggerEnroll);
+
+  document.getElementById("enrollCertPass").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") triggerEnroll();
+  });
+
+  document.getElementById("loginButton").addEventListener("click", triggerLogin);
+
+  document.getElementById("loginPass").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") triggerLogin();
+  });
+
+  document.getElementById("authLogout").addEventListener("click", async () => {
+    document.getElementById("authOverlay").classList.remove("hidden");
+    document.getElementById("statusBar").classList.add("hidden");
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout failed", e);
+    }
+    location.reload();
+  });
+
+  document.getElementById("authForget").addEventListener("click", async () => {
+    if (
+      confirm(
+        "Are you sure you want to forget this enrollment? This will wipe all session certificates.",
+      )
+    ) {
+      document.getElementById("authOverlay").classList.remove("hidden");
+      document.getElementById("statusBar").classList.add("hidden");
+      try {
+        await fetch("/api/auth/logout-wipe", { method: "POST" });
+      } catch (e) {
+        console.error("Forget failed", e);
+      }
+      location.reload();
+    }
+  });
 }
 
 function createLayerItem(l, isRadio, nameGroup, isActive) {
@@ -71,7 +225,6 @@ function populateLayerPicker() {
   const terrainGrid = document.getElementById("terrainGrid");
   const terrainSection = document.getElementById("terrainSection");
 
-  // Populate Terrain
   if (appConfig.terrain_url) {
     const terrainOptions = [
       {
@@ -89,7 +242,7 @@ function populateLayerPicker() {
     ];
 
     terrainOptions.forEach((opt) => {
-      const isActive = opt.isTerrain === false; // Default to terrain OFF (Ellipsoid ON)
+      const isActive = opt.isTerrain === false; 
       const item = createLayerItem(opt, true, "terrainLayer", isActive);
       item.addEventListener("click", async () => {
         terrainGrid
@@ -123,7 +276,6 @@ function populateLayerPicker() {
     ...(appConfig.imagery_layers || []),
   ];
 
-  // Group Base Maps by Category
   const groupedBase = {};
   baseMaps.forEach((l) => {
     const cat = l.category || "Other";
@@ -141,7 +293,6 @@ function populateLayerPicker() {
       const isActive = l.name === "OpenStreetMap";
       const item = createLayerItem(l, true, "baseLayer", isActive);
 
-      // Fix: Ensure the default layer is explicitly set in Cesium on startup
       if (isActive) {
         setBaseLayer(l);
       }
@@ -158,7 +309,6 @@ function populateLayerPicker() {
     });
   });
 
-  // Populate Overlays
   const noneOverlay = { name: "None", icon: null };
   const noneItem = createLayerItem(noneOverlay, false, "none", false);
   noneItem.querySelector(".layer-thumb").style.backgroundColor = "#222";

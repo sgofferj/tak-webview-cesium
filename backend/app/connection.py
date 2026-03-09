@@ -10,7 +10,7 @@
 import asyncio
 import logging
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger("tak-webview.connection")
 
@@ -31,9 +31,7 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            logger.debug(
-                f"Client disconnected. Active: {len(self.active_connections)}"
-            )
+            logger.debug(f"Client disconnected. Active: {len(self.active_connections)}")
 
     async def broadcast(self, message: str | bytes) -> None:
         if not self.active_connections:
@@ -48,7 +46,7 @@ class ConnectionManager:
                 await websocket.send_bytes(message)
             else:
                 await websocket.send_text(message)
-        except Exception:
+        except (RuntimeError, AttributeError, WebSocketDisconnect):
             # Connection likely closed, will be handled by disconnect or manual removal
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)

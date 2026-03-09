@@ -1,14 +1,20 @@
-# TAK Cesium Webview
+# tak-webview-cesium
 A unified web application for visualizing Cursor-on-Target (CoT) data from a TAK Server using CesiumJS.
 
 (C) 2026 Stefan Gofferje
 
 Licensed under the GNU General Public License V3 or later.
 
+> [!CAUTION]
+> The authentication and certificate management system has been completely refactored. Static certificate configurations are no longer supported. Please study the **Security Note**, **Configuration**, and **Quick Start** sections below for details on the new automated enrollment and login workflow.
+
 ## Description
 This application provides a real-time 3D tactical view of Cursor-on-Target (CoT) data from a TAK Server using the CesiumJS engine. It is designed to be a lightweight, web-based alternative for situational awareness, supporting standard military symbology and various imagery providers.
 
 ### Features
+- **Automated Certificate Enrollment:** Securely obtain mTLS certificates directly from your TAK Server (port 8446).
+- **Silent Start & Authentication:** Ephemeral, session-based storage for certificates and hashed credentials with a "Silent Start" policy (no data shown until login).
+- **Status Tray:** Persistent indicator for certificate Common Name (CN), expiry status (Green/Orange/Red), and real-time connection status.
 - **Real-time Visualization:** View CoT data from TAK Server in a 3D CesiumJS environment.
 - **MIL-STD-2525 Support:** Rendering of standard military symbols using `milsymbol`.
 - **Custom Iconsets:** Support for TAK iconsets and custom imagery.
@@ -46,7 +52,14 @@ You can configure your map layers in `customlayers.json`. Layers can be categori
 ```
 
 ## Security Note
-**This software is designed to be used behind a reverse proxy (like Nginx, Traefik, or Apache).** It does not implement HTTPS or any form of authentication natively. For production deployments, you **must** use a reverse proxy to handle SSL/TLS termination and access control.
+This application implements a robust, multi-layered security model:
+
+- **Native Authentication:** No data is displayed or processed until the user successfully authenticates with the backend.
+- **Automated mTLS:** The connection to the TAK Server is secured using industry-standard mTLS. Certificates are obtained dynamically via the 8446 enrollment protocol.
+- **Secure Credential Handling:** User credentials for the web interface are never stored in plain text. They are hashed using `PBKDF2-HMAC-SHA256` with a unique random salt generated per enrollment session.
+- **Ephemeral Storage:** All session-related data (certificates, keys, and hashed credentials) is stored in an ephemeral volume. To maintain a high security posture, this data **will be automatically wiped** upon manual logout, certificate expiration, or after 3 failed login attempts.
+
+**Note on Transport Encryption:** While the application handles authentication and mTLS natively, the web interface itself is served over standard HTTP. For production deployments, you **must** use a reverse proxy (e.g., Nginx, Traefik) to provide HTTPS transport encryption for the frontend-to-backend communication.
 
 ## Configuration
 The following values are supported and can be provided either as environment variables or through an .env-file.
@@ -55,14 +68,17 @@ The following values are supported and can be provided either as environment var
 |----------|---------|---------|
 | `TAK_HOST` | `localhost` | Hostname or IP of the TAK Server |
 | `TAK_PORT` | `8089` | TCP/TLS port of the TAK Server |
-| `TAK_TLS_CLIENT_CERT` | `certs/cert.pem` | Path to the mTLS client certificate (PEM) |
-| `TAK_TLS_CLIENT_KEY` | `certs/cert.key` | Path to the mTLS client private key (PEM) |
-| `TAK_TLS_CA_CERT` | (Optional) | Path to the CA certificate for server verification |
-| `TAK_CALLSIGN` | `CesiumViewer` | Callsign this viewer uses to identify itself to the server |
+| `TAK_ENROLL_PORT` | `8446` | Enrollment port of the TAK Server |
+| `TAK_CALLSIGN` | `CesiumViewer` | Callsign used for enrollment and identification |
 | `TAK_UID` | `CesiumViewer-[Callsign]` | Unique ID for the viewer entity |
+| `SECRET_KEY` | (Random) | Secret for signing session cookies (Regenerated on every restart by default) |
+| `EPHEMERAL_DIR` | `certs/ephemeral` | Path to store temporary session certificates |
 | `ICONSETS_DIR` | `/iconsets` | Directory to scan for built-in iconsets |
 | `USER_ICONSETS_DIR` | `/user_iconsets` | Additional directory to scan for user-installed iconsets |
 | `TERRAIN_URL` | (Empty) | URL to a Cesium terrain provider (quantized-mesh or heightmap) |
+| `TERRAIN_EXAGGERATION` | `1.0` | Vertical exaggeration for terrain |
+| `INITIAL_LAT` | `60.1699` | Initial latitude for map center |
+| `INITIAL_LON` | `24.9384` | Initial longitude for map center |
 | `LOG_COTS` | `false` | Set to `true` to log incoming CoT messages to the console |
 | `CENTER_ALERT` | `false` | Automatically zoom and alert on new emergency messages |
 | `TRUSTED_PROXIES` | `127.0.0.1` | Comma-separated list of IPs/CIDRs to trust for X-Forwarded-For |
@@ -105,36 +121,31 @@ For `wms` layers, if you omit the `rectangle` field, the backend will automatica
 For instructions on how to set up the development environment, test, and deploy the application, please refer to the [DEVELOPMENT.md](./DEVELOPMENT.md) file.
 
 ### Quick Start (Docker)
-First, rename `.env.example` to `.env` and edit according to your needs.
-Create and start the container:
+1. Rename `.env.example` to `.env` and edit `TAK_HOST` to point to your server.
+2. Ensure the `certs/ephemeral` directory (or your configured `EPHEMERAL_DIR`) is writable by the container.
+3. Create and start the container:
 
 ```yaml
 services:
   tak-webview:
     image: ghcr.io/sgofferj/tak-webview-cesium:latest
     ports:
-      - "${WEB_PORT:-8000}:8000"
-    environment:
-      - CESIUM_ION_TOKEN=${CESIUM_ION_TOKEN:-}
-      - INITIAL_LAT=${INITIAL_LAT:-60.1699}
-      - INITIAL_LON=${INITIAL_LON:-24.9384}
-      - LOGO=${LOGO:-}
-      - LOGO_POSITION=${LOGO_POSITION:-bottom_right}
+      - "8000:8000"
     env_file:
       - .env
     volumes:
-      - ./certs:/app/certs:ro
-      - ./frontend/iconsets:/iconsets
-      - ./user_iconsets:/user_iconsets
+      - ./certs:/app/certs:rw
+      - ./customlayers.json:/app/customlayers.json:ro
+      - ./user_iconsets:/user_iconsets:ro
     restart: unless-stopped
 ```
 
-1. Place your `cert.pem` and `cert.key` in the `./certs` directory.
-2. Create a `.env` file based on the environment variables table above.
-3. Run:
+4. Run:
    ```bash
    docker compose up -d
    ```
+5. Open the web interface. You will be prompted to **Enroll** with your TAK Server credentials.
+6. Once enrolled, you will **Login** to start the real-time data flow.
 
 ## Support
 If you have a question about the software or find a bug, please open an issue. Suggestions for improvements or pull requests are also welcome 😀.

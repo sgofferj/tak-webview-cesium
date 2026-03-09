@@ -82,7 +82,7 @@ async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
                         ]
 
         return None
-    except Exception as e:
+    except (httpx.RequestError, etree.LxmlError, ValueError) as e:
         logger.error("Error discovering WMS extent for %s: %s", layer_name, e)
         return None
 
@@ -130,9 +130,7 @@ async def load_layers() -> None:
             has_layers = layer.get("layers")
 
             if is_wms and not has_rect and has_layers:
-                logger.info(
-                    "Auto-discovery of extent for: %s", layer.get("name")
-                )
+                logger.info("Auto-discovery of extent for: %s", layer.get("name"))
                 extent = await fetch_wms_extent(layer["url"], layer["layers"])
                 if extent:
                     logger.info(
@@ -162,7 +160,7 @@ async def load_layers() -> None:
             len(overlay_layers_cache),
             config_path,
         )
-    except Exception as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.error(f"Failed to load layers config: {e}")
         layers_cache = []
         overlay_layers_cache = []
