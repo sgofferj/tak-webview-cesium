@@ -19,9 +19,7 @@ import {
 } from "./viewer.js";
 import {
   entityState,
-  showAllTrails,
   setFilters,
-  setShowAllTrails,
   calculateTrailVisibility,
   throttledUpdateUnitList,
 } from "./state.js";
@@ -428,12 +426,6 @@ function setupEvents() {
       ),
       orientation: { heading: 0.0, pitch: -Math.PI / 2, roll: 0.0 },
     });
-  });
-
-  document.getElementById("toggleTrails").addEventListener("click", (e) => {
-    const newVal = !showAllTrails;
-    setShowAllTrails(newVal);
-    e.target.innerText = newVal ? i18n.trailsButtonOn : i18n.trailsButtonOff;
   });
 
   document.getElementById("toggleUnitList").addEventListener("click", () => {

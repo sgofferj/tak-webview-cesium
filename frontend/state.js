@@ -15,8 +15,8 @@ import {
   LabelStyle,
   DistanceDisplayCondition,
   HeadingPitchRange,
-  CallbackProperty,
   PolylineOutlineMaterialProperty,
+  ArcType,
 } from "cesium";
 import ms from "milsymbol";
 import mgrs from "mgrs";
@@ -33,7 +33,6 @@ import {
 export const entityState = {};
 export let currentFilter = "";
 export let currentAffiliationFilter = "all";
-export let showAllTrails = false;
 export let unitListDirty = true;
 export const collapsedStates = new Set(["incidents", "aircraft", "vessels", "other"]);
 
@@ -58,17 +57,6 @@ export function setFilters(filter, affiliation) {
   if (filter !== undefined) currentFilter = filter.toLowerCase();
   if (affiliation !== undefined) currentAffiliationFilter = affiliation;
   applyFilter();
-}
-
-export function setShowAllTrails(val) {
-  showAllTrails = val;
-  unitListDirty = true;
-  Object.keys(entityState).forEach((uid) => {
-    const state = entityState[uid];
-    if (state.trailEntity) {
-      state.trailEntity.show = calculateTrailVisibility(uid);
-    }
-  });
 }
 
 export function calculateVisibility(data) {
@@ -101,9 +89,10 @@ export function calculateVisibility(data) {
 export function calculateTrailVisibility(uid) {
   const state = entityState[uid];
   if (!state || !state.trailEntity) return false;
+  // Trail ONLY for selected entity
   const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
   const isVisible = calculateVisibility(state.lastData);
-  return isVisible && (showAllTrails || isSelected);
+  return isVisible && isSelected;
 }
 
 export function applyFilter() {
@@ -122,7 +111,7 @@ export function applyFilter() {
 export function createDescription(data) {
   const {
     uid, callsign, remarks, link_url, emergency, xmpp, mail, phone,
-    battery, lat, lon, alt, speed,
+    battery, lat, lon, alt, speed, course,
   } = data;
   let html = `<div style="font-family: sans-serif; color: white;">`;
   if (emergency && emergency.status === "active") {
@@ -137,8 +126,9 @@ export function createDescription(data) {
     } catch (e) { console.error("MGRS failed", e); }
     html += `<b>Lat/Lon:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}<br/>`;
   }
-  if (alt !== undefined && alt !== null) html += `<b>Alt:</b> ${alt} m<br/>`;
+  if (alt !== undefined && alt !== null) html += `<b>Alt:</b> ${alt.toFixed(0)} m<br/>`;
   if (speed !== undefined && speed !== null) html += `<b>Speed:</b> ${(speed * 3.6).toFixed(1)} km/h<br/>`;
+  if (course !== undefined && course !== null) html += `<b>Course:</b> ${course.toFixed(0)}°<br/>`;
 
   if (xmpp || mail || phone) {
     html += `<br/><b>Contact information:</b><br/>`;
@@ -318,6 +308,7 @@ function drawGroupIcon(name, role, how) {
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(abbr, cx, cy);
   }
+
   return canvas;
 }
 
@@ -349,11 +340,10 @@ export async function updateEntity(incomingData) {
   const fullData = state ? state.lastData : data;
   const {
     callsign, type, lat, lon, alt, color, iconsetpath, emergency,
-    course, squawk, stale, how, group_role, group_name,
+    course, squawk, stale, how, group_role, group_name, speed,
   } = fullData;
 
   const position = Cartesian3.fromDegrees(lon, lat, (alt > 9000000 ? 0 : alt) || 0);
-  const groundPosition = Cartesian3.fromDegrees(lon, lat, 0);
   const sidc = cotToSidc((type || "").toUpperCase());
   
   let iconsetUrl = null;
@@ -376,6 +366,8 @@ export async function updateEntity(incomingData) {
   }
   const effectiveColor = color ? cesiumColor : getAffiliationColor(type);
   const useTeamCircle = !!group_name && !!group_role;
+
+  // Clean, modifier-free state key
   const stateKey = useTeamCircle ? `group-${group_name}-${group_role}-${color}-${how}` :
                    iconsetUrl ? `icon-${iconsetUrl}-${rgbColor}` : 
                    `${sidc}-${color}-${squawk}`;
@@ -402,20 +394,18 @@ export async function updateEntity(incomingData) {
           pixelOffset: new Cartesian2(0, -25), eyeOffset: new Cartesian3(0, 0, -20),
           distanceDisplayCondition: ddcTactical, disableDepthTestDistance: HORIZON_LIMIT,
         },
-        polyline: {
-          positions: new CallbackProperty(() => [groundPosition, position], false),
-          width: 1.5, material: effectiveColor, distanceDisplayCondition: ddcTactical,
-        },
         description: description,
       });
 
       const trailEntity = viewer.entities.add({
+        id: uid + "-trail",
         polyline: {
-          positions: new CallbackProperty(() => [...history], false),
+          positions: [...history],
           width: 3, material: new PolylineOutlineMaterialProperty({ color: effectiveColor, outlineWidth: 2, outlineColor: Color.BLACK.withAlpha(0.5) }),
           distanceDisplayCondition: ddcTactical,
+          arcType: ArcType.NONE,
         },
-        show: calculateTrailVisibility(uid),
+        show: false,
       });
 
       state = { entity, trailEntity, history, lastStateKey: "", lastData: fullData, lastIconUrl: "" };
@@ -427,11 +417,19 @@ export async function updateEntity(incomingData) {
   } else {
     state.entity.position = position;
     state.entity.description = description;
+    
     state.history.push(position);
     if (state.history.length > 100) state.history.shift();
+    
     if (state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign) {
         state.entity.label.text = callsign;
         unitListDirty = true;
+    }
+    
+    const trailVisible = calculateTrailVisibility(uid);
+    state.trailEntity.show = trailVisible;
+    if (trailVisible) {
+        state.trailEntity.polyline.positions = [...state.history];
     }
   }
 
@@ -454,16 +452,13 @@ export async function updateEntity(incomingData) {
           billboardColor = color ? cesiumColor : Color.WHITE;
         } else {
           const symbolOptions = { size: 21, padding: 10 }; 
-          if (getSquawkLabel(squawk, i18n)) symbolOptions.staffComments = getSquawkLabel(squawk, i18n);
-          if (course !== null && course !== undefined && type.split("-")[2] === "A") symbolOptions.direction = course;
           const symbol = new ms.Symbol(sidc, symbolOptions);
           const canvas = symbol.asCanvas();
           const iconAnchor = symbol.getAnchor();
           const iconSize = symbol.getSize();
           iconUrl = await canvasToBlobUrl(canvas);
           const scale = 1.1;
-          width = iconSize.width * scale;
-          height = iconSize.height * scale;
+          width = iconSize.width * scale; height = iconSize.height * scale;
           pixelOffset = new Cartesian2((iconSize.width / 2 - iconAnchor.x) * scale, (iconSize.height / 2 - iconAnchor.y) * scale);
         }
         state.entity.billboard.image = iconUrl;
@@ -473,10 +468,11 @@ export async function updateEntity(incomingData) {
         state.lastIconUrl = iconUrl;
         iconCache.set(stateKey, { blobUrl: iconUrl, pixelOffset, width, height, color: billboardColor });
     }
-    state.lastRgbColor = rgbColor;
     state.lastStateKey = stateKey;
+    state.lastRgbColor = rgbColor;
     unitListDirty = true;
   }
+
   state.entity.show = calculateVisibility(fullData);
   state.staleAt = stale ? new Date(stale).getTime() : null;
   throttledUpdateUnitList();
