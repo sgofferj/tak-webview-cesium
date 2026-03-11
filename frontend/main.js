@@ -98,14 +98,13 @@ function setupAuthEvents() {
     const server = document.getElementById("enrollServer").value;
     const username = document.getElementById("enrollUser").value;
     const password = document.getElementById("enrollPass").value;
-    const cert_password = document.getElementById("enrollCertPass").value;
     message.classList.add("hidden");
 
     try {
       const resp = await fetch("/api/auth/enroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ server, username, password, cert_password }),
+        body: JSON.stringify({ server, username, password }),
       });
       if (resp.ok) {
         init(); // Re-run init to start app
@@ -149,7 +148,7 @@ function setupAuthEvents() {
     .getElementById("enrollButton")
     .addEventListener("click", triggerEnroll);
 
-  document.getElementById("enrollCertPass").addEventListener("keyup", (e) => {
+  document.getElementById("enrollPass").addEventListener("keyup", (e) => {
     if (e.key === "Enter") triggerEnroll();
   });
 

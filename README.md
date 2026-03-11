@@ -52,12 +52,20 @@ You can configure your map layers in `customlayers.json`. Layers can be categori
 ```
 
 ## Security Note
-This application implements a robust, multi-layered security model:
+This application implements a rigorous, multi-layered security model designed to protect sensitive mission data and cryptographic identities:
 
 - **Native Authentication:** No data is displayed or processed until the user successfully authenticates with the backend.
-- **Automated mTLS:** The connection to the TAK Server is secured using industry-standard mTLS. Certificates are obtained dynamically via the 8446 enrollment protocol.
+- **Automated mTLS Enrollment:** The connection to the TAK Server is secured using industry-standard mTLS. Certificates are obtained dynamically via the 8446 enrollment protocol using a simplified, automated workflow.
 - **Secure Credential Handling:** User credentials for the web interface are never stored in plain text. They are hashed using `PBKDF2-HMAC-SHA256` with a unique random salt generated per enrollment session.
-- **Ephemeral Storage:** All session-related data (certificates, keys, and hashed credentials) is stored in an ephemeral volume. To maintain a high security posture, this data **will be automatically wiped** upon manual logout, certificate expiration, or after 3 failed login attempts.
+- **Ephemeral Storage & Auto-Wipe:** All session-related data (certificates, keys, and hashed credentials) is stored in an ephemeral volume. This data is **automatically wiped** upon manual logout, certificate expiration, or after 3 failed login attempts.
+
+### Never-Unencrypted-on-Disk Philosophy
+To maintain the highest possible security posture, this application ensures that your **private key never exists in cleartext on the filesystem**:
+
+1.  **Transparent Encryption:** Upon enrollment, the private key is immediately encrypted using a strong `Fernet` (AES-128 in CBC mode with HMAC-SHA256) key derived from your login credentials. Only the encrypted blob is written to the persistent (ephemeral) volume.
+2.  **RAM-Only Decryption:** When the application connects to the TAK Server, the private key is decrypted directly into RAM. 
+3.  **Linux `memfd` Integration:** The application utilizes Linux-native `memfd_create` to create a virtual, RAM-backed file descriptor for the decrypted key. This allows the system to feed the private key to the standard SSL library without ever creating a temporary file on disk.
+4.  **Zero-Knowledge Secrets:** The secrets used for CSR enrollment and key storage are derived deterministically from your login credentials and salts, removing the need for user-chosen (and often weak) certificate passwords.
 
 **Note on Transport Encryption:** While the application handles authentication and mTLS natively, the web interface itself is served over standard HTTP. For production deployments, you **must** use a reverse proxy (e.g., Nginx, Traefik) to provide HTTPS transport encryption for the frontend-to-backend communication.
 
