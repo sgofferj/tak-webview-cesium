@@ -72,7 +72,7 @@ The project is designed to be deployed as a single, unified Docker container.
 ### 1. Build the Image
 ```bash
 # In the project root
-docker build -t tak-cesium-webview .
+docker build -t tak-webview-cesium .
 ```
 
 ### 2. Run the Container
@@ -84,7 +84,7 @@ You can create a `docker-compose.yml` file to manage the container:
 ```yaml
 services:
   tak-webview:
-    image: tak-cesium-webview:latest
+    image: tak-webview-cesium:latest
     ports:
       - "${WEB_PORT:-8000}:8000"
     environment:
@@ -112,11 +112,11 @@ docker run -d \
   -e TAK_HOST=192.168.1.10 \
   -e CESIUM_ION_TOKEN=your_token \
   -v ./certs:/app/certs:ro \
-  tak-cesium-webview
+  tak-webview-cesium
 ```
 
 ## Deployment
-1. Place your `cert.pem` and `cert.key` in the `./certs` directory.
+1. Ensure the `certs/ephemeral` directory (or your configured `EPHEMERAL_DIR`) is writable by the container.
 2. Create a `.env` file based on the documentation in the main `README.md`.
 3. Run with Docker Compose:
    ```bash

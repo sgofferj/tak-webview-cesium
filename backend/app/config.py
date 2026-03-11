@@ -7,6 +7,8 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
+import json
+import secrets
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -21,26 +23,32 @@ class Settings(BaseSettings):
     app_title: str = "TAK Cesium Map"
     tak_host: str = "localhost"
     tak_port: int = 8089
-    tak_tls_client_cert: str = "certs/cert.pem"
-    tak_tls_client_key: str = "certs/cert.key"
-    tak_tls_ca_cert: str | None = None
     tak_callsign: str = "CesiumViewer"
     tak_type: str = "a-f-G-U-C-I"
     tak_uid: str | None = None
+
+    # Enrollment
+    tak_enroll_port: int = 8446
+    ephemeral_dir: str = "certs/ephemeral"
+    ephemeral_cert: str = "cert.pem"
+    ephemeral_key: str = "cert.key"
+    ephemeral_ca: str = "ca.pem"
+    ephemeral_creds: str = "creds.json"
+
+    # Security
+    secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
 
     # App Behavior
     log_cots: bool = False
     center_alert: bool = False
     port: int = 8000
-    
+
     # Traffic Optimization
     ws_throttle: float = 0.5  # Max 2 updates per second per UID
     use_msgpack: bool = True
 
     # Use str | list[str] to satisfy Ruff/UP007 and prevent Pydantic JSON forcing
-    trusted_proxies: str | list[str] = Field(
-        default_factory=lambda: ["127.0.0.1"]
-    )
+    trusted_proxies: str | list[str] = Field(default_factory=lambda: ["127.0.0.1"])
 
     @field_validator("trusted_proxies", mode="before")
     @classmethod
@@ -49,6 +57,7 @@ class Settings(BaseSettings):
             # If it's a JSON-like string, try to parse it
             if v.strip().startswith("[") and v.strip().endswith("]"):
                 import json
+
                 try:
                     res = json.loads(v)
                     if isinstance(res, list):

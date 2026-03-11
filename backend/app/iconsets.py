@@ -59,6 +59,6 @@ def load_iconsets(directory: str, base_url_path: str) -> dict[str, str]:
                     }
                     mounts[uid] = root
                     logger.info(f"Loaded iconset: {name or uid} ({uid})")
-            except Exception as e:
+            except (etree.LxmlError, OSError, ValueError) as e:
                 logger.error(f"Failed to load iconset in {root}: {e}")
     return mounts
