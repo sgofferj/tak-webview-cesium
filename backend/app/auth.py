@@ -38,7 +38,8 @@ class AuthManager:
 
         os.makedirs(self.ephemeral_dir, exist_ok=True)
         self.failed_attempts = 0
-        self.cert_password: str | None = None
+        # This will now store the master STORAGE_KEY instead of the cleartext password
+        self._storage_key: bytes | None = None
 
     def _derive_fernet_key(self, password: str, salt: str) -> bytes:
         """Derive a Fernet key from a password and salt."""
@@ -59,20 +60,20 @@ class AuthManager:
         ).hex()
         return pw_hash, salt
 
-    def save_credentials(self, username: str, password: str, cert_password: str, server: str) -> None:
-        """Save login hash, ENCRYPTED cert decryption password and server address."""
-        pw_hash, salt = self.hash_password(password)
+    def _get_enrollment_secret(self, password: str, salt: str) -> str:
+        """Generate a deterministic but strong secret for the TAK enrollment CSR."""
+        combined = f"{password}:{salt}:enrollment"
+        return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
 
-        # Encrypt the cert_password using the login password
-        key = self._derive_fernet_key(password, salt)
-        f = Fernet(key)
-        encrypted_cert_pw = f.encrypt(cert_password.encode("utf-8")).decode("utf-8")
+    def save_credentials(self, username: str, password: str, server: str, salt: str | None = None) -> None:
+        """Save login hash and server address. Uses provided salt or generates new one."""
+        pw_hash, salt = self.hash_password(password, salt)
+        self._storage_key = self._derive_fernet_key(password, salt)
 
         data = {
             "username": username,
             "hash": pw_hash,
             "salt": salt,
-            "encrypted_cert_pw": encrypted_cert_pw,
             "server": server,
         }
         with open(self.creds_file, "w", encoding="utf-8") as f_out:
@@ -103,17 +104,9 @@ class AuthManager:
             salt = data.get("salt")
             check_hash, _ = self.hash_password(password, salt)
             if secrets.compare_digest(check_hash, data.get("hash", "")):
-                # Decrypt the cert_password into memory
-                try:
-                    key = self._derive_fernet_key(password, salt)
-                    fernet = Fernet(key)
-                    self.cert_password = fernet.decrypt(
-                        data.get("encrypted_cert_pw", "").encode("utf-8")
-                    ).decode("utf-8")
-                    return True
-                except Exception as e:
-                    logger.error(f"Failed to decrypt stored cert password: {e}")
-                    return False
+                # Derive and cache the storage key in RAM only
+                self._storage_key = self._derive_fernet_key(password, salt)
+                return True
             return False
         except (OSError, json.JSONDecodeError) as e:
             logger.error(f"Failed to verify credentials: {e}")
@@ -167,12 +160,33 @@ class AuthManager:
             logger.error(f"Failed to read cert info: {e}")
             return None
 
-    async def enroll(
-        self, server: str, username: str, password: str, cert_password: str
-    ) -> bool:
+    def get_private_key(self) -> bytes | None:
+        """Decrypt the private key from disk into RAM."""
+        if not os.path.exists(self.key_file):
+            logger.error("Private key file missing on disk")
+            return None
+        if not self._storage_key:
+            logger.error("Storage key not initialized in RAM (not logged in?)")
+            return None
+        
+        try:
+            with open(self.key_file, "rb") as f:
+                encrypted_key = f.read()
+            
+            f_box = Fernet(self._storage_key)
+            return f_box.decrypt(encrypted_key)
+        except Exception as e:
+            logger.error(f"Failed to decrypt private key in RAM: {type(e).__name__}: {e}")
+            return None
+
+    async def enroll(self, server: str, username: str, password: str) -> bool:
         self.wipe_ephemeral()
         uid = settings.tak_uid_final
         base_url = f"https://{server}:{settings.tak_enroll_port}/Marti/api/tls"
+
+        # Initialize salt early for enrollment secret derivation
+        _, salt = self.hash_password(password)
+        enrollment_secret = self._get_enrollment_secret(password, salt)
 
         try:
             # 1. Generate Key Pair (Needed for CSR)
@@ -207,7 +221,6 @@ class AuthManager:
                     "L": x509.NameOID.LOCALITY_NAME,
                 }
 
-                # ATAK uses the username as CN
                 subject_items = [x509.NameAttribute(x509.NameOID.COMMON_NAME, username)]
                 for name, value in name_entries:
                     if name in oid_map and name != "CN":
@@ -220,8 +233,6 @@ class AuthManager:
                     .sign(temp_key, hashes.SHA256())
                 )
                 csr_pem = csr.public_bytes(serialization.Encoding.PEM)
-
-                # ATAK strips the banners!
                 csr_body = (
                     csr_pem.decode("utf-8")
                     .replace("-----BEGIN CERTIFICATE REQUEST-----", "")
@@ -230,8 +241,8 @@ class AuthManager:
                     .encode("utf-8")
                 )
 
-                # 5. Sign Client
-                sign_url = f"{base_url}/signClient/v2?clientUid={uid}&version=4.10.0"
+                # 5. Sign Client (Using our hidden enrollment secret as password)
+                sign_url = f"{base_url}/signClient/v2?clientUid={uid}&version=4.10.0&token={enrollment_secret}"
                 headers = {
                     "Accept": "application/xml",
                     "Content-Type": "application/octet-stream",
@@ -242,15 +253,13 @@ class AuthManager:
                 )
 
                 if sign_resp.status_code != 200:
-                    logger.error(
-                        f"Signing failed: {sign_resp.status_code} - {sign_resp.text}"
-                    )
+                    logger.error(f"Signing failed: {sign_resp.status_code}")
                     return False
 
                 # 6. Parse XML Response
                 root = etree.fromstring(sign_resp.content)
                 client_cert_pem = None
-                private_key_pem = None
+                raw_private_key = None
                 ca_certs = []
 
                 for child in root:
@@ -258,36 +267,40 @@ class AuthManager:
                     if "}" in tag_name:
                         tag_name = tag_name.split("}")[1]
 
-                    logger.info(f"Enrollment response tag: {tag_name}")
-
                     if tag_name == "signedCert":
                         client_cert_pem = self._ensure_pem_headers(child.text)
                     elif tag_name == "privateKey":
-                        # The TAK server provides the private key ENCRYPTED with cert_password
-                        private_key_pem = self._ensure_pem_headers(
-                            child.text, "ENCRYPTED PRIVATE KEY"
+                        # Decrypt what the server sent using our enrollment secret
+                        server_key_pem = self._ensure_pem_headers(child.text, "ENCRYPTED PRIVATE KEY")
+                        # We don't want to leave this on disk, we'll transform it later
+                        raw_private_key = serialization.load_pem_private_key(
+                            server_key_pem, 
+                            password=enrollment_secret.encode("utf-8")
                         )
                     else:
                         ca_certs.append(self._ensure_pem_headers(child.text))
 
-                # Use temp_key if server didn't provide one
-                if not private_key_pem:
+                if not raw_private_key:
                     logger.info("Server did not provide private key, using local temp")
-                    private_key_pem = temp_key.private_bytes(
-                        encoding=serialization.Encoding.PEM,
-                        format=serialization.PrivateFormat.PKCS8,
-                        encryption_algorithm=serialization.BestAvailableEncryption(
-                            cert_password.encode("utf-8")
-                        ),
-                    )
+                    raw_private_key = temp_key
 
                 if not client_cert_pem:
                     logger.error("No signedCert found in response")
                     return False
 
+                # 7. Final Protection: Encrypt the key with our hidden STORAGE_KEY
+                storage_key = self._derive_fernet_key(password, salt)
+                key_bytes = raw_private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption() # We encrypt with Fernet instead
+                )
+                f_box = Fernet(storage_key)
+                encrypted_key_blob = f_box.encrypt(key_bytes)
+
                 # Write files
                 with open(self.key_file, "wb") as f:
-                    f.write(private_key_pem)
+                    f.write(encrypted_key_blob)
 
                 with open(self.cert_file, "wb") as f:
                     f.write(client_cert_pem)
@@ -298,8 +311,7 @@ class AuthManager:
                             f.write(cert)
                             f.write(b"\n")
 
-                self.save_credentials(username, password, cert_password, server)
-                self.cert_password = cert_password  # Keep in memory for immediate use
+                self.save_credentials(username, password, server, salt=salt)
                 logger.info("Enrollment successful")
                 return True
 
@@ -308,9 +320,8 @@ class AuthManager:
             return False
 
     def wipe_ephemeral(self) -> None:
-        self.authenticated = False
         self.failed_attempts = 0
-        self.cert_password = None
+        self._storage_key = None
         for f in [self.cert_file, self.key_file, self.ca_file, self.creds_file]:
             if os.path.exists(f):
                 os.remove(f)

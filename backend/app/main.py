@@ -90,7 +90,6 @@ class EnrollRequest(BaseModel):
     server: str
     username: str
     password: str
-    cert_password: str
 
 
 @app.get("/api/auth/status")
@@ -105,9 +104,7 @@ async def auth_status(request: Request) -> dict[str, Any]:
 
 @app.post("/api/auth/enroll")
 async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
-    success = await auth_manager.enroll(
-        req.server, req.username, req.password, req.cert_password
-    )
+    success = await auth_manager.enroll(req.server, req.username, req.password)
     if not success:
         raise HTTPException(status_code=401, detail="Enrollment failed")
 
@@ -115,7 +112,7 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     request.session["authenticated"] = True
     auth_manager.failed_attempts = 0
     # Start TAK client
-    asyncio.create_task(tak_client.run())
+    await tak_client.start()
 
     return {"status": "success"}
 
@@ -135,7 +132,7 @@ async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
         request.session["authenticated"] = True
         auth_manager.failed_attempts = 0
         # Start TAK client
-        asyncio.create_task(tak_client.run())
+        await tak_client.start()
         return {"status": "success"}
 
     auth_manager.failed_attempts += 1
