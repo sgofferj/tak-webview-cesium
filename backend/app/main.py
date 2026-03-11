@@ -15,16 +15,19 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from anyio import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from .config import settings
 from .connection import manager
 from .iconsets import iconsets_cache, load_iconsets
 from .layers import get_app_config, load_layers
 from .tak_client import tak_client
+from .auth import auth_manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,8 +41,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     await load_layers()
 
-    # Start TAK client
-    asyncio.create_task(tak_client.run())
+    # In dynamic session-based mode, the TAK client starts ONLY when a user actively logs in.
+    logger.info("Application startup. Waiting for user login to start TAK client.")
 
     yield
     # Shutdown
@@ -47,6 +50,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(lifespan=lifespan)
+
+# Session management - max_age=None makes it a session-only cookie
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=settings.secret_key,
+    session_cookie="tak_webview_session",
+    max_age=None,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +81,88 @@ for uid, fs_path in user_iconset_mounts.items():
 
 
 # API Routes
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class EnrollRequest(BaseModel):
+    server: str
+    username: str
+    password: str
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request) -> dict[str, Any]:
+    authenticated = request.session.get("authenticated", False)
+    return {
+        "enrolled": auth_manager.is_enrolled(),
+        "authenticated": authenticated,
+        "cert": auth_manager.get_cert_info(),
+    }
+
+
+@app.post("/api/auth/enroll")
+async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
+    success = await auth_manager.enroll(req.server, req.username, req.password)
+    if not success:
+        raise HTTPException(status_code=401, detail="Enrollment failed")
+
+    # Automatically authenticate after enrollment
+    request.session["authenticated"] = True
+    auth_manager.failed_attempts = 0
+    # Start TAK client
+    await tak_client.start()
+
+    return {"status": "success"}
+
+
+@app.post("/api/auth/login")
+async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
+    if not auth_manager.is_enrolled():
+        raise HTTPException(status_code=400, detail="Not enrolled")
+
+    # Check expiry
+    cert_info = auth_manager.get_cert_info()
+    if cert_info and cert_info.get("status") == "expired":
+        auth_manager.wipe_ephemeral()
+        raise HTTPException(status_code=401, detail="Certificate expired")
+
+    if auth_manager.verify_credentials(req.username, req.password):
+        request.session["authenticated"] = True
+        auth_manager.failed_attempts = 0
+        # Start TAK client
+        await tak_client.start()
+        return {"status": "success"}
+
+    auth_manager.failed_attempts += 1
+    if auth_manager.failed_attempts >= 3:
+        auth_manager.wipe_ephemeral()
+        request.session.clear()
+        raise HTTPException(
+            status_code=401, detail="Max attempts reached. Ephemeral storage wiped."
+        )
+
+    raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request) -> dict[str, Any]:
+    """Session logout only - keeps certificates."""
+    await tak_client.stop()
+    request.session.clear()
+    return {"status": "success"}
+
+
+@app.post("/api/auth/logout-wipe")
+async def auth_logout_wipe(request: Request) -> dict[str, Any]:
+    """Full logout and wipe of ephemeral storage."""
+    await tak_client.stop()
+    auth_manager.wipe_ephemeral()
+    request.session.clear()
+    return {"status": "success"}
+
+
 @app.get("/config")
 async def config() -> dict[str, Any]:
     return await get_app_config()
@@ -91,6 +184,12 @@ async def get_logo() -> Response:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
+    # Check session auth for websocket as well
+    session = websocket.scope.get("session", {})
+    if not session.get("authenticated"):
+        await websocket.close(code=4001)
+        return
+
     await manager.connect(websocket)
     try:
         while True:
