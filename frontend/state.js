@@ -16,8 +16,10 @@ import {
   DistanceDisplayCondition,
   HeadingPitchRange,
   PolylineOutlineMaterialProperty,
-  ArcType,
+  HeightReference,
 } from "cesium";
+
+const GROUND_OFFSET = 0; // Surface clamping
 import ms from "milsymbol";
 import mgrs from "mgrs";
 import { i18n } from "./config.js";
@@ -34,18 +36,41 @@ export const entityState = {};
 export let currentFilter = "";
 export let currentAffiliationFilter = "all";
 export let unitListDirty = true;
-export const collapsedStates = new Set(["incidents", "aircraft", "vessels", "other"]);
+export const collapsedStates = new Set([
+  "incidents",
+  "aircraft",
+  "vessels",
+  "other",
+]);
 
 const MAX_DISTANCE = 10000000.0;
 const HORIZON_LIMIT = 1000000.0; // 1000km
 const TACTICAL_DISTANCE = 500000.0; // 500km
 
 const REVERSE_KEY_MAP = {
-  i: "uid", t: "type", c: "callsign", la: "lat", lo: "lon", al: "alt",
-  s: "stale", r: "remarks", sq: "squawk", co: "course", sp: "speed",
-  l: "link_url", cl: "color", ip: "iconsetpath", e: "emergency",
-  x: "xmpp", m: "mail", p: "phone", b: "battery", h: "how",
-  gr: "group_role", gn: "group_name", ce: "ce",
+  i: "uid",
+  t: "type",
+  c: "callsign",
+  la: "lat",
+  lo: "lon",
+  al: "alt",
+  s: "stale",
+  r: "remarks",
+  sq: "squawk",
+  co: "course",
+  sp: "speed",
+  l: "link_url",
+  cl: "color",
+  ip: "iconsetpath",
+  e: "emergency",
+  x: "xmpp",
+  m: "mail",
+  p: "phone",
+  b: "battery",
+  h: "how",
+  gr: "group_role",
+  gn: "group_name",
+  ce: "ce",
 };
 
 // Global icon cache to prevent memory leaks and redundant rendering
@@ -110,8 +135,20 @@ export function applyFilter() {
 
 export function createDescription(data) {
   const {
-    uid, callsign, remarks, link_url, emergency, xmpp, mail, phone,
-    battery, lat, lon, alt, speed, course,
+    uid,
+    callsign,
+    remarks,
+    link_url,
+    emergency,
+    xmpp,
+    mail,
+    phone,
+    battery,
+    lat,
+    lon,
+    alt,
+    speed,
+    course,
   } = data;
   let html = `<div style="font-family: sans-serif; color: white;">`;
   if (emergency && emergency.status === "active") {
@@ -123,23 +160,32 @@ export function createDescription(data) {
     try {
       const mgrsStr = mgrs.forward([lon, lat]);
       html += `<b>MGRS:</b> ${mgrsStr}<br/>`;
-    } catch (e) { console.error("MGRS failed", e); }
+    } catch (e) {
+      console.error("MGRS failed", e);
+    }
     html += `<b>Lat/Lon:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}<br/>`;
   }
-  if (alt !== undefined && alt !== null) html += `<b>Alt:</b> ${alt.toFixed(0)} m<br/>`;
-  if (speed !== undefined && speed !== null) html += `<b>Speed:</b> ${(speed * 3.6).toFixed(1)} km/h<br/>`;
-  if (course !== undefined && course !== null) html += `<b>Course:</b> ${course.toFixed(0)}°<br/>`;
+  if (alt !== undefined && alt !== null)
+    html += `<b>Alt:</b> ${alt.toFixed(0)} m<br/>`;
+  if (speed !== undefined && speed !== null)
+    html += `<b>Speed:</b> ${(speed * 3.6).toFixed(1)} km/h<br/>`;
+  if (course !== undefined && course !== null)
+    html += `<b>Course:</b> ${course.toFixed(0)}°<br/>`;
 
   if (xmpp || mail || phone) {
     html += `<br/><b>Contact information:</b><br/>`;
-    if (xmpp) html += `<b>XMPP:</b> <a href="xmpp:${xmpp}" style="color: #4af;">${xmpp}</a><br/>`;
-    if (mail) html += `<b>Email:</b> <a href="mailto:${mail}" style="color: #4af;">${mail}</a><br/>`;
-    if (phone) html += `<b>Phone:</b> <a href="tel:${phone}" style="color: #4af;">${phone}</a><br/>`;
+    if (xmpp)
+      html += `<b>XMPP:</b> <a href="xmpp:${xmpp}" style="color: #4af;">${xmpp}</a><br/>`;
+    if (mail)
+      html += `<b>Email:</b> <a href="mailto:${mail}" style="color: #4af;">${mail}</a><br/>`;
+    if (phone)
+      html += `<b>Phone:</b> <a href="tel:${phone}" style="color: #4af;">${phone}</a><br/>`;
   }
 
   if (data.squawk) {
     const label = getSquawkLabel(data.squawk, i18n);
-    if (label) html += `<b>${i18n.emergencyLabel || "Emergency"}:</b> <span style="color: red; font-weight: bold;">${label}</span><br/>`;
+    if (label)
+      html += `<b>${i18n.emergencyLabel || "Emergency"}:</b> <span style="color: red; font-weight: bold;">${label}</span><br/>`;
   }
   let processedRemarks = remarks || "";
   let extractedLink = link_url;
@@ -151,8 +197,13 @@ export function createDescription(data) {
   }
   if (processedRemarks.trim()) {
     const formattedRemarks = processedRemarks
-      .replace(/#(\w+)/g, '<a class="hashtag-link" data-tag="#$1" style="color: #4af; cursor: pointer; text-decoration: underline;">#$1</a>')
-      .replace(/\n\s*\n/g, "\n").trim().replace(/\n/g, "<br/>");
+      .replace(
+        /#(\w+)/g,
+        '<a class="hashtag-link" data-tag="#$1" style="color: #4af; cursor: pointer; text-decoration: underline;">#$1</a>',
+      )
+      .replace(/\n\s*\n/g, "\n")
+      .trim()
+      .replace(/\n/g, "<br/>");
     html += `<br/><b>${i18n.infoBoxHeader}:</b><br/>${formattedRemarks}<br/>`;
   }
   if (extractedLink) {
@@ -202,14 +253,23 @@ export function updateUnitListUI() {
     const uidLower = uid.toLowerCase();
     let cat = "other";
     if (uidLower.includes("gdacs")) cat = "incidents";
-    else if (uidLower.includes("icao") || (data.remarks || "").toLowerCase().includes("#adsb")) cat = "aircraft";
-    else if (uidLower.includes("ais") || (data.remarks || "").toLowerCase().includes("#ais")) cat = "vessels";
+    else if (
+      uidLower.includes("icao") ||
+      (data.remarks || "").toLowerCase().includes("#adsb")
+    )
+      cat = "aircraft";
+    else if (
+      uidLower.includes("ais") ||
+      (data.remarks || "").toLowerCase().includes("#ais")
+    )
+      cat = "vessels";
 
     const et = (data.type || "u-u-g").split("-");
     const affilCode = et[1] ? et[1].toLowerCase() : "u";
     const affilLabel = currentAffilMap[affilCode] || i18n.affiliationUnknown;
 
-    if (!categories[cat].groups[affilLabel]) categories[cat].groups[affilLabel] = [];
+    if (!categories[cat].groups[affilLabel])
+      categories[cat].groups[affilLabel] = [];
     categories[cat].groups[affilLabel].push({
       uid: uid,
       callsign: data.callsign,
@@ -223,12 +283,20 @@ export function updateUnitListUI() {
   Object.keys(categories).forEach((catKey) => {
     const cat = categories[catKey];
     if (Object.keys(cat.groups).length === 0) return;
-    const totalCount = Object.values(cat.groups).reduce((sum, g) => sum + g.length, 0);
+    const totalCount = Object.values(cat.groups).reduce(
+      (sum, g) => sum + g.length,
+      0,
+    );
     const catCollapsed = collapsedStates.has(catKey);
     html += `<div class="unit-group ${catCollapsed ? "collapsed" : ""}">
             <div class="unit-group-header" onclick="toggleCollapse('${catKey}')">${cat.label} (${totalCount})</div>
             <div class="unit-group-content">`;
-    [i18n.affiliationFriendly, i18n.affiliationHostile, i18n.affiliationNeutral, i18n.affiliationUnknown].forEach((affil) => {
+    [
+      i18n.affiliationFriendly,
+      i18n.affiliationHostile,
+      i18n.affiliationNeutral,
+      i18n.affiliationUnknown,
+    ].forEach((affil) => {
       const units = cat.groups[affil];
       if (!units || units.length === 0) return;
       const subKey = `${catKey}-${affil}`;
@@ -236,18 +304,22 @@ export function updateUnitListUI() {
       html += `<div class="affiliation-group ${isSubCollapsed ? "collapsed" : ""}">
                 <div class="affiliation-header" onclick="toggleCollapse('${subKey}')">${affil} (${units.length})</div>
                 <div class="affiliation-content">`;
-      units.sort((a, b) => a.callsign.localeCompare(b.callsign)).forEach((unit) => {
-        html += `<div class="unit-item" onclick="zoomToUnit('${unit.uid}')">
+      units
+        .sort((a, b) => a.callsign.localeCompare(b.callsign))
+        .forEach((unit) => {
+          html += `<div class="unit-item" onclick="zoomToUnit('${unit.uid}')">
                     <img class="unit-icon" src="${unit.iconUrl}" />
                     <span class="unit-name" style="color: ${unit.color}">${unit.callsign}</span>
                     ${unit.emergency ? `<span class="unit-emergency">${i18n.emergency911Badge}</span>` : ""}
                 </div>`;
-      });
+        });
       html += `</div></div>`;
     });
     html += `</div></div>`;
   });
-  content.innerHTML = html || `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
+  content.innerHTML =
+    html ||
+    `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
   unitListDirty = false;
 }
 
@@ -264,48 +336,80 @@ window.zoomToUnit = function (uid) {
   const state = entityState[uid];
   if (state) {
     viewer.selectedEntity = state.entity;
-    viewer.flyTo(state.entity, { offset: new HeadingPitchRange(0, -Math.PI / 2, 100000) });
+    viewer.flyTo(state.entity, {
+      offset: new HeadingPitchRange(0, -Math.PI / 2, 100000),
+    });
   }
 };
 
 function drawGroupIcon(name, role, how) {
   const canvas = document.createElement("canvas");
-  canvas.width = 256; canvas.height = 256;
+  canvas.width = 256;
+  canvas.height = 256;
   const ctx = canvas.getContext("2d");
-  const cx = 128; const cy = 128;
+  const cx = 128;
+  const cy = 128;
 
   const groupColors = {
-    Cyan: "#00FFFF", Green: "#00FF00", Blue: "#0000FF", Red: "#FF0000",
-    Yellow: "#FFFF00", Magenta: "#FF00FF", White: "#FFFFFF", Maroon: "#800000",
-    "Dark Blue": "#00008B", "Dark Green": "#006400", Purple: "#800080",
-    Orange: "#FFA500", Brown: "#A52A2A",
+    Cyan: "#00FFFF",
+    Green: "#00FF00",
+    Blue: "#0000FF",
+    Red: "#FF0000",
+    Yellow: "#FFFF00",
+    Magenta: "#FF00FF",
+    White: "#FFFFFF",
+    Maroon: "#800000",
+    "Dark Blue": "#00008B",
+    "Dark Green": "#006400",
+    Purple: "#800080",
+    Orange: "#FFA500",
+    Brown: "#A52A2A",
   };
-  const roleAbbrMap = { 
-    "Team Member": "TM", "Team Lead": "TL", "HQ": "HQ", "Sniper": "S", 
-    "Medic": "M", "Forward Observer": "FO", "RTO": "R", "K9": "K9"
+  const roleAbbrMap = {
+    "Team Member": "none",
+    "Team Lead": "TL",
+    HQ: "HQ",
+    Sniper: "S",
+    Medic: "M",
+    "Forward Observer": "FO",
+    RTO: "R",
+    K9: "K9",
   };
   const fillColor = groupColors[name] || name || "#FFFFFF";
-  const abbr = roleAbbrMap[role] || (role ? role.substring(0, 3).toUpperCase() : "");
+  const rawAbbr =
+    roleAbbrMap[role] || (role ? role.substring(0, 3).toUpperCase() : "");
+  const abbr = rawAbbr === "none" ? "" : rawAbbr;
 
   ctx.beginPath();
   ctx.arc(cx, cy, 96, 0, 2 * Math.PI);
-  ctx.fillStyle = fillColor; ctx.fill();
-  ctx.lineWidth = 8; ctx.strokeStyle = "black"; ctx.stroke();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = "black";
+  ctx.stroke();
 
   if (how !== "m-g") {
     ctx.beginPath();
     ctx.moveTo(cx - 68, cy + 68);
     ctx.lineTo(cx + 68, cy - 68);
-    ctx.lineWidth = 16; ctx.strokeStyle = "black"; ctx.stroke();
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = "black";
+    ctx.stroke();
   }
 
   if (abbr) {
     ctx.font = "bold 72px sans-serif";
     const textMetrics = ctx.measureText(abbr);
     ctx.fillStyle = fillColor;
-    ctx.fillRect(cx - textMetrics.width / 2 - 8, cy - 44, textMetrics.width + 16, 88);
+    ctx.fillRect(
+      cx - textMetrics.width / 2 - 8,
+      cy - 44,
+      textMetrics.width + 16,
+      88,
+    );
     ctx.fillStyle = "black";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillText(abbr, cx, cy);
   }
 
@@ -339,60 +443,106 @@ export async function updateEntity(incomingData) {
 
   const fullData = state ? state.lastData : data;
   const {
-    callsign, type, lat, lon, alt, color, iconsetpath, emergency,
-    course, squawk, stale, how, group_role, group_name, speed,
+    callsign,
+    type,
+    lat,
+    lon,
+    alt,
+    color,
+    iconsetpath,
+    stale,
+    how,
+    group_role,
+    group_name,
+    squawk,
   } = fullData;
 
-  const position = Cartesian3.fromDegrees(lon, lat, (alt > 9000000 ? 0 : alt) || 0);
+  const typeParts = (type || "").toLowerCase().split("-");
+  const isAir = typeParts[0] === "a" && typeParts[2] === "a";
+  const iconHeight =
+    isAir && alt !== undefined && alt < 9000000 ? alt : GROUND_OFFSET;
+  const iconRef = isAir
+    ? HeightReference.NONE
+    : HeightReference.CLAMP_TO_GROUND;
+  const position = Cartesian3.fromDegrees(lon, lat, iconHeight);
+  const anchorPosition = Cartesian3.fromDegrees(lon, lat, 0);
+
   const sidc = cotToSidc((type || "").toUpperCase());
-  
+
   let iconsetUrl = null;
   if (iconsetpath) {
-    const parts = iconsetpath.split("/").filter(p => p.length > 0);
+    const parts = iconsetpath.split("/").filter((p) => p.length > 0);
     const setUid = parts.shift();
     const iconFile = parts.join("/");
     if (window.availableIconsets && window.availableIconsets[setUid]) {
       const set = window.availableIconsets[setUid];
       if (iconFile) iconsetUrl = encodeURI(`${set.url_path}/${iconFile}`);
-      else if (set.type_map && set.type_map[type]) iconsetUrl = encodeURI(`${set.url_path}/${set.type_map[type]}`);
-    } else iconsetUrl = iconsetpath.startsWith("/") ? iconsetpath : `/iconsets/${iconsetpath}`;
+      else if (set.type_map && set.type_map[type])
+        iconsetUrl = encodeURI(`${set.url_path}/${set.type_map[type]}`);
+    } else
+      iconsetUrl = iconsetpath.startsWith("/")
+        ? iconsetpath
+        : `/iconsets/${iconsetpath}`;
   }
 
-  let rgbColor = "white", cesiumColor = Color.WHITE;
+  let rgbColor = "white",
+    cesiumColor = Color.WHITE;
   if (color) {
     const argb = parseInt(color);
-    const r = (argb >> 16) & 0xff, g = (argb >> 8) & 0xff, b = argb & 0xff;
-    rgbColor = `rgb(${r},${g},${b})`; cesiumColor = Color.fromBytes(r, g, b, 255);
+    const r = (argb >> 16) & 0xff,
+      g = (argb >> 8) & 0xff,
+      b = argb & 0xff;
+    rgbColor = `rgb(${r},${g},${b})`;
+    cesiumColor = Color.fromBytes(r, g, b, 255);
   }
   const effectiveColor = color ? cesiumColor : getAffiliationColor(type);
   const useTeamCircle = !!group_name && !!group_role;
 
   // Clean, modifier-free state key
-  const stateKey = useTeamCircle ? `group-${group_name}-${group_role}-${color}-${how}` :
-                   iconsetUrl ? `icon-${iconsetUrl}-${rgbColor}` : 
-                   `${sidc}-${color}-${squawk}`;
-  
+  const stateKey = useTeamCircle
+    ? `group-${group_name}-${group_role}-${color}-${how}`
+    : iconsetUrl
+      ? `icon-${iconsetUrl}-${rgbColor}`
+      : `${sidc}-${color}-${squawk}`;
+
   const description = createDescription(fullData);
   const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
-  const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE); 
+  const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
 
   if (!state) {
     pendingCreation.add(uid);
     try {
-      const history = [position];
+      // Start history with two points to avoid Cesium crash with clampToGround
+      const history = [anchorPosition, anchorPosition];
       const entity = viewer.entities.add({
-        id: uid, name: callsign, position: position,
-        billboard: { 
-          horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.CENTER, 
+        id: uid,
+        name: callsign,
+        position: position,
+        billboard: {
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          verticalOrigin: VerticalOrigin.CENTER,
           eyeOffset: new Cartesian3(0, 0, -10),
-          distanceDisplayCondition: ddcAlways, disableDepthTestDistance: HORIZON_LIMIT 
+          distanceDisplayCondition: ddcAlways,
+          disableDepthTestDistance: HORIZON_LIMIT,
+          heightReference: iconRef,
         },
         label: {
-          text: callsign, font: "bold 14px sans-serif", style: LabelStyle.FILL_AND_OUTLINE, fillColor: Color.WHITE, outlineColor: Color.BLACK, outlineWidth: 4,
-          showBackground: true, backgroundColor: new Color(0, 0, 0, 0.4), backgroundPadding: new Cartesian2(7, 5),
-          verticalOrigin: VerticalOrigin.BOTTOM, horizontalOrigin: HorizontalOrigin.CENTER, 
-          pixelOffset: new Cartesian2(0, -25), eyeOffset: new Cartesian3(0, 0, -20),
-          distanceDisplayCondition: ddcTactical, disableDepthTestDistance: HORIZON_LIMIT,
+          text: callsign,
+          font: "bold 14px sans-serif",
+          style: LabelStyle.FILL_AND_OUTLINE,
+          fillColor: Color.WHITE,
+          outlineColor: Color.BLACK,
+          outlineWidth: 4,
+          showBackground: true,
+          backgroundColor: new Color(0, 0, 0, 0.4),
+          backgroundPadding: new Cartesian2(7, 5),
+          verticalOrigin: VerticalOrigin.BOTTOM,
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          pixelOffset: new Cartesian2(0, -25),
+          eyeOffset: new Cartesian3(0, 0, -20),
+          distanceDisplayCondition: ddcTactical,
+          disableDepthTestDistance: HORIZON_LIMIT,
+          heightReference: iconRef,
         },
         description: description,
       });
@@ -400,15 +550,27 @@ export async function updateEntity(incomingData) {
       const trailEntity = viewer.entities.add({
         id: uid + "-trail",
         polyline: {
-          positions: [...history],
-          width: 3, material: new PolylineOutlineMaterialProperty({ color: effectiveColor, outlineWidth: 2, outlineColor: Color.BLACK.withAlpha(0.5) }),
+          positions: history,
+          width: 3,
+          material: new PolylineOutlineMaterialProperty({
+            color: effectiveColor,
+            outlineWidth: 2,
+            outlineColor: Color.BLACK.withAlpha(0.5),
+          }),
           distanceDisplayCondition: ddcTactical,
-          arcType: ArcType.NONE,
+          clampToGround: true,
         },
         show: false,
       });
 
-      state = { entity, trailEntity, history, lastStateKey: "", lastData: fullData, lastIconUrl: "" };
+      state = {
+        entity,
+        trailEntity,
+        history,
+        lastStateKey: "",
+        lastData: fullData,
+        lastIconUrl: "",
+      };
       entityState[uid] = state;
       unitListDirty = true;
     } finally {
@@ -417,56 +579,82 @@ export async function updateEntity(incomingData) {
   } else {
     state.entity.position = position;
     state.entity.description = description;
-    
-    state.history.push(position);
-    if (state.history.length > 100) state.history.shift();
-    
-    if (state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign) {
-        state.entity.label.text = callsign;
-        unitListDirty = true;
+
+    // Update height references for potential type changes
+    if (state.entity.billboard.heightReference !== iconRef) {
+      state.entity.billboard.heightReference = iconRef;
+      state.entity.label.heightReference = iconRef;
     }
-    
+
+    state.history.push(anchorPosition);
+    if (state.history.length > 100) state.history.shift();
+
+    if (
+      state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign
+    ) {
+      state.entity.label.text = callsign;
+      unitListDirty = true;
+    }
+
     const trailVisible = calculateTrailVisibility(uid);
     state.trailEntity.show = trailVisible;
     if (trailVisible) {
-        state.trailEntity.polyline.positions = [...state.history];
+      state.trailEntity.polyline.positions = [...state.history];
     }
   }
 
   if (state.lastStateKey !== stateKey) {
     if (iconCache.has(stateKey)) {
-        const cached = iconCache.get(stateKey);
-        state.entity.billboard.image = cached.blobUrl;
-        state.entity.billboard.width = cached.width; state.entity.billboard.height = cached.height;
-        state.entity.billboard.pixelOffset = cached.pixelOffset || new Cartesian2(0, 0);
-        state.entity.billboard.color = cached.color || Color.WHITE;
-        state.lastIconUrl = cached.blobUrl;
+      const cached = iconCache.get(stateKey);
+      state.entity.billboard.image = cached.blobUrl;
+      state.entity.billboard.width = cached.width;
+      state.entity.billboard.height = cached.height;
+      state.entity.billboard.pixelOffset =
+        cached.pixelOffset || new Cartesian2(0, 0);
+      state.entity.billboard.color = cached.color || Color.WHITE;
+      state.lastIconUrl = cached.blobUrl;
     } else {
-        let iconUrl, pixelOffset = new Cartesian2(0, 0), width = 28, height = 28, billboardColor = Color.WHITE;
-        if (useTeamCircle) {
-          const canvas = drawGroupIcon(group_name, group_role, how);
-          iconUrl = await canvasToBlobUrl(canvas);
-          width = 32; height = 32;
-        } else if (iconsetUrl) {
-          iconUrl = iconsetUrl;
-          billboardColor = color ? cesiumColor : Color.WHITE;
-        } else {
-          const symbolOptions = { size: 21, padding: 10 }; 
-          const symbol = new ms.Symbol(sidc, symbolOptions);
-          const canvas = symbol.asCanvas();
-          const iconAnchor = symbol.getAnchor();
-          const iconSize = symbol.getSize();
-          iconUrl = await canvasToBlobUrl(canvas);
-          const scale = 1.1;
-          width = iconSize.width * scale; height = iconSize.height * scale;
-          pixelOffset = new Cartesian2((iconSize.width / 2 - iconAnchor.x) * scale, (iconSize.height / 2 - iconAnchor.y) * scale);
-        }
-        state.entity.billboard.image = iconUrl;
-        state.entity.billboard.width = width; state.entity.billboard.height = height;
-        state.entity.billboard.pixelOffset = pixelOffset;
-        state.entity.billboard.color = billboardColor;
-        state.lastIconUrl = iconUrl;
-        iconCache.set(stateKey, { blobUrl: iconUrl, pixelOffset, width, height, color: billboardColor });
+      let iconUrl,
+        pixelOffset = new Cartesian2(0, 0),
+        width = 28,
+        height = 28,
+        billboardColor = Color.WHITE;
+      if (useTeamCircle) {
+        const canvas = drawGroupIcon(group_name, group_role, how);
+        iconUrl = await canvasToBlobUrl(canvas);
+        width = 32;
+        height = 32;
+      } else if (iconsetUrl) {
+        iconUrl = iconsetUrl;
+        billboardColor = color ? cesiumColor : Color.WHITE;
+      } else {
+        const symbolOptions = { size: 21, padding: 10 };
+        const symbol = new ms.Symbol(sidc, symbolOptions);
+        const canvas = symbol.asCanvas();
+        const iconAnchor = symbol.getAnchor();
+        const iconSize = symbol.getSize();
+        iconUrl = await canvasToBlobUrl(canvas);
+        const scale = 1.1;
+        width = iconSize.width * scale;
+        height = iconSize.height * scale;
+        pixelOffset = new Cartesian2(
+          (iconSize.width / 2 - iconAnchor.x) * scale,
+          (iconSize.height / 2 - iconAnchor.y) * scale,
+        );
+      }
+      state.entity.billboard.image = iconUrl;
+      state.entity.billboard.width = width;
+      state.entity.billboard.height = height;
+      state.entity.billboard.pixelOffset = pixelOffset;
+      state.entity.billboard.color = billboardColor;
+      state.lastIconUrl = iconUrl;
+      iconCache.set(stateKey, {
+        blobUrl: iconUrl,
+        pixelOffset,
+        width,
+        height,
+        color: billboardColor,
+      });
     }
     state.lastStateKey = stateKey;
     state.lastRgbColor = rgbColor;

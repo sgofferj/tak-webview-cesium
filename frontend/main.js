@@ -152,7 +152,9 @@ function setupAuthEvents() {
     if (e.key === "Enter") triggerEnroll();
   });
 
-  document.getElementById("loginButton").addEventListener("click", triggerLogin);
+  document
+    .getElementById("loginButton")
+    .addEventListener("click", triggerLogin);
 
   document.getElementById("loginPass").addEventListener("keyup", (e) => {
     if (e.key === "Enter") triggerLogin();
@@ -239,7 +241,7 @@ function populateLayerPicker() {
     ];
 
     terrainOptions.forEach((opt) => {
-      const isActive = opt.isTerrain === false; 
+      const isActive = opt.isTerrain === false;
       const item = createLayerItem(opt, true, "terrainLayer", isActive);
       item.addEventListener("click", async () => {
         terrainGrid
@@ -401,6 +403,15 @@ function setupEvents() {
     }
   });
 
+  const updateZoom = () => {
+    const height = viewer.camera.positionCartographic.height;
+    const zoom = Math.floor(Math.log2(35200000 / height));
+    const zoomEl = document.getElementById("statusZoom");
+    if (zoomEl) zoomEl.innerText = `Z${Math.max(0, zoom)}`;
+  };
+  viewer.camera.changed.addEventListener(updateZoom);
+  updateZoom();
+
   document.getElementById("filterInput").addEventListener("input", (e) => {
     setFilters(e.target.value, undefined);
   });
@@ -417,11 +428,13 @@ function setupEvents() {
   document.getElementById("resetView").addEventListener("click", () => {
     viewer.trackedEntity = undefined;
     const center = viewer.camera.positionCartographic;
+    // Set minimum height of 15km to prevent 'doomzoom'
+    const resetHeight = Math.max(center.height, 15000.0);
     viewer.camera.flyTo({
       destination: Cartesian3.fromRadians(
         center.longitude,
         center.latitude,
-        center.height,
+        resetHeight,
       ),
       orientation: { heading: 0.0, pitch: -Math.PI / 2, roll: 0.0 },
     });
@@ -450,6 +463,19 @@ function setupEvents() {
 
   document.getElementById("closeInfo").addEventListener("click", () => {
     document.getElementById("infoModal").classList.add("modal-hidden");
+  });
+
+  // Minimize panels when clicking outside
+  document.addEventListener("click", (e) => {
+    const layerPickerPanel = document.getElementById("layerPickerPanel");
+    const toggleLayerPicker = document.getElementById("toggleLayerPicker");
+    if (
+      !layerPickerPanel.classList.contains("hidden") &&
+      !layerPickerPanel.contains(e.target) &&
+      !toggleLayerPicker.contains(e.target)
+    ) {
+      layerPickerPanel.classList.add("hidden");
+    }
   });
 }
 

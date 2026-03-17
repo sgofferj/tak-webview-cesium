@@ -18,6 +18,7 @@ import {
   Cartesian3,
   Rectangle,
   Credit,
+  Color,
 } from "cesium";
 import { appConfig } from "./config.js";
 
@@ -88,6 +89,17 @@ export async function setBaseLayer(layerConfig) {
 
   // Base layer is always at the bottom (index 0)
   currentBaseLayer = viewer.imageryLayers.addImageryProvider(provider, 0);
+
+  // Dark mode aesthetic: Hide atmosphere if layer name contains 'dark' or 'night'
+  const layerName = (layerConfig.name || "").toLowerCase();
+  const isDark = layerName.includes("dark") || layerName.includes("night");
+  if (isDark) {
+    viewer.scene.skyAtmosphere.show = false;
+    viewer.scene.backgroundColor = Color.BLACK;
+  } else {
+    viewer.scene.skyAtmosphere.show = true;
+    // Default background is black, but atmosphere makes it blue.
+  }
 }
 
 export async function setTerrain(isTerrain) {
@@ -166,6 +178,7 @@ export async function initViewer() {
     terrainExaggerationRelativeHeight: 0.0,
   });
 
+  viewer.scene.globe.depthTestAgainstTerrain = true;
   currentBaseLayer = viewer.imageryLayers.get(0);
 
   let initialDestination = Cartesian3.fromDegrees(

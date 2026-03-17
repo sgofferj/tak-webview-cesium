@@ -423,7 +423,7 @@
         max-width: 50%;
         border-top-right-radius: 4px;
         z-index: 1000;
-        box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
         display: block !important;
       }
       .cesium-viewer-bottom a {
@@ -534,14 +534,22 @@
         color: #fff;
         font-weight: bold;
       }
-      .status-green { color: #0f0 !important; }
-      .status-orange { color: #f90 !important; }
-      .status-red { color: #f00 !important; }
+      .status-green {
+        color: #0f0 !important;
+      }
+      .status-orange {
+        color: #f90 !important;
+      }
+      .status-red {
+        color: #f00 !important;
+      }
 
       #statusConnection {
         color: #888;
       }
-      .conn-online { color: #0f0 !important; }
+      .conn-online {
+        color: #0f0 !important;
+      }
 
       #statusActions {
         display: flex;
@@ -624,9 +632,18 @@
         <h2 id="authTitle">TAK Login</h2>
         <div id="enrollmentForm" class="hidden">
           <p>Please enroll to access the TAK network.</p>
-          <input type="text" id="enrollServer" placeholder="TAK Server (e.g. tak.example.com)" autofocus />
+          <input
+            type="text"
+            id="enrollServer"
+            placeholder="TAK Server (e.g. tak.example.com)"
+            autofocus
+          />
           <input type="text" id="enrollUser" placeholder="Username" />
-          <input type="password" id="enrollPass" placeholder="TAK Server Password" />
+          <input
+            type="password"
+            id="enrollPass"
+            placeholder="TAK Server Password"
+          />
           <button id="enrollButton">Enroll</button>
         </div>
         <div id="loginForm" class="hidden">
@@ -641,11 +658,16 @@
 
     <!-- Status Bar -->
     <div id="statusBar" class="hidden">
-      <div id="statusCert">Cert: <span id="certCN"></span> (<span id="certExpiry"></span>)</div>
+      <div id="statusZoom">Z-</div>
+      <div id="statusCert">
+        Cert: <span id="certCN"></span> (<span id="certExpiry"></span>)
+      </div>
       <div id="statusConnection">Disconnected</div>
       <div id="statusActions">
         <button id="authLogout" title="Logout (keeps certs)">Logout</button>
-        <button id="authForget" title="Forget enrollment (wipes certs)">Forget</button>
+        <button id="authForget" title="Forget enrollment (wipes certs)">
+          Forget
+        </button>
       </div>
     </div>
 
