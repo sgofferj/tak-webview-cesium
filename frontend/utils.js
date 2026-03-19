@@ -120,6 +120,7 @@ export function renderGoogleIcon(
   color,
   size = 32,
   noBackground = false,
+  border = false,
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -154,7 +155,7 @@ export function renderGoogleIcon(
   }
 
   // Draw border
-  if (noBackground) {
+  if (border) {
     ctx.strokeStyle = "rgba(50, 50, 50, 1)";
     ctx.lineWidth = 6;
     ctx.lineJoin = "round";
