@@ -22,6 +22,8 @@ import {
   setFilters,
   calculateTrailVisibility,
   throttledUpdateUnitList,
+  updateEntitySelectionVisibility,
+  previouslySelectedEntityId,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -346,6 +348,8 @@ function populateLayerPicker() {
 
 function setupEvents() {
   viewer.selectedEntityChanged.addEventListener((entity) => {
+    updateEntitySelectionVisibility(entity);
+
     const infoBox = document.querySelector(".cesium-infoBox");
     if (infoBox) {
       infoBox.classList.remove("emergency-active");
