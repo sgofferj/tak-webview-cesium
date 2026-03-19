@@ -47,9 +47,23 @@ export const collapsedStates = new Set([
   "other",
 ]);
 
+export let previouslySelectedEntityId = null;
+
 const MAX_DISTANCE = 100000000.0;
 const HORIZON_LIMIT = 1000000.0; // 1000km
 const TACTICAL_DISTANCE = 300000.0; // 300km
+
+const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
+const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
+
+const DDC_UNSELECTED_LABEL = ddcTactical;
+const DDC_UNSELECTED_COURSE = ddcTactical;
+const DDC_UNSELECTED_TRAIL = ddcTactical;
+
+const DDC_SELECTED = ddcAlways;
+
+const DDD_UNSELECTED = HORIZON_LIMIT;
+const DDD_SELECTED = MAX_DISTANCE;
 
 const REVERSE_KEY_MAP = {
   i: "uid",
@@ -134,7 +148,7 @@ export function applyFilter() {
       state.trailEntity.show = calculateTrailVisibility(uid);
     }
     if (state.courseEntity) {
-      state.courseEntity.show = isVisible && state.courseEntity.billboard.show;
+      state.courseEntity.show = true; // Always show courseEntity
     }
   });
   throttledUpdateUnitList();
@@ -549,11 +563,10 @@ export async function updateEntity(incomingData) {
           horizontalOrigin: HorizontalOrigin.CENTER,
           pixelOffset: new Cartesian2(0, -25),
           eyeOffset: new Cartesian3(0, 0, -20),
-          distanceDisplayCondition: ddcTactical,
-          disableDepthTestDistance: HORIZON_LIMIT,
+          distanceDisplayCondition: DDC_UNSELECTED_LABEL,
+          disableDepthTestDistance: DDD_UNSELECTED,
           heightReference: iconRef,
-        },
-        description: description,
+        },        description: description,
       });
 
       const trailEntity = viewer.entities.add({
@@ -566,26 +579,23 @@ export async function updateEntity(incomingData) {
             outlineWidth: 2,
             outlineColor: Color.BLACK.withAlpha(0.5),
           }),
-          distanceDisplayCondition: ddcTactical,
+          distanceDisplayCondition: DDC_UNSELECTED_TRAIL,
           clampToGround: true,
-        },
-        show: false,
+        },        show: false,
       });
 
       const courseEntity = viewer.entities.add({
         id: uid + "-course",
         billboard: {
-          image: renderGoogleIcon("triangle", "white", 24, true),
+          image: renderGoogleIcon("triangle", "white", 24, true, true),
           width: 16,
           height: 16,
           horizontalOrigin: HorizontalOrigin.CENTER,
           verticalOrigin: VerticalOrigin.CENTER,
           eyeOffset: new Cartesian3(0, 0, -15),
-          distanceDisplayCondition: ddcTactical,
-          disableDepthTestDistance: HORIZON_LIMIT,
           heightReference: iconRef,
         },
-        show: false,
+        show: true,
       });
 
       state = {
@@ -643,7 +653,7 @@ export async function updateEntity(incomingData) {
       return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
     }, false);
     state.courseEntity.billboard.heightReference = iconRef;
-    state.courseEntity.show = calculateVisibility(fullData);
+    state.courseEntity.show = true; // Always show if course data exists
   } else if (state && state.courseEntity) {
     state.courseEntity.show = false;
   }
@@ -720,6 +730,47 @@ export function removeEntity(uid) {
   delete entityState[uid];
   unitListDirty = true;
   throttledUpdateUnitList();
+}
+
+export function updateEntitySelectionVisibility(selectedEntity) {
+  // Restore previous entity's visibility if any
+  if (previouslySelectedEntityId && entityState[previouslySelectedEntityId]) {
+    const prevState = entityState[previouslySelectedEntityId];
+    if (prevState.entity && prevState.entity.label) {
+      prevState.entity.label.distanceDisplayCondition = DDC_UNSELECTED_LABEL;
+      prevState.entity.label.disableDepthTestDistance = DDD_UNSELECTED;
+    }
+    if (prevState.trailEntity && prevState.trailEntity.polyline) {
+      prevState.trailEntity.polyline.distanceDisplayCondition = DDC_UNSELECTED_TRAIL;
+      prevState.trailEntity.show = calculateTrailVisibility(prevState.entity.id);
+    }
+    // No need to set distance conditions for courseEntity anymore
+    if (prevState.courseEntity) {
+      prevState.courseEntity.show = true; // Always true for courseEntity
+    }
+  }
+
+  // Apply visibility for currently selected entity
+  if (selectedEntity) {
+    const currentState = entityState[selectedEntity.id];
+    if (currentState) {
+      if (currentState.entity && currentState.entity.label) {
+        currentState.entity.label.distanceDisplayCondition = DDC_SELECTED;
+        currentState.entity.label.disableDepthTestDistance = DDD_SELECTED;
+      }
+      if (currentState.trailEntity && currentState.trailEntity.polyline) {
+        currentState.trailEntity.polyline.distanceDisplayCondition = DDC_SELECTED;
+        currentState.trailEntity.show = true; // Always show trail for selected entity
+      }
+      // No need to set distance conditions for courseEntity anymore
+      if (currentState.courseEntity) {
+        currentState.courseEntity.show = true; // Always true for courseEntity
+      }
+      previouslySelectedEntityId = selectedEntity.id;
+    }
+  } else {
+    previouslySelectedEntityId = null;
+  }
 }
 
 setInterval(() => {
