@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -65,7 +65,9 @@ class AuthManager:
         combined = f"{password}:{salt}:enrollment"
         return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
 
-    def save_credentials(self, username: str, password: str, server: str, salt: str | None = None) -> None:
+    def save_credentials(
+        self, username: str, password: str, server: str, salt: str | None = None
+    ) -> None:
         """Save login hash and server address. Uses provided salt or generates new one."""
         pw_hash, salt = self.hash_password(password, salt)
         self._storage_key = self._derive_fernet_key(password, salt)
@@ -84,9 +86,10 @@ class AuthManager:
         if not os.path.exists(self.creds_file):
             return None
         try:
-            with open(self.creds_file, "r", encoding="utf-8") as f_in:
+            with open(self.creds_file, encoding="utf-8") as f_in:
                 data = json.load(f_in)
-            return data.get("server")
+            server = data.get("server")
+            return str(server) if server is not None else None
         except (OSError, json.JSONDecodeError):
             return None
 
@@ -95,7 +98,7 @@ class AuthManager:
             return False
 
         try:
-            with open(self.creds_file, "r", encoding="utf-8") as f_in:
+            with open(self.creds_file, encoding="utf-8") as f_in:
                 data = json.load(f_in)
 
             if data.get("username") != username:
@@ -140,7 +143,7 @@ class AuthManager:
             cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
             expiry = cert.not_valid_after_utc
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             status = "green"
             delta = expiry - now
             if delta.days < 0:
@@ -168,15 +171,17 @@ class AuthManager:
         if not self._storage_key:
             logger.error("Storage key not initialized in RAM (not logged in?)")
             return None
-        
+
         try:
             with open(self.key_file, "rb") as f:
                 encrypted_key = f.read()
-            
+
             f_box = Fernet(self._storage_key)
             return f_box.decrypt(encrypted_key)
         except Exception as e:
-            logger.error(f"Failed to decrypt private key in RAM: {type(e).__name__}: {e}")
+            logger.error(
+                f"Failed to decrypt private key in RAM: {type(e).__name__}: {e}"
+            )
             return None
 
     async def enroll(self, server: str, username: str, password: str) -> bool:
@@ -264,21 +269,24 @@ class AuthManager:
 
                 for child in root:
                     tag_name = child.tag
-                    if "}" in tag_name:
+                    if isinstance(tag_name, str) and "}" in tag_name:
                         tag_name = tag_name.split("}")[1]
+                    elif hasattr(tag_name, "text"):
+                        # Handle QName or other objects that might have text
+                        tag_name = str(tag_name)
 
                     if tag_name == "signedCert":
-                        client_cert_pem = self._ensure_pem_headers(child.text)
+                        client_cert_pem = self._ensure_pem_headers(str(child.text or ""))
                     elif tag_name == "privateKey":
                         # Decrypt what the server sent using our enrollment secret
-                        server_key_pem = self._ensure_pem_headers(child.text, "ENCRYPTED PRIVATE KEY")
-                        # We don't want to leave this on disk, we'll transform it later
+                        server_key_pem = self._ensure_pem_headers(
+                            str(child.text or ""), "ENCRYPTED PRIVATE KEY"
+                        )
                         raw_private_key = serialization.load_pem_private_key(
-                            server_key_pem, 
-                            password=enrollment_secret.encode("utf-8")
+                            server_key_pem, password=enrollment_secret.encode("utf-8")
                         )
                     else:
-                        ca_certs.append(self._ensure_pem_headers(child.text))
+                        ca_certs.append(self._ensure_pem_headers(str(child.text or "")))
 
                 if not raw_private_key:
                     logger.info("Server did not provide private key, using local temp")
@@ -293,7 +301,7 @@ class AuthManager:
                 key_bytes = raw_private_key.private_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.NoEncryption() # We encrypt with Fernet instead
+                    encryption_algorithm=serialization.NoEncryption(),  # We encrypt with Fernet instead
                 )
                 f_box = Fernet(storage_key)
                 encrypted_key_blob = f_box.encrypt(key_bytes)

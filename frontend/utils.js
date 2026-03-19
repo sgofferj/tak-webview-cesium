@@ -137,10 +137,12 @@ export function renderGoogleIcon(
     ctx.lineWidth = 2.5;
     ctx.stroke();
   }
+
   const p = new Path2D(pathData);
   const isLargeCoords = pathData.includes("-") || pathData.startsWith("m");
   const viewboxSize = isLargeCoords ? 960 : 24;
   const iconScale = (size * 0.65) / viewboxSize;
+
   ctx.save();
   if (isLargeCoords) {
     ctx.translate(size / 2, size / 2);
@@ -154,11 +156,10 @@ export function renderGoogleIcon(
 
   // Draw border
   if (border) {
-    ctx.save();
-    ctx.scale(1.15, 1.15); // Apply *additional* scale for border (relative to base transform)
-    ctx.fillStyle = "darkgray"; // Change color to dark gray
-    ctx.fill(p); // Draw the border
-    ctx.restore(); // Restore to "base transform" state
+    ctx.strokeStyle = "rgba(50, 50, 50, 1)";
+    ctx.lineWidth = 6;
+    ctx.lineJoin = "round";
+    ctx.stroke(p);
   }
 
   ctx.fillStyle = color || "white";

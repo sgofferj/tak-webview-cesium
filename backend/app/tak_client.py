@@ -18,6 +18,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import cachetools
 import msgpack  # type: ignore
 from lxml import etree
 
@@ -66,9 +67,9 @@ class TAKClient:
         self._stop = False
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
-        self._run_task: asyncio.Task | None = None
+        self._run_task: asyncio.Task[None] | None = None
         # State tracking for throttling
-        self._last_send_time: dict[str, float] = {}
+        self._last_send_time: cachetools.TTLCache[str, float] = cachetools.TTLCache(maxsize=1000, ttl=60)
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
@@ -82,7 +83,7 @@ class TAKClient:
             raise FileNotFoundError(f"Certificate file missing: {cert_file}")
 
         logger.info("Initializing secure SSL context (RAM-only key)")
-        
+
         # 1. Get decrypted key from AuthManager (RAM only)
         key_bytes = auth_manager.get_private_key()
         if not key_bytes:
@@ -95,19 +96,18 @@ class TAKClient:
         # 3. Use memfd to feed bytes to ssl.load_cert_chain (Linux only)
         fd_cert = os.memfd_create("tak_cert", 0)
         fd_key = os.memfd_create("tak_key", 0)
-        
+
         try:
             os.write(fd_cert, cert_bytes)
             os.write(fd_key, key_bytes)
-            
+
             # Reset offsets
             os.lseek(fd_cert, 0, 0)
             os.lseek(fd_key, 0, 0)
-            
+
             # Python's ssl library can load from /dev/fd/ paths
             ctx.load_cert_chain(
-                certfile=f"/dev/fd/{fd_cert}",
-                keyfile=f"/dev/fd/{fd_key}"
+                certfile=f"/dev/fd/{fd_cert}", keyfile=f"/dev/fd/{fd_key}"
             )
         finally:
             os.close(fd_cert)
@@ -194,11 +194,14 @@ class TAKClient:
 
                     # Contact info
                     val = contact.get("xmppUsername")
-                    if val: data["xmpp"] = val
+                    if val:
+                        data["xmpp"] = val
                     val = contact.get("emailAddress")
-                    if val: data["mail"] = val
+                    if val:
+                        data["mail"] = val
                     val = contact.get("phone")
-                    if val: data["phone"] = val
+                    if val:
+                        data["phone"] = val
 
                 status_el = detail.find("status")
                 if status_el is not None:
@@ -314,7 +317,7 @@ class TAKClient:
         logger.info(
             f"Connecting to TAK Server at " f"{tak_host}:{self.config.tak_port}"
         )
-        
+
         # Start heartbeat as a task we can track if needed, or just part of this loop
         heartbeat_task = asyncio.create_task(self._send_heartbeat())
 
@@ -335,14 +338,16 @@ class TAKClient:
                             logger.warning("CoT event too large, skipping buffer...")
                             await self._reader.read(1024)
                             continue
-                            
+
                         if not data:
                             break
 
                         if self.config.log_cots:
-                            logger.debug(f"Received CoT: {data.decode(errors='replace')}")
+                            logger.debug(
+                                f"Received CoT: {data.decode(errors='replace')}"
+                            )
 
-                        parsed = self.parse_cot(data)
+                        parsed = await asyncio.to_thread(self.parse_cot, data)
                         if parsed:
                             if self.on_cot:
                                 if asyncio.iscoroutinefunction(self.on_cot):
@@ -377,7 +382,7 @@ class TAKClient:
             except (OSError, RuntimeError, asyncio.CancelledError):
                 pass
             self._writer = None
-        
+
         if self._run_task and not self._run_task.done():
             self._run_task.cancel()
             try:

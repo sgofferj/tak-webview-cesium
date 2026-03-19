@@ -51,7 +51,7 @@ export let previouslySelectedEntityId = null;
 
 const MAX_DISTANCE = 100000000.0;
 const HORIZON_LIMIT = 1000000.0; // 1000km
-const TACTICAL_DISTANCE = 300000.0; // 300km
+const TACTICAL_DISTANCE = 200000.0; // 200km
 
 const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
 const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
@@ -142,13 +142,23 @@ export function applyFilter() {
   unitListDirty = true;
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
+    const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
     const isVisible = calculateVisibility(state.lastData);
+
+    // Icons follow filter
     state.entity.show = isVisible;
+    
+    // Labels show when selected OR zoomed in (<200km)
+    const cameraDistance = viewer.camera.positionCartographic.height;
+    const showLabel = isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
+    state.entity.label.show = showLabel;
+    
     if (state.trailEntity) {
       state.trailEntity.show = calculateTrailVisibility(uid);
     }
     if (state.courseEntity) {
-      state.courseEntity.show = true; // Always show courseEntity
+      // Course arrows always visible if entity is visible, regardless of zoom/selection
+      state.courseEntity.show = isVisible;
     }
   });
   throttledUpdateUnitList();
@@ -309,7 +319,7 @@ export function updateUnitListUI() {
       0,
     );
     const catCollapsed = collapsedStates.has(catKey);
-    html += `<div class="unit-group ${catCollapsed ? "collapsed" : ""}">
+    html += `<div class="unit-group ${catCollapsed ? "collapsed" : ""}" id="group-${catKey}">
             <div class="unit-group-header" onclick="toggleCollapse('${catKey}')">${cat.label} (${totalCount})</div>
             <div class="unit-group-content">`;
     [
@@ -322,13 +332,13 @@ export function updateUnitListUI() {
       if (!units || units.length === 0) return;
       const subKey = `${catKey}-${affil}`;
       const isSubCollapsed = collapsedStates.has(subKey);
-      html += `<div class="affiliation-group ${isSubCollapsed ? "collapsed" : ""}">
+      html += `<div class="affiliation-group ${isSubCollapsed ? "collapsed" : ""}" id="group-${subKey}">
                 <div class="affiliation-header" onclick="toggleCollapse('${subKey}')">${affil} (${units.length})</div>
                 <div class="affiliation-content">`;
       units
         .sort((a, b) => a.callsign.localeCompare(b.callsign))
         .forEach((unit) => {
-          html += `<div class="unit-item" onclick="zoomToUnit('${unit.uid}')">
+          html += `<div class="unit-item" id="unit-${unit.uid}" onclick="zoomToUnit('${unit.uid}')">
                     <img class="unit-icon" src="${unit.iconUrl}" />
                     <span class="unit-name" style="color: ${unit.color}">${unit.callsign}</span>
                     ${unit.emergency ? `<span class="unit-emergency">${i18n.emergency911Badge}</span>` : ""}
@@ -566,12 +576,13 @@ export async function updateEntity(incomingData) {
           distanceDisplayCondition: DDC_UNSELECTED_LABEL,
           disableDepthTestDistance: DDD_UNSELECTED,
           heightReference: iconRef,
-        },        description: description,
-      });
+          },
+          description: description,
+          });
 
-      const trailEntity = viewer.entities.add({
-        id: uid + "-trail",
-        polyline: {
+          const trailEntity = viewer.entities.add({
+          id: uid + "-trail",
+          polyline: {
           positions: history,
           width: 3,
           material: new PolylineOutlineMaterialProperty({
@@ -580,23 +591,26 @@ export async function updateEntity(incomingData) {
             outlineColor: Color.BLACK.withAlpha(0.5),
           }),
           distanceDisplayCondition: DDC_UNSELECTED_TRAIL,
+          disableDepthTestDistance: HORIZON_LIMIT,
           clampToGround: true,
-        },        show: false,
-      });
+          },
+          show: false,
+          });
 
-      const courseEntity = viewer.entities.add({
-        id: uid + "-course",
-        billboard: {
+          const courseEntity = viewer.entities.add({
+          id: uid + "-course",
+          billboard: {
           image: renderGoogleIcon("triangle", "white", 24, true, true),
           width: 16,
           height: 16,
           horizontalOrigin: HorizontalOrigin.CENTER,
           verticalOrigin: VerticalOrigin.CENTER,
           eyeOffset: new Cartesian3(0, 0, -15),
+          disableDepthTestDistance: HORIZON_LIMIT,
           heightReference: iconRef,
-        },
-        show: true,
-      });
+          },
+          show: true,
+          });
 
       state = {
         entity,
@@ -606,6 +620,7 @@ export async function updateEntity(incomingData) {
         lastStateKey: "",
         lastData: fullData,
         lastIconUrl: "",
+        lastPosition: position,
       };
       entityState[uid] = state;
       unitListDirty = true;
@@ -613,7 +628,13 @@ export async function updateEntity(incomingData) {
       pendingCreation.delete(uid);
     }
   } else {
-    state.entity.position = position;
+    // Only update position if it has changed to avoid redundant Cesium property updates
+    if (
+      !position.equals(state.lastPosition)
+    ) {
+      state.entity.position = position;
+      state.lastPosition = position;
+    }
     state.entity.description = description;
 
     // Update height references for potential type changes
@@ -659,6 +680,12 @@ export async function updateEntity(incomingData) {
   }
 
   if (state.lastStateKey !== stateKey) {
+    // If we have an existing icon, we need to track usage and potentially revoke
+    if (state.lastIconUrl && state.lastIconUrl !== iconsetUrl) {
+        // Decrease usage or just revoke if not shared
+        URL.revokeObjectURL(state.lastIconUrl);
+    }
+
     if (iconCache.has(stateKey)) {
       const cached = iconCache.get(stateKey);
       state.entity.billboard.image = cached.blobUrl;
@@ -716,7 +743,17 @@ export async function updateEntity(incomingData) {
     unitListDirty = true;
   }
 
-  state.entity.show = calculateVisibility(fullData);
+  const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
+  const isVisible = calculateVisibility(fullData);
+  const cameraDistance = viewer.camera.positionCartographic.height;
+  const showLabel = isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
+
+  state.entity.show = isVisible;
+  state.entity.label.show = showLabel;
+  if (state.courseEntity) {
+    state.courseEntity.show = isVisible;
+  }
+
   state.staleAt = stale ? new Date(stale).getTime() : null;
   throttledUpdateUnitList();
 }
