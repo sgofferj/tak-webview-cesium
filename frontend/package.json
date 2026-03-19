@@ -15,6 +15,7 @@
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.5.5",
+    "jsdom": "^29.0.0",
     "prettier": "^3.2.5",
     "vite": "^5.0.0",
     "vite-plugin-cesium": "^1.2.22",

@@ -120,6 +120,7 @@ export function renderGoogleIcon(
   color,
   size = 32,
   noBackground = false,
+  border = false,
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -150,6 +151,16 @@ export function renderGoogleIcon(
     ctx.translate(offset, offset);
     ctx.scale(iconScale, iconScale);
   }
+
+  // Draw border
+  if (border) {
+    ctx.save();
+    ctx.scale(1.15, 1.15); // Apply *additional* scale for border (relative to base transform)
+    ctx.fillStyle = "darkgray"; // Change color to dark gray
+    ctx.fill(p); // Draw the border
+    ctx.restore(); // Restore to "base transform" state
+  }
+
   ctx.fillStyle = color || "white";
   ctx.fill(p);
   ctx.restore();
