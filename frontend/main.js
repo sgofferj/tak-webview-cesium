@@ -19,6 +19,7 @@ import {
 } from "./viewer.js";
 import {
   entityState,
+  applyFilter,
   setFilters,
   calculateTrailVisibility,
   throttledUpdateUnitList,
@@ -354,12 +355,10 @@ function setupEvents() {
     if (infoBox) {
       infoBox.classList.remove("emergency-active");
     }
-    Object.keys(entityState).forEach((uid) => {
-      const state = entityState[uid];
-      if (state.trailEntity) {
-        state.trailEntity.show = calculateTrailVisibility(uid);
-      }
-    });
+
+    // Refresh all visibility states (labels, trails, course arrows) on selection change
+    applyFilter();
+
     if (entity) {
       const state = entityState[entity.id];
       if (
@@ -412,6 +411,9 @@ function setupEvents() {
     const zoom = Math.floor(Math.log2(35200000 / height));
     const zoomEl = document.getElementById("statusZoom");
     if (zoomEl) zoomEl.innerText = `Z${Math.max(0, zoom)}`;
+    
+    // Update filters to refresh visibility (including zoom-dependent labels)
+    applyFilter();
   };
   viewer.camera.changed.addEventListener(updateZoom);
   updateZoom();
