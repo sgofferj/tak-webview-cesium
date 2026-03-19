@@ -17,6 +17,8 @@ import {
   HeadingPitchRange,
   PolylineOutlineMaterialProperty,
   HeightReference,
+  CallbackProperty,
+  Math as CesiumMath,
 } from "cesium";
 
 const GROUND_OFFSET = 0; // Surface clamping
@@ -30,6 +32,8 @@ import {
   getSquawkLabel,
   affilMap,
   throttle,
+  getDestination,
+  renderGoogleIcon,
 } from "./utils.js";
 
 export const entityState = {};
@@ -43,9 +47,9 @@ export const collapsedStates = new Set([
   "other",
 ]);
 
-const MAX_DISTANCE = 10000000.0;
+const MAX_DISTANCE = 100000000.0;
 const HORIZON_LIMIT = 1000000.0; // 1000km
-const TACTICAL_DISTANCE = 500000.0; // 500km
+const TACTICAL_DISTANCE = 300000.0; // 300km
 
 const REVERSE_KEY_MAP = {
   i: "uid",
@@ -128,6 +132,9 @@ export function applyFilter() {
     state.entity.show = isVisible;
     if (state.trailEntity) {
       state.trailEntity.show = calculateTrailVisibility(uid);
+    }
+    if (state.courseEntity) {
+      state.courseEntity.show = isVisible && state.courseEntity.billboard.show;
     }
   });
   throttledUpdateUnitList();
@@ -455,6 +462,8 @@ export async function updateEntity(incomingData) {
     group_role,
     group_name,
     squawk,
+    course,
+    speed,
   } = fullData;
 
   const typeParts = (type || "").toLowerCase().split("-");
@@ -563,9 +572,26 @@ export async function updateEntity(incomingData) {
         show: false,
       });
 
+      const courseEntity = viewer.entities.add({
+        id: uid + "-course",
+        billboard: {
+          image: renderGoogleIcon("triangle", "white", 24, true),
+          width: 16,
+          height: 16,
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          verticalOrigin: VerticalOrigin.CENTER,
+          eyeOffset: new Cartesian3(0, 0, -15),
+          distanceDisplayCondition: ddcTactical,
+          disableDepthTestDistance: HORIZON_LIMIT,
+          heightReference: iconRef,
+        },
+        show: false,
+      });
+
       state = {
         entity,
         trailEntity,
+        courseEntity,
         history,
         lastStateKey: "",
         lastData: fullData,
@@ -601,6 +627,25 @@ export async function updateEntity(incomingData) {
     if (trailVisible) {
       state.trailEntity.polyline.positions = [...state.history];
     }
+  }
+
+  // Update Course Vector
+  const hasCourse = course !== undefined && course !== null;
+  if (hasCourse) {
+    state.courseEntity.position = position;
+    // Dynamic leading arrow: always ahead of icon regardless of camera rotation
+    state.courseEntity.billboard.rotation = new CallbackProperty(() => {
+      return -CesiumMath.toRadians(course) + viewer.camera.heading;
+    }, false);
+    state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
+      const angle = CesiumMath.toRadians(course) - viewer.camera.heading;
+      const dist = 22; // Pixels from center
+      return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
+    }, false);
+    state.courseEntity.billboard.heightReference = iconRef;
+    state.courseEntity.show = calculateVisibility(fullData);
+  } else if (state && state.courseEntity) {
+    state.courseEntity.show = false;
   }
 
   if (state.lastStateKey !== stateKey) {
@@ -671,6 +716,7 @@ export function removeEntity(uid) {
   if (!state) return;
   if (state.entity) viewer.entities.remove(state.entity);
   if (state.trailEntity) viewer.entities.remove(state.trailEntity);
+  if (state.courseEntity) viewer.entities.remove(state.courseEntity);
   delete entityState[uid];
   unitListDirty = true;
   throttledUpdateUnitList();
