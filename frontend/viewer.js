@@ -179,6 +179,7 @@ export async function initViewer() {
   });
 
   viewer.scene.globe.depthTestAgainstTerrain = true;
+  viewer.camera.percentageChanged = 0.01;
   currentBaseLayer = viewer.imageryLayers.get(0);
 
   let initialDestination = Cartesian3.fromDegrees(
