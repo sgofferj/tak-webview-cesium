@@ -7,7 +7,6 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
-import asyncio
 import logging
 import os
 from collections.abc import AsyncGenerator
@@ -15,19 +14,19 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from anyio import Path
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
+from .auth import auth_manager
 from .config import settings
 from .connection import manager
 from .iconsets import iconsets_cache, load_iconsets
 from .layers import get_app_config, load_layers
 from .tak_client import tak_client
-from .auth import auth_manager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,7 +52,7 @@ app = FastAPI(lifespan=lifespan)
 
 # Session management - max_age=None makes it a session-only cookie
 app.add_middleware(
-    SessionMiddleware, 
+    SessionMiddleware,
     secret_key=settings.secret_key,
     session_cookie="tak_webview_session",
     max_age=None,
