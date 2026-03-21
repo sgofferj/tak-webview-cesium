@@ -28,6 +28,7 @@
   "emergency911Badge": "911",
   "affiliationFriendly": "Vänlig",
   "affiliationHostile": "Fientlig",
+  "affiliationSuspect": "Misstänkt",
   "affiliationNeutral": "Neutral",
   "affiliationUnknown": "Okänd",
   "affiliationFilterLabel": "Filtrera tillhörighet:",
