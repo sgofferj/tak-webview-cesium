@@ -571,6 +571,31 @@
       #authForget:hover {
         background: #600 !important;
       }
+      #contourSettings {
+        padding: 5px 10px;
+        background: rgba(0,0,0,0.3);
+        border-top: 1px solid #444;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 5px;
+      }
+      #contourSettings button {
+        background: #444;
+        color: white;
+        border: 1px solid #555;
+        width: 24px; 
+        height: 24px; 
+        cursor: pointer;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+      }
+      #contourSettings button:hover {
+        background: #555;
+      }
     </style>
   </head>
   <body>
@@ -611,6 +636,18 @@
       <div id="baseMapGrid" class="layer-grid"></div>
       <div class="layer-section-header">Overlays</div>
       <div id="overlayGrid" class="layer-grid"></div>
+      <div id="analysisSection" class="hidden">
+        <div class="layer-section-header">Analysis</div>
+        <div id="analysisGrid" class="layer-grid"></div>
+        <div id="contourSettings" class="hidden">
+           <span style="font-size: 0.8em; color: #ccc;">Density</span>
+           <div style="display: flex; align-items: center; gap: 5px;">
+              <button id="contourDec" title="Decrease Density">-</button>
+              <span id="contourValue" style="font-size: 0.9em; color: cyan; width: 45px; text-align: center;">100m</span>
+              <button id="contourInc" title="Increase Density">+</button>
+           </div>
+        </div>
+      </div>
     </div>
 
     <div id="infoModal" class="modal-hidden">

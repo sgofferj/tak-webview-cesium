@@ -36,6 +36,7 @@
   "emergencyLabel": "Hätätila",
   "terrainLabel": "Maasto",
   "ellipsoidLabel": "WGS84 Ellipsoidi",
+  "contoursLabel": "Korkeuskäyrät",
   "squawk7500": "KAAPPAUS",
   "squawk7600": "RADIORIKKO",
   "squawk7700": "HÄTÄTILA"

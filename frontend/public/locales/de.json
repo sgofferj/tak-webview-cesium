@@ -36,6 +36,7 @@
   "emergencyLabel": "Notfall",
   "terrainLabel": "Gelände",
   "ellipsoidLabel": "WGS84-Ellipsoid",
+  "contoursLabel": "Höhenlinien",
   "squawk7500": "ENTFÜHRUNG",
   "squawk7600": "FUNKAUSFALL",
   "squawk7700": "NOTFALL"
