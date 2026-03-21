@@ -32,7 +32,6 @@ import {
   getSquawkLabel,
   affilMap,
   throttle,
-  getDestination,
   renderGoogleIcon,
 } from "./utils.js";
 
@@ -57,7 +56,6 @@ const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
 const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
 
 const DDC_UNSELECTED_LABEL = ddcTactical;
-const DDC_UNSELECTED_COURSE = ddcTactical;
 const DDC_UNSELECTED_TRAIL = ddcTactical;
 
 const DDC_SELECTED = ddcAlways;
@@ -97,6 +95,8 @@ const iconCache = new Map();
 const blobUsageRegistry = new Map();
 // Lock to prevent duplicate entity creation during async calls
 const pendingCreation = new Set();
+// Track pending icon generations to prevent race conditions
+const pendingIcons = new Map();
 
 function registerBlobUsage(url) {
   if (!url || !url.startsWith("blob:")) return;
@@ -174,16 +174,22 @@ export function applyFilter() {
   unitListDirty = true;
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
+    if (!state) return; // Safety check for concurrent removal
+
     const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
     const isVisible = calculateVisibility(state.lastData);
 
     // Icons follow filter
-    state.entity.show = isVisible;
-    
-    // Labels show when selected OR zoomed in (<200km)
-    const cameraDistance = viewer.camera.positionCartographic.height;
-    const showLabel = isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
-    state.entity.label.show = showLabel;
+    if (state.entity) {
+      state.entity.show = isVisible;
+      
+      // Labels show when selected OR zoomed in (<200km)
+      if (state.entity.label) {
+        const cameraDistance = viewer.camera.positionCartographic.height;
+        const showLabel = isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
+        state.entity.label.show = showLabel;
+      }
+    }
     
     if (state.trailEntity) {
       state.trailEntity.show = calculateTrailVisibility(uid);
@@ -310,7 +316,7 @@ export function updateUnitListUI() {
 
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state.entity || !state.entity.show) return;
+    if (!state || !state.entity || !state.entity.show) return;
     const data = state.lastData;
     const uidLower = uid.toLowerCase();
     let cat = "other";
@@ -522,7 +528,6 @@ export async function updateEntity(incomingData) {
     group_name,
     squawk,
     course,
-    speed,
   } = fullData;
 
   const typeParts = (type || "").toLowerCase().split("-");
@@ -675,6 +680,8 @@ export async function updateEntity(incomingData) {
 
     if (
       viewer.clock &&
+      state.entity.label &&
+      state.entity.label.text &&
       state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign
     ) {
       state.entity.label.text = callsign;
@@ -692,14 +699,21 @@ export async function updateEntity(incomingData) {
   const hasCourse = course !== undefined && course !== null;
   if (hasCourse) {
     state.courseEntity.position = position;
-    if (!state.courseEntity.billboard.rotation.getValue) {
+    // Dynamic leading arrow: always ahead of icon regardless of camera rotation
+    if (
+      !state.courseEntity.billboard.rotation ||
+      typeof state.courseEntity.billboard.rotation.getValue !== "function"
+    ) {
       state.courseEntity.billboard.rotation = new CallbackProperty(() => {
         const s = entityState[uid];
         if (!s || !s.lastData || s.lastData.course === undefined) return 0;
         return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
       }, false);
     }
-    if (!state.courseEntity.billboard.pixelOffset.getValue) {
+    if (
+      !state.courseEntity.billboard.pixelOffset ||
+      typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
+    ) {
       state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
         const s = entityState[uid];
         if (!s || !s.lastData || s.lastData.course === undefined)
@@ -717,11 +731,7 @@ export async function updateEntity(incomingData) {
   }
 
   if (state.lastStateKey !== stateKey) {
-    let iconUrl,
-      pixelOffset = new Cartesian2(0, 0),
-      width = 28,
-      height = 28,
-      billboardColor = Color.WHITE;
+    let iconUrl, pixelOffset, width, height, billboardColor;
 
     if (iconCache.has(stateKey)) {
       const cached = iconCache.get(stateKey);
@@ -730,37 +740,67 @@ export async function updateEntity(incomingData) {
       height = cached.height;
       pixelOffset = cached.pixelOffset || new Cartesian2(0, 0);
       billboardColor = cached.color || Color.WHITE;
+    } else if (pendingIcons.has(stateKey)) {
+      // If someone else is already making this icon, wait for them
+      const result = await pendingIcons.get(stateKey);
+      iconUrl = result.blobUrl;
+      width = result.width;
+      height = result.height;
+      pixelOffset = result.pixelOffset;
+      billboardColor = result.color;
     } else {
-      if (useTeamCircle) {
-        const canvas = drawGroupIcon(group_name, group_role, how);
-        iconUrl = await canvasToBlobUrl(canvas);
-        width = 32;
-        height = 32;
-      } else if (iconsetUrl) {
-        iconUrl = iconsetUrl;
-        billboardColor = color ? cesiumColor : Color.WHITE;
-      } else {
-        const symbolOptions = { size: 21, padding: 10 };
-        const symbol = new ms.Symbol(sidc, symbolOptions);
-        const canvas = symbol.asCanvas();
-        const iconAnchor = symbol.getAnchor();
-        const iconSize = symbol.getSize();
-        iconUrl = await canvasToBlobUrl(canvas);
-        const scale = 1.1;
-        width = iconSize.width * scale;
-        height = iconSize.height * scale;
-        pixelOffset = new Cartesian2(
-          (iconSize.width / 2 - iconAnchor.x) * scale,
-          (iconSize.height / 2 - iconAnchor.y) * scale,
-        );
-      }
-      iconCache.set(stateKey, {
-        blobUrl: iconUrl,
-        pixelOffset,
-        width,
-        height,
-        color: billboardColor,
-      });
+      // We are the ones making the icon
+      const generateIcon = async () => {
+        let iUrl,
+          pOff = new Cartesian2(0, 0),
+          w = 28,
+          h = 28,
+          bCol = Color.WHITE;
+
+        if (useTeamCircle) {
+          const canvas = drawGroupIcon(group_name, group_role, how);
+          iUrl = await canvasToBlobUrl(canvas);
+          w = 32;
+          h = 32;
+        } else if (iconsetUrl) {
+          iUrl = iconsetUrl;
+          bCol = color ? cesiumColor : Color.WHITE;
+        } else {
+          const symbolOptions = { size: 21, padding: 10 };
+          const symbol = new ms.Symbol(sidc, symbolOptions);
+          const canvas = symbol.asCanvas();
+          const iconAnchor = symbol.getAnchor();
+          const iconSize = symbol.getSize();
+          iUrl = await canvasToBlobUrl(canvas);
+          const scale = 1.1;
+          w = iconSize.width * scale;
+          h = iconSize.height * scale;
+          pOff = new Cartesian2(
+            (iconSize.width / 2 - iconAnchor.x) * scale,
+            (iconSize.height / 2 - iconAnchor.y) * scale,
+          );
+        }
+        const cacheEntry = {
+          blobUrl: iUrl,
+          pixelOffset: pOff,
+          width: w,
+          height: h,
+          color: bCol,
+        };
+        iconCache.set(stateKey, cacheEntry);
+        return cacheEntry;
+      };
+
+      const pendingPromise = generateIcon();
+      pendingIcons.set(stateKey, pendingPromise);
+      const result = await pendingPromise;
+      pendingIcons.delete(stateKey);
+
+      iconUrl = result.blobUrl;
+      width = result.width;
+      height = result.height;
+      pixelOffset = result.pixelOffset;
+      billboardColor = result.color;
     }
 
     // Re-verify state exists after async await
@@ -796,7 +836,11 @@ export async function updateEntity(incomingData) {
     state.courseEntity.show = isVisible;
   }
 
-  state.staleAt = stale ? new Date(stale).getTime() : null;
+  // Only update staleAt if explicitly provided in this message
+  if (stale) {
+    state.staleAt = new Date(stale).getTime();
+  }
+  
   throttledUpdateUnitList();
 }
 
@@ -857,6 +901,14 @@ setInterval(() => {
   const now = Date.now();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (state.staleAt && now > state.staleAt) removeEntity(uid);
+    if (!state) return;
+    // STALE GRACE PERIOD: 120s
+    // CoT stale times are often based on eventTime + small delta, 
+    // which fails if clocks are slightly out of sync.
+    // AIS often has very short stale times.
+    if (state.staleAt && now > (state.staleAt + 120000)) {
+        console.log(`Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`);
+        removeEntity(uid);
+    }
   });
 }, 5000);
