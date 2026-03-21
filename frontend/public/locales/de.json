@@ -28,6 +28,7 @@
   "emergency911Badge": "911",
   "affiliationFriendly": "Freundlich",
   "affiliationHostile": "Feindlich",
+  "affiliationSuspect": "Verdächtig",
   "affiliationNeutral": "Neutral",
   "affiliationUnknown": "Unbekannt",
   "affiliationFilterLabel": "Zugehörigkeit filtern:",

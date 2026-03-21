@@ -91,10 +91,39 @@ const REVERSE_KEY_MAP = {
   ce: "ce",
 };
 
-// Global icon cache to prevent memory leaks and redundant rendering
+// Global icon cache to prevent redundant rendering
 const iconCache = new Map();
+// Reference counting for blob URLs to prevent memory leaks while avoiding broken images
+const blobUsageRegistry = new Map();
 // Lock to prevent duplicate entity creation during async calls
 const pendingCreation = new Set();
+
+function registerBlobUsage(url) {
+  if (!url || !url.startsWith("blob:")) return;
+  const count = blobUsageRegistry.get(url) || 0;
+  blobUsageRegistry.set(url, count + 1);
+}
+
+function unregisterBlobUsage(url) {
+  if (!url || !url.startsWith("blob:")) return;
+  const count = blobUsageRegistry.get(url) || 0;
+  if (count <= 1) {
+    blobUsageRegistry.delete(url);
+    // Check if it's still in the icon cache before revoking
+    let inCache = false;
+    for (const cached of iconCache.values()) {
+      if (cached.blobUrl === url) {
+        inCache = true;
+        break;
+      }
+    }
+    if (!inCache) {
+      URL.revokeObjectURL(url);
+    }
+  } else {
+    blobUsageRegistry.set(url, count - 1);
+  }
+}
 
 export function setFilters(filter, affiliation) {
   if (filter !== undefined) currentFilter = filter.toLowerCase();
@@ -112,7 +141,9 @@ export function calculateVisibility(data) {
     const affilCode = et[1] ? et[1].toLowerCase() : "u";
     let simpleAffil = "u";
     if (["f", "a"].includes(affilCode)) simpleAffil = "f";
-    else if (["h", "s", "j", "k"].includes(affilCode)) simpleAffil = "h";
+    else if (affilCode === "h") simpleAffil = "h";
+    else if (affilCode === "s") simpleAffil = "s";
+    else if (["j", "k"].includes(affilCode)) simpleAffil = "h"; // Joker/Faker treated as hostile
     else if (affilCode === "n") simpleAffil = "n";
 
     showByAffil = simpleAffil === currentAffiliationFilter;
@@ -139,6 +170,7 @@ export function calculateTrailVisibility(uid) {
 }
 
 export function applyFilter() {
+  if (!viewer) return;
   unitListDirty = true;
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
@@ -157,7 +189,6 @@ export function applyFilter() {
       state.trailEntity.show = calculateTrailVisibility(uid);
     }
     if (state.courseEntity) {
-      // Course arrows always visible if entity is visible, regardless of zoom/selection
       state.courseEntity.show = isVisible;
     }
   });
@@ -220,7 +251,7 @@ export function createDescription(data) {
   }
   let processedRemarks = remarks || "";
   let extractedLink = link_url;
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const urlRegex = new RegExp("https?://[^\\s]+", "g");
   const matches = processedRemarks.match(urlRegex);
   if (matches && matches.length > 0) {
     if (!extractedLink) extractedLink = matches[0];
@@ -229,12 +260,12 @@ export function createDescription(data) {
   if (processedRemarks.trim()) {
     const formattedRemarks = processedRemarks
       .replace(
-        /#(\w+)/g,
+        new RegExp("#(\\w+)", "g"),
         '<a class="hashtag-link" data-tag="#$1" style="color: #4af; cursor: pointer; text-decoration: underline;">#$1</a>',
       )
-      .replace(/\n\s*\n/g, "\n")
+      .replace(new RegExp("\\n\\s*\\n", "g"), "\n")
       .trim()
-      .replace(/\n/g, "<br/>");
+      .replace(new RegExp("\\n", "g"), "<br/>");
     html += `<br/><b>${i18n.infoBoxHeader}:</b><br/>${formattedRemarks}<br/>`;
   }
   if (extractedLink) {
@@ -325,6 +356,7 @@ export function updateUnitListUI() {
     [
       i18n.affiliationFriendly,
       i18n.affiliationHostile,
+      i18n.affiliationSuspect,
       i18n.affiliationNeutral,
       i18n.affiliationUnknown,
     ].forEach((affil) => {
@@ -365,7 +397,7 @@ window.toggleCollapse = function (key) {
 
 window.zoomToUnit = function (uid) {
   const state = entityState[uid];
-  if (state) {
+  if (state && viewer) {
     viewer.selectedEntity = state.entity;
     viewer.flyTo(state.entity, {
       offset: new HeadingPitchRange(0, -Math.PI / 2, 100000),
@@ -456,13 +488,16 @@ async function canvasToBlobUrl(canvas) {
 }
 
 export async function updateEntity(incomingData) {
+  if (!viewer || !viewer.entities) return;
+
   const data = {};
   for (const key in incomingData) {
     data[REVERSE_KEY_MAP[key] || key] = incomingData[key];
   }
   const { uid } = data;
-  let state = entityState[uid];
+  if (!uid) return;
 
+  let state = entityState[uid];
   if (!state && pendingCreation.has(uid)) return;
 
   if (state) {
@@ -531,7 +566,6 @@ export async function updateEntity(incomingData) {
   const effectiveColor = color ? cesiumColor : getAffiliationColor(type);
   const useTeamCircle = !!group_name && !!group_role;
 
-  // Clean, modifier-free state key
   const stateKey = useTeamCircle
     ? `group-${group_name}-${group_role}-${color}-${how}`
     : iconsetUrl
@@ -539,13 +573,10 @@ export async function updateEntity(incomingData) {
       : `${sidc}-${color}-${squawk}`;
 
   const description = createDescription(fullData);
-  const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
-  const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
 
   if (!state) {
     pendingCreation.add(uid);
     try {
-      // Start history with two points to avoid Cesium crash with clampToGround
       const history = [anchorPosition, anchorPosition];
       const entity = viewer.entities.add({
         id: uid,
@@ -576,13 +607,13 @@ export async function updateEntity(incomingData) {
           distanceDisplayCondition: DDC_UNSELECTED_LABEL,
           disableDepthTestDistance: DDD_UNSELECTED,
           heightReference: iconRef,
-          },
-          description: description,
-          });
+        },
+        description: description,
+      });
 
-          const trailEntity = viewer.entities.add({
-          id: uid + "-trail",
-          polyline: {
+      const trailEntity = viewer.entities.add({
+        id: uid + "-trail",
+        polyline: {
           positions: history,
           width: 3,
           material: new PolylineOutlineMaterialProperty({
@@ -593,13 +624,13 @@ export async function updateEntity(incomingData) {
           distanceDisplayCondition: DDC_UNSELECTED_TRAIL,
           disableDepthTestDistance: HORIZON_LIMIT,
           clampToGround: true,
-          },
-          show: false,
-          });
+        },
+        show: false,
+      });
 
-          const courseEntity = viewer.entities.add({
-          id: uid + "-course",
-          billboard: {
+      const courseEntity = viewer.entities.add({
+        id: uid + "-course",
+        billboard: {
           image: renderGoogleIcon("triangle", "white", 24, true, true),
           width: 16,
           height: 16,
@@ -608,9 +639,9 @@ export async function updateEntity(incomingData) {
           eyeOffset: new Cartesian3(0, 0, -15),
           disableDepthTestDistance: HORIZON_LIMIT,
           heightReference: iconRef,
-          },
-          show: true,
-          });
+        },
+        show: true,
+      });
 
       state = {
         entity,
@@ -628,16 +659,12 @@ export async function updateEntity(incomingData) {
       pendingCreation.delete(uid);
     }
   } else {
-    // Only update position if it has changed to avoid redundant Cesium property updates
-    if (
-      !position.equals(state.lastPosition)
-    ) {
+    if (!position.equals(state.lastPosition)) {
       state.entity.position = position;
       state.lastPosition = position;
     }
     state.entity.description = description;
 
-    // Update height references for potential type changes
     if (state.entity.billboard.heightReference !== iconRef) {
       state.entity.billboard.heightReference = iconRef;
       state.entity.label.heightReference = iconRef;
@@ -647,13 +674,14 @@ export async function updateEntity(incomingData) {
     if (state.history.length > 100) state.history.shift();
 
     if (
+      viewer.clock &&
       state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign
     ) {
       state.entity.label.text = callsign;
       unitListDirty = true;
     }
 
-    const trailVisible = calculateTrailVisibility(uid);
+    const trailVisible = calculateVisibility(fullData) && viewer.selectedEntity && viewer.selectedEntity.id === uid;
     state.trailEntity.show = trailVisible;
     if (trailVisible) {
       state.trailEntity.polyline.positions = [...state.history];
@@ -664,43 +692,45 @@ export async function updateEntity(incomingData) {
   const hasCourse = course !== undefined && course !== null;
   if (hasCourse) {
     state.courseEntity.position = position;
-    // Dynamic leading arrow: always ahead of icon regardless of camera rotation
-    state.courseEntity.billboard.rotation = new CallbackProperty(() => {
-      return -CesiumMath.toRadians(course) + viewer.camera.heading;
-    }, false);
-    state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
-      const angle = CesiumMath.toRadians(course) - viewer.camera.heading;
-      const dist = 22; // Pixels from center
-      return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
-    }, false);
+    if (!state.courseEntity.billboard.rotation.getValue) {
+      state.courseEntity.billboard.rotation = new CallbackProperty(() => {
+        const s = entityState[uid];
+        if (!s || !s.lastData || s.lastData.course === undefined) return 0;
+        return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
+      }, false);
+    }
+    if (!state.courseEntity.billboard.pixelOffset.getValue) {
+      state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
+        const s = entityState[uid];
+        if (!s || !s.lastData || s.lastData.course === undefined)
+          return new Cartesian2(0, 0);
+        const angle =
+          CesiumMath.toRadians(s.lastData.course) - viewer.camera.heading;
+        const dist = 22; // Pixels from center
+        return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
+      }, false);
+    }
     state.courseEntity.billboard.heightReference = iconRef;
-    state.courseEntity.show = true; // Always show if course data exists
+    state.courseEntity.show = true;
   } else if (state && state.courseEntity) {
     state.courseEntity.show = false;
   }
 
   if (state.lastStateKey !== stateKey) {
-    // If we have an existing icon, we need to track usage and potentially revoke
-    if (state.lastIconUrl && state.lastIconUrl !== iconsetUrl) {
-        // Decrease usage or just revoke if not shared
-        URL.revokeObjectURL(state.lastIconUrl);
-    }
+    let iconUrl,
+      pixelOffset = new Cartesian2(0, 0),
+      width = 28,
+      height = 28,
+      billboardColor = Color.WHITE;
 
     if (iconCache.has(stateKey)) {
       const cached = iconCache.get(stateKey);
-      state.entity.billboard.image = cached.blobUrl;
-      state.entity.billboard.width = cached.width;
-      state.entity.billboard.height = cached.height;
-      state.entity.billboard.pixelOffset =
-        cached.pixelOffset || new Cartesian2(0, 0);
-      state.entity.billboard.color = cached.color || Color.WHITE;
-      state.lastIconUrl = cached.blobUrl;
+      iconUrl = cached.blobUrl;
+      width = cached.width;
+      height = cached.height;
+      pixelOffset = cached.pixelOffset || new Cartesian2(0, 0);
+      billboardColor = cached.color || Color.WHITE;
     } else {
-      let iconUrl,
-        pixelOffset = new Cartesian2(0, 0),
-        width = 28,
-        height = 28,
-        billboardColor = Color.WHITE;
       if (useTeamCircle) {
         const canvas = drawGroupIcon(group_name, group_role, how);
         iconUrl = await canvasToBlobUrl(canvas);
@@ -724,12 +754,6 @@ export async function updateEntity(incomingData) {
           (iconSize.height / 2 - iconAnchor.y) * scale,
         );
       }
-      state.entity.billboard.image = iconUrl;
-      state.entity.billboard.width = width;
-      state.entity.billboard.height = height;
-      state.entity.billboard.pixelOffset = pixelOffset;
-      state.entity.billboard.color = billboardColor;
-      state.lastIconUrl = iconUrl;
       iconCache.set(stateKey, {
         blobUrl: iconUrl,
         pixelOffset,
@@ -738,6 +762,24 @@ export async function updateEntity(incomingData) {
         color: billboardColor,
       });
     }
+
+    // Re-verify state exists after async await
+    state = entityState[uid];
+    if (!state) return;
+
+    if (state.lastIconUrl !== iconUrl) {
+      const oldIcon = state.lastIconUrl;
+      registerBlobUsage(iconUrl);
+      state.entity.billboard.image = iconUrl;
+      state.lastIconUrl = iconUrl;
+      // Unregister old after new is set
+      if (oldIcon) unregisterBlobUsage(oldIcon);
+    }
+
+    state.entity.billboard.width = width;
+    state.entity.billboard.height = height;
+    state.entity.billboard.pixelOffset = pixelOffset;
+    state.entity.billboard.color = billboardColor;
     state.lastStateKey = stateKey;
     state.lastRgbColor = rgbColor;
     unitListDirty = true;
@@ -761,16 +803,28 @@ export async function updateEntity(incomingData) {
 export function removeEntity(uid) {
   const state = entityState[uid];
   if (!state) return;
+
+  if (viewer.selectedEntity && viewer.selectedEntity.id === uid) {
+    viewer.selectedEntity = undefined;
+  }
+  if (previouslySelectedEntityId === uid) {
+    previouslySelectedEntityId = null;
+  }
+
+  if (state.lastIconUrl) {
+    unregisterBlobUsage(state.lastIconUrl);
+  }
+
   if (state.entity) viewer.entities.remove(state.entity);
   if (state.trailEntity) viewer.entities.remove(state.trailEntity);
   if (state.courseEntity) viewer.entities.remove(state.courseEntity);
+
   delete entityState[uid];
   unitListDirty = true;
   throttledUpdateUnitList();
 }
 
 export function updateEntitySelectionVisibility(selectedEntity) {
-  // Restore previous entity's visibility if any
   if (previouslySelectedEntityId && entityState[previouslySelectedEntityId]) {
     const prevState = entityState[previouslySelectedEntityId];
     if (prevState.entity && prevState.entity.label) {
@@ -779,32 +833,21 @@ export function updateEntitySelectionVisibility(selectedEntity) {
     }
     if (prevState.trailEntity && prevState.trailEntity.polyline) {
       prevState.trailEntity.polyline.distanceDisplayCondition = DDC_UNSELECTED_TRAIL;
-      prevState.trailEntity.show = calculateTrailVisibility(prevState.entity.id);
-    }
-    // No need to set distance conditions for courseEntity anymore
-    if (prevState.courseEntity) {
-      prevState.courseEntity.show = true; // Always true for courseEntity
+      prevState.trailEntity.show = calculateTrailVisibility(previouslySelectedEntityId);
     }
   }
 
-  // Apply visibility for currently selected entity
-  if (selectedEntity) {
+  if (selectedEntity && selectedEntity.id && entityState[selectedEntity.id]) {
     const currentState = entityState[selectedEntity.id];
-    if (currentState) {
-      if (currentState.entity && currentState.entity.label) {
-        currentState.entity.label.distanceDisplayCondition = DDC_SELECTED;
-        currentState.entity.label.disableDepthTestDistance = DDD_SELECTED;
-      }
-      if (currentState.trailEntity && currentState.trailEntity.polyline) {
-        currentState.trailEntity.polyline.distanceDisplayCondition = DDC_SELECTED;
-        currentState.trailEntity.show = true; // Always show trail for selected entity
-      }
-      // No need to set distance conditions for courseEntity anymore
-      if (currentState.courseEntity) {
-        currentState.courseEntity.show = true; // Always true for courseEntity
-      }
-      previouslySelectedEntityId = selectedEntity.id;
+    if (currentState.entity && currentState.entity.label) {
+      currentState.entity.label.distanceDisplayCondition = DDC_SELECTED;
+      currentState.entity.label.disableDepthTestDistance = DDD_SELECTED;
     }
+    if (currentState.trailEntity && currentState.trailEntity.polyline) {
+      currentState.trailEntity.polyline.distanceDisplayCondition = DDC_SELECTED;
+      currentState.trailEntity.show = true;
+    }
+    previouslySelectedEntityId = selectedEntity.id;
   } else {
     previouslySelectedEntityId = null;
   }

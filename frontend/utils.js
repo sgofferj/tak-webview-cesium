@@ -34,7 +34,7 @@ export const affilMap = (i18n) => ({
   f: i18n.affiliationFriendly,
   a: i18n.affiliationFriendly,
   h: i18n.affiliationHostile,
-  s: i18n.affiliationHostile,
+  s: i18n.affiliationSuspect,
   j: i18n.affiliationHostile,
   k: i18n.affiliationHostile,
   n: i18n.affiliationNeutral,
