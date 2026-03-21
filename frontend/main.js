@@ -16,6 +16,8 @@ import {
   setTerrain,
   toggleOverlayLayer,
   clearOverlayLayers,
+  setElevationContours,
+  setContourSpacing,
 } from "./viewer.js";
 import {
   entityState,
@@ -23,6 +25,7 @@ import {
   setFilters,
   throttledUpdateUnitList,
   updateEntitySelectionVisibility,
+  setCameraTilt,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -343,6 +346,67 @@ function populateLayerPicker() {
       overlayGrid.appendChild(item);
     });
   }
+
+  // Analysis Section
+  const analysisGrid = document.getElementById("analysisGrid");
+  const contourOpt = {
+    name: i18n.contoursLabel || "Contours",
+    icon: null, // We'll use a CSS placeholder
+  };
+  const contourItem = createLayerItem(contourOpt, false, "analysisLayer", false);
+  contourItem.querySelector(".layer-thumb").style.backgroundColor = "#111";
+  contourItem.querySelector(".layer-thumb").innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:5px;">
+      <div style="width:60%;height:2px;background:cyan;opacity:0.8;border-radius:1px;"></div>
+      <div style="width:40%;height:2px;background:cyan;opacity:0.6;border-radius:1px;"></div>
+      <div style="width:70%;height:2px;background:cyan;opacity:0.9;border-radius:1px;"></div>
+    </div>
+  `;
+
+  const updateContourUI = (active) => {
+    const settingsDiv = document.getElementById("contourSettings");
+    const input = contourItem.querySelector("input");
+    input.checked = active;
+    if (active) {
+      contourItem.classList.add("active");
+      settingsDiv.classList.remove("hidden");
+    } else {
+      contourItem.classList.remove("active");
+      settingsDiv.classList.add("hidden");
+    }
+  };
+
+  window.addEventListener("contoursChanged", (e) => {
+    updateContourUI(e.detail.active);
+  });
+
+  contourItem.addEventListener("click", (e) => {
+    const input = contourItem.querySelector("input");
+    let targetState = input.checked;
+    if (e.target !== input) {
+      targetState = !input.checked;
+    }
+    setElevationContours(targetState);
+  });
+  analysisGrid.appendChild(contourItem);
+
+  // Contour Density Controls
+  let currentDensity = 100;
+  const valueSpan = document.getElementById("contourValue");
+
+  document.getElementById("contourDec").addEventListener("click", (e) => {
+    e.stopPropagation();
+    currentDensity = Math.max(5, currentDensity - 5);
+    valueSpan.innerText = `${currentDensity}m`;
+    setContourSpacing(currentDensity);
+  });
+
+  document.getElementById("contourInc").addEventListener("click", (e) => {
+    e.stopPropagation();
+    currentDensity += 5;
+    valueSpan.innerText = `${currentDensity}m`;
+    setContourSpacing(currentDensity);
+  });
 }
 
 function setupEvents() {
@@ -409,7 +473,13 @@ function setupEvents() {
     const zoom = Math.floor(Math.log2(35200000 / height));
     const zoomEl = document.getElementById("statusZoom");
     if (zoomEl) zoomEl.innerText = `Z${Math.max(0, zoom)}`;
-    
+
+    // Update camera tilt state (limit visual range if not looking straight down)
+    const pitch = viewer.camera.pitch;
+    // -PI/2 is straight down. If pitch is greater than -PI/2 + epsilon, we are tilted.
+    const isTilted = pitch > -Math.PI / 2 + 0.1;
+    setCameraTilt(isTilted);
+
     // Update filters to refresh visibility (including zoom-dependent labels)
     applyFilter();
   };

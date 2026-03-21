@@ -19,12 +19,17 @@ import {
   Rectangle,
   Credit,
   Color,
+  Material,
 } from "cesium";
 import { appConfig } from "./config.js";
 
 export let viewer;
 const activeOverlays = new Map();
 let currentBaseLayer = null;
+let isDarkMode = false;
+let isTerrainActive = false;
+let contoursEnabled = false;
+let contourSpacing = 100.0;
 
 async function createImageryProvider(layer) {
   let rect = Rectangle.MAX_VALUE;
@@ -92,14 +97,18 @@ export async function setBaseLayer(layerConfig) {
 
   // Dark mode aesthetic: Hide atmosphere if layer name contains 'dark' or 'night'
   const layerName = (layerConfig.name || "").toLowerCase();
-  const isDark = layerName.includes("dark") || layerName.includes("night");
-  if (isDark) {
+  isDarkMode = layerName.includes("dark") || layerName.includes("night");
+  if (isDarkMode) {
     viewer.scene.skyAtmosphere.show = false;
     viewer.scene.backgroundColor = Color.BLACK;
   } else {
     viewer.scene.skyAtmosphere.show = true;
-    // Default background is black, but atmosphere makes it blue.
+    // If we lose dark mode, we must lose contours too
+    if (contoursEnabled) {
+      setElevationContours(false);
+    }
   }
+  checkAnalysisAvailability();
 }
 
 export async function setTerrain(isTerrain) {
@@ -110,14 +119,66 @@ export async function setTerrain(isTerrain) {
         appConfig.terrain_url,
       );
       viewer.terrainProvider = provider;
+      isTerrainActive = true;
     } else {
       console.log("Setting terrain provider to Ellipsoid");
       viewer.terrainProvider = new EllipsoidTerrainProvider();
+      isTerrainActive = false;
+      // If we lose terrain, we must lose contours too
+      if (contoursEnabled) {
+        setElevationContours(false);
+      }
     }
   } catch (e) {
     console.error("Failed to set terrain provider:", e);
     // Fallback to Ellipsoid on error
     viewer.terrainProvider = new EllipsoidTerrainProvider();
+    isTerrainActive = false;
+    if (contoursEnabled) {
+      setElevationContours(false);
+    }
+  }
+  checkAnalysisAvailability();
+}
+
+export function setElevationContours(active) {
+  const oldState = contoursEnabled;
+  if (active && isTerrainActive && isDarkMode) {
+    viewer.scene.globe.material = Material.fromType("ElevationContour", {
+      color: Color.CYAN,
+      width: 1.0,
+      spacing: contourSpacing,
+    });
+    contoursEnabled = true;
+  } else {
+    viewer.scene.globe.material = undefined;
+    contoursEnabled = false;
+  }
+
+  if (contoursEnabled !== oldState) {
+    window.dispatchEvent(
+      new CustomEvent("contoursChanged", { detail: { active: contoursEnabled } }),
+    );
+  }
+  return contoursEnabled;
+}
+
+export function setContourSpacing(val) {
+  contourSpacing = val;
+  if (contoursEnabled && viewer.scene.globe.material) {
+    viewer.scene.globe.material.uniforms.spacing = val;
+  }
+}
+
+function checkAnalysisAvailability() {
+  const section = document.getElementById("analysisSection");
+  if (!section) return;
+
+  const available = isTerrainActive && isDarkMode;
+  if (available) {
+    section.classList.remove("hidden");
+  } else {
+    section.classList.add("hidden");
   }
 }
 

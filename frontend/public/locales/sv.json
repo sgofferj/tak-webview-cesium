@@ -36,6 +36,7 @@
   "emergencyLabel": "Nödläge",
   "terrainLabel": "Terräng",
   "ellipsoidLabel": "WGS84 Ellipsoid",
+  "contoursLabel": "Höjdkurvor",
   "squawk7500": "KAPNING",
   "squawk7600": "RADIOFEL",
   "squawk7700": "NÖDSITUATION"

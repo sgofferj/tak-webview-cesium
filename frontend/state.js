@@ -53,6 +53,7 @@ const HORIZON_LIMIT = 1000000.0; // 1000km
 const TACTICAL_DISTANCE = 200000.0; // 200km
 
 const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
+const ddcTilted = new DistanceDisplayCondition(0, 100000.0); // 100km limit when tilted
 const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
 
 const DDC_UNSELECTED_LABEL = ddcTactical;
@@ -62,6 +63,12 @@ const DDC_SELECTED = ddcAlways;
 
 const DDD_UNSELECTED = HORIZON_LIMIT;
 const DDD_SELECTED = MAX_DISTANCE;
+
+export let isCameraTilted = false;
+
+export function setCameraTilt(tilted) {
+  isCameraTilted = tilted;
+}
 
 const REVERSE_KEY_MAP = {
   i: "uid",
@@ -179,23 +186,48 @@ export function applyFilter() {
     const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
     const isVisible = calculateVisibility(state.lastData);
 
+    // Determine Target DDC based on Selection and Tilt
+    // Icons/Course: Tilted -> 100km, Normal -> Always
+    // Labels: Tilted -> 100km, Normal -> 200km (Tactical)
+    const iconDDC = isSelected
+      ? ddcAlways
+      : isCameraTilted
+        ? ddcTilted
+        : ddcAlways;
+    const labelDDC = isSelected
+      ? ddcAlways
+      : isCameraTilted
+        ? ddcTilted
+        : ddcTactical;
+
     // Icons follow filter
     if (state.entity) {
       state.entity.show = isVisible;
-      
+
+      // Update icon visual range based on camera tilt
+      if (state.entity.billboard) {
+        state.entity.billboard.distanceDisplayCondition = iconDDC;
+      }
+
       // Labels show when selected OR zoomed in (<200km)
       if (state.entity.label) {
+        state.entity.label.distanceDisplayCondition = labelDDC;
+
         const cameraDistance = viewer.camera.positionCartographic.height;
-        const showLabel = isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
+        const showLabel =
+          isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
         state.entity.label.show = showLabel;
       }
     }
-    
+
     if (state.trailEntity) {
       state.trailEntity.show = calculateTrailVisibility(uid);
     }
     if (state.courseEntity) {
       state.courseEntity.show = isVisible;
+      if (state.courseEntity.billboard) {
+        state.courseEntity.billboard.distanceDisplayCondition = iconDDC;
+      }
     }
   });
   throttledUpdateUnitList();
