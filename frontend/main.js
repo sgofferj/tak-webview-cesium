@@ -21,10 +21,8 @@ import {
   entityState,
   applyFilter,
   setFilters,
-  calculateTrailVisibility,
   throttledUpdateUnitList,
   updateEntitySelectionVisibility,
-  previouslySelectedEntityId,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -75,8 +73,8 @@ async function checkAuth() {
     }
     setupAuthEvents();
     return false;
-  } catch (e) {
-    console.error("Auth check failed", e);
+  } catch {
+    console.error("Auth check failed");
     return false;
   }
 }
@@ -116,7 +114,7 @@ function setupAuthEvents() {
         message.innerText = err.detail || "Enrollment failed";
         message.classList.remove("hidden");
       }
-    } catch (e) {
+    } catch {
       message.innerText = "Connection error";
       message.classList.remove("hidden");
     }
@@ -141,7 +139,7 @@ function setupAuthEvents() {
         message.classList.remove("hidden");
         if (resp.status === 401) checkAuth();
       }
-    } catch (e) {
+    } catch {
       message.innerText = "Connection error";
       message.classList.remove("hidden");
     }
@@ -168,8 +166,8 @@ function setupAuthEvents() {
     document.getElementById("statusBar").classList.add("hidden");
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-    } catch (e) {
-      console.error("Logout failed", e);
+    } catch {
+      console.error("Logout failed");
     }
     location.reload();
   });
@@ -184,8 +182,8 @@ function setupAuthEvents() {
       document.getElementById("statusBar").classList.add("hidden");
       try {
         await fetch("/api/auth/logout-wipe", { method: "POST" });
-      } catch (e) {
-        console.error("Forget failed", e);
+      } catch {
+        console.error("Forget failed");
       }
       location.reload();
     }
@@ -461,7 +459,7 @@ function setupEvents() {
     try {
       const response = await fetch("/info.html");
       body.innerHTML = await response.text();
-    } catch (e) {
+    } catch {
       body.innerHTML = "Failed to load information.";
     }
     modal.classList.remove("modal-hidden");
