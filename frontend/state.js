@@ -202,21 +202,16 @@ export function applyFilter() {
 
     // Icons follow filter
     if (state.entity) {
-      state.entity.show = isVisible;
+      state.entity.show = isVisible || isSelected;
 
       // Update icon visual range based on camera tilt
       if (state.entity.billboard) {
         state.entity.billboard.distanceDisplayCondition = iconDDC;
       }
 
-      // Labels show when selected OR zoomed in (<200km)
+      // Labels follow distanceDisplayCondition automatically
       if (state.entity.label) {
         state.entity.label.distanceDisplayCondition = labelDDC;
-
-        const cameraDistance = viewer.camera.positionCartographic.height;
-        const showLabel =
-          isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
-        state.entity.label.show = showLabel;
       }
     }
 
@@ -224,7 +219,7 @@ export function applyFilter() {
       state.trailEntity.show = calculateTrailVisibility(uid);
     }
     if (state.courseEntity) {
-      state.courseEntity.show = isVisible;
+      state.courseEntity.show = isVisible || isSelected;
       if (state.courseEntity.billboard) {
         state.courseEntity.billboard.distanceDisplayCondition = iconDDC;
       }
@@ -547,7 +542,7 @@ export async function updateEntity(incomingData) {
 
   const fullData = state ? state.lastData : data;
   const {
-    callsign,
+    callsign: rawCallsign,
     type,
     lat,
     lon,
@@ -561,6 +556,8 @@ export async function updateEntity(incomingData) {
     squawk,
     course,
   } = fullData;
+
+  const callsign = rawCallsign || uid || "Unknown";
 
   const typeParts = (type || "").toLowerCase().split("-");
   const isAir = typeParts[0] === "a" && typeParts[2] === "a";
@@ -609,7 +606,7 @@ export async function updateEntity(incomingData) {
       ? `icon-${iconsetUrl}-${rgbColor}`
       : `${sidc}-${color}-${squawk}`;
 
-  const description = createDescription(fullData);
+  const description = createDescription({ ...fullData, callsign });
 
   if (!state) {
     pendingCreation.add(uid);
@@ -644,6 +641,7 @@ export async function updateEntity(incomingData) {
           distanceDisplayCondition: DDC_UNSELECTED_LABEL,
           disableDepthTestDistance: DDD_UNSELECTED,
           heightReference: iconRef,
+          show: true,
         },
         description: description,
       });
@@ -686,7 +684,7 @@ export async function updateEntity(incomingData) {
         courseEntity,
         history,
         lastStateKey: "",
-        lastData: fullData,
+        lastData: { ...fullData, callsign },
         lastIconUrl: "",
         lastPosition: position,
       };
@@ -720,7 +718,7 @@ export async function updateEntity(incomingData) {
       unitListDirty = true;
     }
 
-    const trailVisible = calculateVisibility(fullData) && viewer.selectedEntity && viewer.selectedEntity.id === uid;
+    const trailVisible = calculateVisibility(state.lastData) && viewer.selectedEntity && viewer.selectedEntity.id === uid;
     state.trailEntity.show = trailVisible;
     if (trailVisible) {
       state.trailEntity.polyline.positions = [...state.history];
@@ -746,6 +744,7 @@ export async function updateEntity(incomingData) {
       !state.courseEntity.billboard.pixelOffset ||
       typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
     ) {
+      state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0); // Temporary sync
       state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
         const s = entityState[uid];
         if (!s || !s.lastData || s.lastData.course === undefined)
@@ -859,13 +858,10 @@ export async function updateEntity(incomingData) {
 
   const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
   const isVisible = calculateVisibility(fullData);
-  const cameraDistance = viewer.camera.positionCartographic.height;
-  const showLabel = isSelected || (isVisible && cameraDistance < TACTICAL_DISTANCE);
 
-  state.entity.show = isVisible;
-  state.entity.label.show = showLabel;
+  state.entity.show = isVisible || isSelected;
   if (state.courseEntity) {
-    state.courseEntity.show = isVisible;
+    state.courseEntity.show = isVisible || isSelected;
   }
 
   // Only update staleAt if explicitly provided in this message
