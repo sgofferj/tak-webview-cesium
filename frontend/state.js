@@ -876,20 +876,36 @@ export function removeEntity(uid) {
   const state = entityState[uid];
   if (!state) return;
 
-  if (viewer.selectedEntity && viewer.selectedEntity.id === uid) {
+  // Collect all Cesium entities associated with this vessel
+  const subEntities = [
+    state.entity,
+    state.trailEntity,
+    state.courseEntity,
+  ].filter(Boolean);
+
+  // CRITICAL: Clear selection and tracking BEFORE removal
+  // If Cesium is tracking or has selected an entity that is removed from the collection,
+  // it often crashes in the internal updateShows/render loop with "TypeError: s is undefined".
+  if (viewer.selectedEntity && subEntities.includes(viewer.selectedEntity)) {
     viewer.selectedEntity = undefined;
   }
+  if (viewer.trackedEntity && subEntities.includes(viewer.trackedEntity)) {
+    viewer.trackedEntity = undefined;
+  }
+
   if (previouslySelectedEntityId === uid) {
     previouslySelectedEntityId = null;
   }
 
+  // Clear internal state and reference counting
   if (state.lastIconUrl) {
     unregisterBlobUsage(state.lastIconUrl);
   }
 
-  if (state.entity) viewer.entities.remove(state.entity);
-  if (state.trailEntity) viewer.entities.remove(state.trailEntity);
-  if (state.courseEntity) viewer.entities.remove(state.courseEntity);
+  // Remove all entities from the viewer
+  subEntities.forEach((ent) => {
+    viewer.entities.remove(ent);
+  });
 
   delete entityState[uid];
   unitListDirty = true;
