@@ -1,0 +1,7 @@
+The affilitions in the filter bar are partially broken
+- Friendly correctly filters for Friendly icons
+- Hostile correctly filters for Hostile icons
+- Neutral filters for Suspect icons
+- Unknown filters for neutral icons
+- Second Unknown filters for Unknown icons
+

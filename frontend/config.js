@@ -95,6 +95,7 @@ function applyStaticTranslations() {
       i18n.allAffiliations || "All",
       i18n.affiliationFriendly || "Friendly",
       i18n.affiliationHostile || "Hostile",
+      i18n.affiliationSuspect || "Suspect",
       i18n.affiliationNeutral || "Neutral",
       i18n.affiliationUnknown || "Unknown",
     ];
