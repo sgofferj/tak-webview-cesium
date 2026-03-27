@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Enrollment
     tak_enroll_port: int = 8446
-    ephemeral_dir: str = "certs/ephemeral"
+    _ephemeral_dir: str = "/app/certs/ephemeral"
     ephemeral_cert: str = "cert.pem"
     ephemeral_key: str = "cert.key"
     ephemeral_ca: str = "ca.pem"
@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # Traffic Optimization
     ws_throttle: float = 0.5  # Max 2 updates per second per UID
     use_msgpack: bool = True
+    tak_staff_comments: str = ""
 
     # Use str | list[str] to satisfy Ruff/UP007 and prevent Pydantic JSON forcing
     trusted_proxies: str | list[str] = Field(default_factory=lambda: ["127.0.0.1"])
@@ -79,9 +80,22 @@ class Settings(BaseSettings):
     logo_position: str = "bottom_right"
 
     # Paths
-    iconsets_dir: str = "/iconsets"
-    user_iconsets_dir: str = "/user_iconsets"
+    _iconsets_dir: str = "/iconsets"
+    _overlays_dir: str = "/app/overlays"
+    _user_iconsets_dir: str = "/app/user_iconsets"
     layers_config_file: str = "customlayers.json"
+
+    @property
+    def ephemeral_dir(self) -> str:
+        return self._ephemeral_dir
+
+    @property
+    def iconsets_dir(self) -> str:
+        return self._iconsets_dir
+
+    @property
+    def user_iconsets_dir(self) -> str:
+        return self._user_iconsets_dir
 
     @property
     def tak_uid_final(self) -> str:

@@ -20,16 +20,40 @@ import {
   Credit,
   Color,
   Material,
+  GeoJsonDataSource,
+  KmlDataSource,
+  CzmlDataSource,
 } from "cesium";
-import { appConfig } from "./config.js";
+import { appConfig, i18n } from "./config.js";
 
 export let viewer;
 const activeOverlays = new Map();
 let currentBaseLayer = null;
+let currentBaseLayerConfig = null;
 let isDarkMode = false;
 let isTerrainActive = false;
 let contoursEnabled = false;
 let contourSpacing = 100.0;
+
+export function getBaseMaps() {
+  return [
+    {
+      name: "OpenStreetMap",
+      type: "xyz",
+      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+      category: i18n.worldLayersLabel || "World Layers",
+    },
+    {
+      name: "ESRI World Topo",
+      type: "arcgis",
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer",
+      category: i18n.worldLayersLabel || "World Layers",
+    },
+    ...(appConfig.imagery_layers || []),
+  ];
+}
 
 async function createImageryProvider(layer) {
   let rect = Rectangle.MAX_VALUE;
@@ -94,6 +118,7 @@ export async function setBaseLayer(layerConfig) {
 
   // Base layer is always at the bottom (index 0)
   currentBaseLayer = viewer.imageryLayers.addImageryProvider(provider, 0);
+  currentBaseLayerConfig = layerConfig;
 
   // Dark mode aesthetic: Hide atmosphere if layer name contains 'dark' or 'night'
   const layerName = (layerConfig.name || "").toLowerCase();
@@ -185,22 +210,54 @@ function checkAnalysisAvailability() {
 export async function toggleOverlayLayer(layerConfig, active) {
   if (active) {
     if (!activeOverlays.has(layerConfig.name)) {
-      const provider = await createImageryProvider(layerConfig);
-      const cesiumLayer = viewer.imageryLayers.addImageryProvider(provider);
-      activeOverlays.set(layerConfig.name, cesiumLayer);
+      if (layerConfig.type === "file") {
+        let dataSource;
+        try {
+          if (layerConfig.file_type === "geojson") {
+            dataSource = await GeoJsonDataSource.load(layerConfig.url);
+          } else if (layerConfig.file_type === "kml") {
+            dataSource = await KmlDataSource.load(layerConfig.url, {
+              canvas: viewer.canvas,
+              camera: viewer.camera,
+            });
+          } else if (layerConfig.file_type === "czml") {
+            dataSource = await CzmlDataSource.load(layerConfig.url);
+          }
+          if (dataSource) {
+            await viewer.dataSources.add(dataSource);
+            activeOverlays.set(layerConfig.name, dataSource);
+          }
+        } catch (e) {
+          console.error(`Failed to load overlay file ${layerConfig.name}:`, e);
+        }
+      } else {
+        const provider = await createImageryProvider(layerConfig);
+        const cesiumLayer = viewer.imageryLayers.addImageryProvider(provider);
+        activeOverlays.set(layerConfig.name, cesiumLayer);
+      }
     }
   } else {
-    const cesiumLayer = activeOverlays.get(layerConfig.name);
-    if (cesiumLayer) {
-      viewer.imageryLayers.remove(cesiumLayer);
+    const overlay = activeOverlays.get(layerConfig.name);
+    if (overlay) {
+      if (layerConfig.type === "file") {
+        viewer.dataSources.remove(overlay);
+      } else {
+        viewer.imageryLayers.remove(overlay);
+      }
       activeOverlays.delete(layerConfig.name);
     }
   }
 }
 
 export function clearOverlayLayers() {
-  activeOverlays.forEach((cesiumLayer) => {
-    viewer.imageryLayers.remove(cesiumLayer);
+  activeOverlays.forEach((overlay) => {
+    // We need to know the type to remove correctly. 
+    // Since we don't store the config, we check for DataSource properties
+    if (overlay && typeof overlay.show !== "undefined" && typeof overlay.entities !== "undefined") {
+      viewer.dataSources.remove(overlay);
+    } else {
+      viewer.imageryLayers.remove(overlay);
+    }
   });
   activeOverlays.clear();
 }
@@ -214,14 +271,8 @@ export async function initViewer() {
   }
 
   // Use a simple initial imagery provider to avoid startup failure
-  const initialImagery = new UrlTemplateImageryProvider({
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    subdomains: ["a", "b", "c"],
-    credit: new Credit(
-      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
-      false,
-    ),
-  });
+  const defaultBase = getBaseMaps().find((l) => l.name === "OpenStreetMap") || getBaseMaps()[0];
+  const initialImagery = await createImageryProvider(defaultBase);
 
   viewer = new Viewer("cesiumContainer", {
     terrainProvider: new EllipsoidTerrainProvider(),
@@ -242,29 +293,50 @@ export async function initViewer() {
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.camera.percentageChanged = 0.01;
   currentBaseLayer = viewer.imageryLayers.get(0);
+  currentBaseLayerConfig = defaultBase;
 
-  let initialDestination = Cartesian3.fromDegrees(
+  const initialDestination = Cartesian3.fromDegrees(
     appConfig.initial_lon || 24.9384,
     appConfig.initial_lat || 60.1699,
     1000000.0,
   );
-
-  if (appConfig.imagery_layers && appConfig.imagery_layers.length > 0) {
-    const firstLayer = appConfig.imagery_layers[0];
-    if (firstLayer.rectangle && firstLayer.rectangle.length === 4) {
-      const rect = Rectangle.fromDegrees(...firstLayer.rectangle);
-      const center = Rectangle.center(rect);
-      initialDestination = Cartesian3.fromRadians(
-        center.longitude,
-        center.latitude,
-        1000000.0,
-      );
-    }
-  }
 
   viewer.camera.setView({
     destination: initialDestination,
   });
 
   return viewer;
+}
+
+export function getCameraState() {
+  if (!viewer) return null;
+  const camera = viewer.camera;
+  return {
+    position: camera.position.clone(),
+    direction: camera.direction.clone(),
+    up: camera.up.clone(),
+    right: camera.right.clone(),
+    transform: camera.transform.clone(),
+  };
+}
+
+export function setCameraState(state) {
+  if (!viewer || !state) return;
+  viewer.camera.setView({
+    destination: state.position,
+    orientation: {
+      direction: state.direction,
+      up: state.up,
+    },
+  });
+}
+
+export function getLayerState() {
+  return {
+    baseLayerName: currentBaseLayerConfig ? currentBaseLayerConfig.name : null,
+    terrainActive: isTerrainActive,
+    overlays: Array.from(activeOverlays.keys()),
+    contoursEnabled,
+    contourSpacing,
+  };
 }

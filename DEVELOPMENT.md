@@ -116,7 +116,7 @@ docker run -d \
 ```
 
 ## Deployment
-1. Ensure the `certs/ephemeral` directory (or your configured `EPHEMERAL_DIR`) is writable by the container.
+1. Ensure the `certs/ephemeral` directory (hardcoded to `/app/certs/ephemeral` in container) is writable.
 2. Create a `.env` file based on the documentation in the main `README.md`.
 3. Run with Docker Compose:
    ```bash
