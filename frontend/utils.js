@@ -7,27 +7,43 @@
 // You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
 import { Color } from "cesium";
+import mgrs from "mgrs";
 
 // CoT Type to MIL-STD-2525 SIDC mapping
 export function cotToSidc(type) {
-  if (!type) return "u-u-g-u---------";
+  if (!type) return "SUGP------------";
   const et = type.split("-");
-  let affil = et[1] || "u";
-  if (affil.includes(".")) affil = "n";
-  return [
-    "s",
-    affil.toLowerCase(),
-    (et[2] || "G").toLowerCase(),
-    "-",
-    (et[3] || "-").toLowerCase(),
-    (et[4] || "-").toLowerCase(),
-    (et[5] || "-").toLowerCase(),
-    (et[6] || "-").toLowerCase(),
-    (et[7] || "-").toLowerCase(),
-    (et[8] || "-").toLowerCase(),
-    "-",
-    "-",
-  ].join("");
+  let affil = (et[1] || "U").toUpperCase();
+  if (affil.includes(".")) affil = "N";
+
+  let dim = (et[2] || "G").toUpperCase();
+  // Standardize Dimension
+  if (!["P", "A", "G", "S", "U"].includes(dim)) dim = "G";
+
+  // Position 1: Scheme (S = Warfighting)
+  // Position 2: Identity
+  // Position 3: Battle Dimension
+  // Position 4: Status (P = Present)
+  let sidc = "S" + affil + dim + "P";
+
+  // Position 5-10: Function Code (Mapping from et[3..8])
+  for (let i = 3; i <= 8; i++) {
+    const part = et[i] || "-";
+    sidc += part.toUpperCase().substring(0, 1);
+  }
+
+  // Pad to 15 chars
+  while (sidc.length < 15) sidc += "-";
+
+  return sidc.substring(0, 15);
+}
+
+export function getMGRS(lon, lat) {
+  try {
+    return mgrs.forward([lon, lat]);
+  } catch {
+    return "N/A";
+  }
 }
 
 export const affilMap = (i18n) => ({

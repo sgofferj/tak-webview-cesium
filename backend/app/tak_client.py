@@ -53,6 +53,7 @@ KEY_MAP = {
     "group_role": "gr",
     "group_name": "gn",
     "ce": "ce",
+    "staff_comment": "sc",
 }
 
 
@@ -69,7 +70,20 @@ class TAKClient:
         self._writer: asyncio.StreamWriter | None = None
         self._run_task: asyncio.Task[None] | None = None
         # State tracking for throttling
-        self._last_send_time: cachetools.TTLCache[str, float] = cachetools.TTLCache(maxsize=1000, ttl=60)
+        self._last_send_time: cachetools.TTLCache[str, float] = cachetools.TTLCache(
+            maxsize=1000, ttl=60
+        )
+
+        # Parse staff comments: "#shadowfleet=SF,#LEO=LEO" -> {"#shadowfleet": "SF", "#LEO": "LEO"}
+        self.staff_comments: dict[str, str] = {}
+        if self.config.tak_staff_comments:
+            # Strip quotes that might be passed from shell/docker
+            raw_val = self.config.tak_staff_comments.strip("\"'")
+            for pair in raw_val.split(","):
+                if "=" in pair:
+                    pattern, comment = pair.split("=", 1)
+                    # Also strip each side to be safe
+                    self.staff_comments[pattern.strip("\"' ")] = comment.strip("\"' ")
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
@@ -256,12 +270,22 @@ class TAKClient:
                         if emergency.text:
                             data["callsign"] = emergency.text
 
-                # Squawk fallback
+                # Match staff comments based on remarks
                 remarks = data.get("remarks")
-                if not data.get("squawk") and isinstance(remarks, str) and remarks:
-                    re_match = re.search(r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I)
-                    if re_match:
-                        data["squawk"] = re_match.group(1)
+                if isinstance(remarks, str) and remarks:
+                    # Squawk fallback
+                    if not data.get("squawk"):
+                        re_match = re.search(
+                            r"Squawk:\s*([0-7]{4}|unknown)", remarks, re.I
+                        )
+                        if re_match:
+                            data["squawk"] = re_match.group(1)
+
+                    # Staff comments
+                    for pattern, comment in self.staff_comments.items():
+                        if pattern.lower() in remarks.lower():
+                            data["staff_comment"] = comment
+                            break
             else:
                 # Detail is missing, clear all detail fields
                 data["battery"] = data["group_role"] = data["group_name"] = None

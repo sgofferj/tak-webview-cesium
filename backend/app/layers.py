@@ -23,6 +23,30 @@ logger = logging.getLogger("tak-webview.layers")
 
 layers_cache: list[dict[str, Any]] = []
 overlay_layers_cache: list[dict[str, Any]] = []
+file_overlays_cache: list[dict[str, Any]] = []
+
+
+async def scan_file_overlays() -> list[dict[str, Any]]:
+    """Scans the overlays directory for GeoJSON, KML, and CZML files."""
+    overlays = []
+    directory = settings._overlays_dir
+    if not os.path.exists(directory):
+        return overlays
+
+    for filename in os.listdir(directory):
+        ext = filename.lower().split(".")[-1]
+        if ext in ["geojson", "json", "kml", "czml"]:
+            overlays.append(
+                {
+                    "name": filename,
+                    "type": "file",
+                    "url": f"/api/overlays/{filename}",
+                    "file_type": ext if ext != "json" else "geojson",
+                    "category": "Local Files",
+                    "overlay": True,
+                }
+            )
+    return overlays
 
 
 async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
@@ -89,7 +113,10 @@ async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
 
 async def load_layers() -> None:
     """Loads customlayers.json and discovers missing extents."""
-    global layers_cache, overlay_layers_cache
+    global layers_cache, overlay_layers_cache, file_overlays_cache
+    
+    file_overlays_cache = await scan_file_overlays()
+    
     config_filename = settings.layers_config_file
 
     # Search logic
@@ -177,8 +204,9 @@ async def get_app_config() -> dict[str, Any]:
         "terrain_url": settings.terrain_url,
         "terrain_exaggeration": settings.terrain_exaggeration,
         "imagery_layers": layers_cache,
-        "overlay_layers": overlay_layers_cache,
+        "overlay_layers": overlay_layers_cache + file_overlays_cache,
         "cesium_ion_token": settings.cesium_ion_token,
         "logo": settings.logo,
         "logo_position": settings.logo_position,
+        "tak_staff_comments": settings.tak_staff_comments,
     }

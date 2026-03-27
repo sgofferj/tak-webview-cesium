@@ -12,18 +12,22 @@ import { loadConfig, loadTranslations, appConfig, i18n } from "./config.js";
 import {
   initViewer,
   viewer,
+  getBaseMaps,
   setBaseLayer,
   setTerrain,
   toggleOverlayLayer,
   clearOverlayLayers,
   setElevationContours,
   setContourSpacing,
+  getCameraState,
+  setCameraState,
+  getLayerState,
 } from "./viewer.js";
 import {
   entityState,
   applyFilter,
   setFilters,
-  throttledUpdateUnitList,
+  getFilters,
   updateEntitySelectionVisibility,
   setCameraTilt,
 } from "./state.js";
@@ -36,16 +40,151 @@ async function init() {
   }
 }
 
+function saveAppState() {
+  if (!viewer) return;
+  const state = {
+    camera: getCameraState(),
+    layers: getLayerState(),
+    filters: getFilters(),
+  };
+  localStorage.setItem("tak_map_state", JSON.stringify(state));
+  updateLayerPickerUI();
+}
+
+async function loadAppState() {
+  const saved = localStorage.getItem("tak_map_state");
+  if (!saved) return false;
+  try {
+    const state = JSON.parse(saved);
+
+    // Restore Camera
+    if (state.camera) {
+      setCameraState(state.camera);
+    }
+
+    // Restore Filters
+    if (state.filters) {
+      setFilters(state.filters);
+      const filterInput = document.getElementById("filterInput");
+      const affFilter = document.getElementById("affiliationFilter");
+      if (filterInput) filterInput.value = state.filters.text || "";
+      if (affFilter) affFilter.value = state.filters.affiliation || "all";
+    }
+
+    // Restore Layers
+    if (state.layers) {
+      // Base Layer
+      const allBaseLayers = getBaseMaps();
+      const bl = allBaseLayers.find(
+        (l) => l.name === state.layers.baseLayerName,
+      );
+      if (bl) {
+        await setBaseLayer(bl);
+      } else {
+        // Fallback to default if saved not found
+        const defaultBase = allBaseLayers.find((l) => l.name === "OpenStreetMap") || allBaseLayers[0];
+        if (defaultBase) await setBaseLayer(defaultBase);
+      }
+
+      // Terrain
+      if (state.layers.terrainActive !== undefined) {
+        await setTerrain(state.layers.terrainActive);
+      }
+
+      // Overlays
+      if (state.layers.overlays && appConfig.overlay_layers) {
+        for (const ovName of state.layers.overlays) {
+          const ov = appConfig.overlay_layers.find((l) => l.name === ovName);
+          if (ov) await toggleOverlayLayer(ov, true);
+        }
+      }
+
+      // Analysis
+      if (state.layers.contoursEnabled) {
+        setContourSpacing(state.layers.contourSpacing || 100);
+        setElevationContours(true);
+      }
+    }
+
+    // Re-sync UI
+    updateLayerPickerUI();
+    return true;
+  } catch (e) {
+    console.error("Failed to load saved state", e);
+    return false;
+  }
+}
+
+function updateLayerPickerUI() {
+  const layerState = getLayerState();
+  const panel = document.getElementById("layerPickerPanel");
+  if (!panel) return;
+
+  const labels = {
+    terrain: i18n.terrainLabel || "Terrain",
+    ellipsoid: i18n.ellipsoidLabel || "WGS84 Ellipsoid",
+  };
+
+  panel.querySelectorAll(".layer-item").forEach((item) => {
+    const name = item.querySelector(".layer-label")?.innerText?.trim();
+    const input = item.querySelector("input");
+
+    if (item.classList.contains("baseLayer")) {
+      const active = name === layerState.baseLayerName?.trim();
+      item.classList.toggle("active", active);
+      if (input) input.checked = active;
+    } else if (item.classList.contains("terrainLayer")) {
+      const isTerrainOption = name === labels.terrain || name === i18n.terrainLabel;
+      const isEllipsoidOption = name === labels.ellipsoid || name === i18n.ellipsoidLabel;
+      const active =
+        (isTerrainOption && layerState.terrainActive) ||
+        (isEllipsoidOption && !layerState.terrainActive);
+
+      item.classList.toggle("active", active);
+      if (input) input.checked = active;
+    } else if (item.classList.contains("overlayLayer")) {
+      const active = layerState.overlays.includes(name);
+      item.classList.toggle("active", active);
+      if (input) input.checked = active;
+    }
+  });
+}
+
 async function startApp() {
   await loadConfig();
   await loadTranslations();
   await initViewer();
   setupEvents();
   populateLayerPicker();
+
+  // Try to load state
+  const loaded = await loadAppState();
+
+  // Fallback: if no state, apply sensible defaults
+  if (!loaded) {
+    const defaultBase = getBaseMaps().find((l) => l.name === "OpenStreetMap");
+    if (defaultBase) await setBaseLayer(defaultBase);
+    await setTerrain(false);
+    updateLayerPickerUI();
+  }
+
   startWebSocket();
+
+  // Start auto-save
+  viewer.camera.moveEnd.addEventListener(saveAppState);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      console.log("Tab backgrounded: pausing rendering loop");
+      viewer.useDefaultRenderLoop = false;
+    } else {
+      console.log("Tab focused: resuming rendering loop");
+      viewer.useDefaultRenderLoop = true;
+    }
+  });
 }
 
-async function checkAuth() {
+export async function checkAuth() {
   const overlay = document.getElementById("authOverlay");
   const loginForm = document.getElementById("loginForm");
   const enrollmentForm = document.getElementById("enrollmentForm");
@@ -76,8 +215,15 @@ async function checkAuth() {
     }
     setupAuthEvents();
     return false;
-  } catch {
-    console.error("Auth check failed");
+  } catch (e) {
+    console.error("Auth check failed", e);
+    const loginForm = document.getElementById("loginForm");
+    const enrollmentForm = document.getElementById("enrollmentForm");
+    if (loginForm && enrollmentForm) {
+      enrollmentForm.classList.remove("hidden");
+      loginForm.classList.add("hidden");
+    }
+    setupAuthEvents();
     return false;
   }
 }
@@ -86,9 +232,14 @@ function updateStatus(status) {
   if (status.cert) {
     const cn = document.getElementById("certCN");
     const expiry = document.getElementById("certExpiry");
-    cn.innerText = status.cert.cn;
-    expiry.innerText = status.cert.expiry.split("T")[0];
-    expiry.className = `status-${status.cert.status}`;
+    if (cn) {
+      cn.innerText = status.cert.cn;
+      cn.className = `status-${status.cert.status}`;
+    }
+    if (expiry) {
+      expiry.innerText = status.cert.expiry.split("T")[0];
+      expiry.className = `status-${status.cert.status}`;
+    }
   }
 }
 
@@ -195,7 +346,7 @@ function setupAuthEvents() {
 
 function createLayerItem(l, isRadio, nameGroup, isActive) {
   const item = document.createElement("div");
-  item.className = `layer-item ${isActive ? "active" : ""}`;
+  item.className = `layer-item ${nameGroup} ${isActive ? "active" : ""}`;
 
   let iconUrl = l.icon;
   if (!iconUrl) {
@@ -216,7 +367,9 @@ function createLayerItem(l, isRadio, nameGroup, isActive) {
   item.innerHTML = `
         <div class="layer-thumb" style="background-image: url('${iconUrl}')"></div>
         <div class="layer-label">${l.name}</div>
-        <input type="${isRadio ? "radio" : "checkbox"}" name="${nameGroup}" ${isActive ? "checked" : ""}>
+        <input type="${isRadio ? "radio" : "checkbox"}" name="${nameGroup}" ${
+          isActive ? "checked" : ""
+        }>
     `;
 
   return item;
@@ -245,8 +398,7 @@ function populateLayerPicker() {
     ];
 
     terrainOptions.forEach((opt) => {
-      const isActive = opt.isTerrain === false;
-      const item = createLayerItem(opt, true, "terrainLayer", isActive);
+      const item = createLayerItem(opt, true, "terrainLayer", false);
       item.addEventListener("click", async () => {
         terrainGrid
           .querySelectorAll(".layer-item")
@@ -254,6 +406,7 @@ function populateLayerPicker() {
         item.classList.add("active");
         item.querySelector("input").checked = true;
         await setTerrain(opt.isTerrain);
+        saveAppState();
       });
       terrainGrid.appendChild(item);
     });
@@ -261,26 +414,8 @@ function populateLayerPicker() {
     terrainSection.classList.add("hidden");
   }
 
-  const baseMaps = [
-    {
-      name: "OpenStreetMap",
-      type: "xyz",
-      url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
-      category: i18n.worldLayersLabel || "World Layers",
-    },
-    {
-      name: "ESRI World Topo",
-      type: "arcgis",
-      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer",
-      category: i18n.worldLayersLabel || "World Layers",
-    },
-    ...(appConfig.imagery_layers || []),
-  ];
-
   const groupedBase = {};
-  baseMaps.forEach((l) => {
+  getBaseMaps().forEach((l) => {
     const cat = l.category || "Other";
     if (!groupedBase[cat]) groupedBase[cat] = [];
     groupedBase[cat].push(l);
@@ -293,20 +428,11 @@ function populateLayerPicker() {
     baseMapGrid.appendChild(title);
 
     layers.forEach((l) => {
-      const isActive = l.name === "OpenStreetMap";
-      const item = createLayerItem(l, true, "baseLayer", isActive);
+      const item = createLayerItem(l, true, "baseLayer", false);
 
-      if (isActive) {
-        setBaseLayer(l);
-      }
-
-      item.addEventListener("click", () => {
-        baseMapGrid
-          .querySelectorAll(".layer-item")
-          .forEach((el) => el.classList.remove("active"));
-        item.classList.add("active");
-        item.querySelector("input").checked = true;
-        setBaseLayer(l);
+      item.addEventListener("click", async () => {
+        await setBaseLayer(l);
+        saveAppState();
       });
       baseMapGrid.appendChild(item);
     });
@@ -325,13 +451,14 @@ function populateLayerPicker() {
     overlayGrid
       .querySelectorAll("input")
       .forEach((input) => (input.checked = false));
+    saveAppState();
   });
   overlayGrid.appendChild(noneItem);
 
   if (appConfig.overlay_layers && appConfig.overlay_layers.length > 0) {
     appConfig.overlay_layers.forEach((l) => {
       const item = createLayerItem(l, false, "overlayLayer", false);
-      item.addEventListener("click", (e) => {
+      item.addEventListener("click", async (e) => {
         const input = item.querySelector("input");
         if (e.target !== input) {
           input.checked = !input.checked;
@@ -341,7 +468,8 @@ function populateLayerPicker() {
         } else {
           item.classList.remove("active");
         }
-        toggleOverlayLayer(l, input.checked);
+        await toggleOverlayLayer(l, input.checked);
+        saveAppState();
       });
       overlayGrid.appendChild(item);
     });
@@ -387,6 +515,7 @@ function populateLayerPicker() {
       targetState = !input.checked;
     }
     setElevationContours(targetState);
+    saveAppState();
   });
   analysisGrid.appendChild(contourItem);
 
@@ -399,6 +528,7 @@ function populateLayerPicker() {
     currentDensity = Math.max(5, currentDensity - 5);
     valueSpan.innerText = `${currentDensity}m`;
     setContourSpacing(currentDensity);
+    saveAppState();
   });
 
   document.getElementById("contourInc").addEventListener("click", (e) => {
@@ -406,11 +536,26 @@ function populateLayerPicker() {
     currentDensity += 5;
     valueSpan.innerText = `${currentDensity}m`;
     setContourSpacing(currentDensity);
+    saveAppState();
   });
 }
 
 function setupEvents() {
   viewer.selectedEntityChanged.addEventListener((entity) => {
+    // REDIRECT SELECTION: If we clicked on a course arrow or trail, select the main entity instead
+    if (
+      entity &&
+      entity.id &&
+      (entity.id.endsWith("-course") || entity.id.endsWith("-trail"))
+    ) {
+      const parentId = entity.id.replace("-course", "").replace("-trail", "");
+      const parentEntity = viewer.entities.getById(parentId);
+      if (parentEntity) {
+        viewer.selectedEntity = parentEntity;
+        return; // The event will fire again for the parent
+      }
+    }
+
     updateEntitySelectionVisibility(entity);
 
     const infoBox = document.querySelector(".cesium-infoBox");
@@ -421,7 +566,7 @@ function setupEvents() {
     // Refresh all visibility states (labels, trails, course arrows) on selection change
     applyFilter();
 
-    if (entity) {
+    if (entity && entity.id) {
       const state = entityState[entity.id];
       if (
         state &&
@@ -488,16 +633,19 @@ function setupEvents() {
 
   document.getElementById("filterInput").addEventListener("input", (e) => {
     setFilters(e.target.value, undefined);
+    saveAppState();
   });
   document
     .getElementById("affiliationFilter")
     .addEventListener("change", (e) => {
       setFilters(undefined, e.target.value);
+      saveAppState();
     });
   document.getElementById("clearFilter").addEventListener("click", () => {
     document.getElementById("filterInput").value = "";
     document.getElementById("affiliationFilter").value = "all";
     setFilters("", "all");
+    saveAppState();
   });
   document.getElementById("resetView").addEventListener("click", () => {
     viewer.trackedEntity = undefined;
@@ -514,9 +662,9 @@ function setupEvents() {
     });
   });
 
-  document.getElementById("toggleUnitList").addEventListener("click", () => {
-    document.getElementById("unitListPanel").classList.toggle("hidden");
-    throttledUpdateUnitList();
+  document.getElementById("sidebarToggle").addEventListener("click", () => {
+    document.getElementById("sidebar").classList.toggle("collapsed");
+    // No need to call throttledUpdateUnitList here as the list is always visible in sidebar
   });
 
   document.getElementById("toggleLayerPicker").addEventListener("click", () => {
@@ -544,6 +692,7 @@ function setupEvents() {
     const layerPickerPanel = document.getElementById("layerPickerPanel");
     const toggleLayerPicker = document.getElementById("toggleLayerPicker");
     if (
+      layerPickerPanel &&
       !layerPickerPanel.classList.contains("hidden") &&
       !layerPickerPanel.contains(e.target) &&
       !toggleLayerPicker.contains(e.target)
