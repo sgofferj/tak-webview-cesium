@@ -32,6 +32,7 @@ class AuthManager:
     def __init__(self) -> None:
         self.ephemeral_dir = settings.ephemeral_dir
         self.creds_file = os.path.join(self.ephemeral_dir, settings.ephemeral_creds)
+
         self.cert_file = os.path.join(self.ephemeral_dir, settings.ephemeral_cert)
         self.key_file = os.path.join(self.ephemeral_dir, settings.ephemeral_key)
         self.ca_file = os.path.join(self.ephemeral_dir, settings.ephemeral_ca)
@@ -276,7 +277,9 @@ class AuthManager:
                         tag_name = str(tag_name)
 
                     if tag_name == "signedCert":
-                        client_cert_pem = self._ensure_pem_headers(str(child.text or ""))
+                        client_cert_pem = self._ensure_pem_headers(
+                            str(child.text or "")
+                        )
                     elif tag_name == "privateKey":
                         # Decrypt what the server sent using our enrollment secret
                         server_key_pem = self._ensure_pem_headers(

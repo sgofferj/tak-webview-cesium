@@ -21,7 +21,7 @@
   "categoryIncidents": "⚠️ Tapahtumat (GDACS)",
   "categoryAircraft": "✈️ Lentokoneet (ADSB)",
   "categoryVessels": "🚢 Alukset (AIS)",
-  "categoryOther": "🎖️ Muut yksiköt",
+  "categoryOther": "🎖️ Muut kohteet",
   "worldLayersLabel": "Maailmankartat",
   "noActiveUnits": "Ei aktiivisia yksiköitä",
   "emergencyBanner": "!!! HÄTÄTILA: {type} !!!",
@@ -39,5 +39,10 @@
   "contoursLabel": "Korkeuskäyrät",
   "squawk7500": "KAAPPAUS",
   "squawk7600": "RADIORIKKO",
-  "squawk7700": "HÄTÄTILA"
+  "squawk7700": "HÄTÄTILA",
+  "sidebarHeaderView": "Näkymä",
+  "sidebarHeaderFilter": "Suodatin",
+  "sidebarHeaderTracks": "Aktiiviset kohteet",
+  "infoTitle": "Tiedot",
+  "resetViewLabel": "Nollaa näkymä"
 }

@@ -8,20 +8,30 @@
 
 import { decode } from "@msgpack/msgpack";
 import { updateEntity } from "./state.js";
+import { checkAuth } from "./main.js";
+
+let pulseTimeout = null;
+function triggerPulse() {
+  const dot = document.getElementById("statusPulse");
+  if (!dot) return;
+  dot.classList.add("pulse-active");
+  if (pulseTimeout) clearTimeout(pulseTimeout);
+  pulseTimeout = setTimeout(() => {
+    dot.classList.remove("pulse-active");
+    pulseTimeout = null;
+  }, 100);
+}
 
 export function startWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsHost = import.meta.env.VITE_WS_HOST || window.location.host;
-  const wsPath = import.meta.env.VITE_WS_PATH || "/ws";
-  const wsUrl = `${protocol}//${wsHost}${wsPath}`;
-  const ws = new WebSocket(wsUrl);
+  const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
-    console.log("Connected to Backend WebSocket");
+    console.log("WebSocket Connection Open");
     const conn = document.getElementById("statusConnection");
     if (conn) {
-      conn.innerText = "Online";
+      conn.innerText = "Connected";
       conn.classList.add("conn-online");
     }
   };
@@ -34,6 +44,7 @@ export function startWebSocket() {
       } else {
         data = JSON.parse(event.data);
       }
+      triggerPulse();
       updateEntity(data);
     } catch (e) {
       console.error("Error parsing WS message", e);
@@ -41,19 +52,25 @@ export function startWebSocket() {
   };
 
   ws.onerror = (error) => {
-    console.error("WebSocket Error", error);
+    console.error("WebSocket Error:", error);
+    checkAuth(); // Check if session is still valid if connection fails
   };
 
-  ws.onclose = () => {
-    console.log("WebSocket Connection Closed");
+  ws.onclose = (event) => {
+    console.log(`WebSocket Connection Closed: ${event.code} ${event.reason}`);
     const conn = document.getElementById("statusConnection");
     if (conn) {
       conn.innerText = "Disconnected";
       conn.classList.remove("conn-online");
     }
+
+    if (event.code === 4001) {
+      console.warn("WebSocket unauthorized, showing login overlay.");
+      checkAuth();
+      return; // Don't auto-reconnect if unauthorized
+    }
+
     // Reconnect after 5s
     setTimeout(startWebSocket, 5000);
   };
-
-  return ws;
 }

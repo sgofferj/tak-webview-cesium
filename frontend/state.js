@@ -10,100 +10,104 @@ import {
   Cartesian2,
   Cartesian3,
   Color,
+  CallbackProperty,
   VerticalOrigin,
   HorizontalOrigin,
-  LabelStyle,
-  DistanceDisplayCondition,
-  HeadingPitchRange,
-  PolylineOutlineMaterialProperty,
   HeightReference,
-  CallbackProperty,
+  LabelStyle,
+  PolylineOutlineMaterialProperty,
+  DistanceDisplayCondition,
   Math as CesiumMath,
+  HeadingPitchRange,
 } from "cesium";
-
-const GROUND_OFFSET = 0; // Surface clamping
 import ms from "milsymbol";
-import mgrs from "mgrs";
-import { i18n } from "./config.js";
+import { i18n, appConfig } from "./config.js";
 import { viewer } from "./viewer.js";
 import {
   cotToSidc,
-  getAffiliationColor,
-  getSquawkLabel,
   affilMap,
+  getSquawkLabel,
+  getAffiliationColor,
   throttle,
   renderGoogleIcon,
+  getMGRS,
 } from "./utils.js";
-
-export const entityState = {};
-export let currentFilter = "";
-export let currentAffiliationFilter = "all";
-export let unitListDirty = true;
-export const collapsedStates = new Set([
-  "incidents",
-  "aircraft",
-  "vessels",
-  "other",
-]);
-
-export let previouslySelectedEntityId = null;
 
 const MAX_DISTANCE = 100000000.0;
 const HORIZON_LIMIT = 1000000.0; // 1000km
-const TACTICAL_DISTANCE = 200000.0; // 200km
+const TACTICAL_DISTANCE = 300000.0; // 300km
+const GROUND_OFFSET = 2.0;
 
 const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
 const ddcTilted = new DistanceDisplayCondition(0, 100000.0); // 100km limit when tilted
 const ddcTactical = new DistanceDisplayCondition(0, TACTICAL_DISTANCE);
 
 const DDC_UNSELECTED_LABEL = ddcTactical;
-const DDC_UNSELECTED_TRAIL = ddcTactical;
-
 const DDC_SELECTED = ddcAlways;
 
 const DDD_UNSELECTED = HORIZON_LIMIT;
 const DDD_SELECTED = MAX_DISTANCE;
 
+const iconCache = new Map();
+const blobUsageRegistry = new Map();
+
+// Global tilt state (set by viewer.js)
 export let isCameraTilted = false;
 
 export function setCameraTilt(tilted) {
-  isCameraTilted = tilted;
+  if (isCameraTilted !== tilted) {
+    isCameraTilted = tilted;
+    applyFilter();
+  }
 }
 
+export const entityState = {};
+export let currentFilter = "";
+export let currentAffiliationFilter = "all";
+export let unitListDirty = true;
+export const expandedStates = new Set();
+
+export let previouslySelectedEntityId = null;
+
 const REVERSE_KEY_MAP = {
-  i: "uid",
-  t: "type",
   c: "callsign",
+  t: "type",
   la: "lat",
   lo: "lon",
   al: "alt",
-  s: "stale",
-  r: "remarks",
-  sq: "squawk",
   co: "course",
   sp: "speed",
-  l: "link_url",
-  cl: "color",
-  ip: "iconsetpath",
-  e: "emergency",
-  x: "xmpp",
-  m: "mail",
-  p: "phone",
+  s: "stale",
   b: "battery",
   h: "how",
+  i: "uid",
+  ip: "iconsetpath",
+  cl: "color",
+  r: "remarks",
+  e: "emergency",
   gr: "group_role",
   gn: "group_name",
   ce: "ce",
+  sc: "staff_comment",
+  l: "link_url",
+  sq: "squawk",
+  x: "xmpp",
+  m: "mail",
+  p: "phone",
 };
 
-// Global icon cache to prevent redundant rendering
-const iconCache = new Map();
-// Reference counting for blob URLs to prevent memory leaks while avoiding broken images
-const blobUsageRegistry = new Map();
 // Lock to prevent duplicate entity creation during async calls
 const pendingCreation = new Set();
 // Track pending icon generations to prevent race conditions
 const pendingIcons = new Map();
+
+// QUEUED REMOVAL SYSTEM to prevent Cesium rendering crashes
+const pendingRemovals = new Map(); // UID -> state
+let removalProcessActive = false;
+
+function safeGetId(entity) {
+  return entity && entity.id ? entity.id : null;
+}
 
 function registerBlobUsage(url) {
   if (!url || !url.startsWith("blob:")) return;
@@ -115,63 +119,69 @@ function unregisterBlobUsage(url) {
   if (!url || !url.startsWith("blob:")) return;
   const count = blobUsageRegistry.get(url) || 0;
   if (count <= 1) {
-    blobUsageRegistry.delete(url);
-    // Check if it's still in the icon cache before revoking
-    let inCache = false;
-    for (const cached of iconCache.values()) {
-      if (cached.blobUrl === url) {
-        inCache = true;
-        break;
+    // Delay revocation to ensure Cesium has finished loading the texture
+    setTimeout(() => {
+      // Re-verify count before revoking, in case it was re-registered
+      const currentCount = blobUsageRegistry.get(url) || 0;
+      if (currentCount === 0) {
+        URL.revokeObjectURL(url);
       }
-    }
-    if (!inCache) {
-      URL.revokeObjectURL(url);
-    }
+    }, 5000);
+    blobUsageRegistry.delete(url);
   } else {
     blobUsageRegistry.set(url, count - 1);
   }
 }
 
 export function setFilters(filter, affiliation) {
-  if (filter !== undefined) currentFilter = filter.toLowerCase();
-  if (affiliation !== undefined) currentAffiliationFilter = affiliation;
+  if (typeof filter === "object" && filter !== null) {
+    if (filter.text !== undefined) currentFilter = filter.text.toLowerCase();
+    if (filter.affiliation !== undefined) currentAffiliationFilter = filter.affiliation;
+  } else {
+    if (filter !== undefined) currentFilter = filter.toLowerCase();
+    if (affiliation !== undefined) currentAffiliationFilter = affiliation;
+  }
   applyFilter();
+}
+
+export function getFilters() {
+  return {
+    text: currentFilter,
+    affiliation: currentAffiliationFilter,
+  };
 }
 
 export function calculateVisibility(data) {
   if (!data || !data.type) return false;
   const filter = currentFilter.trim();
+  const affil = currentAffiliationFilter;
 
-  let showByAffil = true;
-  if (currentAffiliationFilter !== "all") {
+  // Affiliation Filter
+  if (affil !== "all") {
     const et = data.type.split("-");
-    const affilCode = et[1] ? et[1].toLowerCase() : "u";
-    let simpleAffil = "u";
-    if (["f", "a"].includes(affilCode)) simpleAffil = "f";
-    else if (affilCode === "h") simpleAffil = "h";
-    else if (affilCode === "s") simpleAffil = "s";
-    else if (["j", "k"].includes(affilCode)) simpleAffil = "h"; // Joker/Faker treated as hostile
-    else if (affilCode === "n") simpleAffil = "n";
-
-    showByAffil = simpleAffil === currentAffiliationFilter;
+    const itemAffil = et[1] ? et[1].toLowerCase() : "u";
+    if (itemAffil !== affil) return false;
   }
 
-  let showByText = true;
+  // Text Filter
   if (filter) {
-    const searchableText = [data.uid, data.callsign, data.remarks || ""]
-      .join(" ")
-      .toLowerCase();
-    showByText = searchableText.includes(filter);
+    const searchStr = `${data.callsign || ""} ${data.uid || ""} ${data.remarks || ""}`.toLowerCase();
+    if (!searchStr.includes(filter)) return false;
   }
 
-  return showByAffil && showByText;
+  return true;
 }
 
 export function calculateTrailVisibility(uid) {
   const state = entityState[uid];
   if (!state || !state.trailEntity) return false;
-  // Trail ONLY for selected entity
-  const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
+
+  const selectedId = safeGetId(viewer.selectedEntity);
+  const isSelected =
+    selectedId &&
+    (selectedId === uid ||
+      selectedId === uid + "-trail" ||
+      selectedId === uid + "-course");
   const isVisible = calculateVisibility(state.lastData);
   return isVisible && isSelected;
 }
@@ -179,16 +189,20 @@ export function calculateTrailVisibility(uid) {
 export function applyFilter() {
   if (!viewer) return;
   unitListDirty = true;
+  const selectedId = safeGetId(viewer.selectedEntity);
+
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state) return; // Safety check for concurrent removal
+    if (!state || state._isRemoved) return;
 
-    const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
+    const isSelected =
+      selectedId &&
+      (selectedId === uid ||
+        selectedId === uid + "-trail" ||
+        selectedId === uid + "-course");
     const isVisible = calculateVisibility(state.lastData);
 
     // Determine Target DDC based on Selection and Tilt
-    // Icons/Course: Tilted -> 100km, Normal -> Always
-    // Labels: Tilted -> 100km, Normal -> 200km (Tactical)
     const iconDDC = isSelected
       ? ddcAlways
       : isCameraTilted
@@ -215,57 +229,53 @@ export function applyFilter() {
       }
     }
 
+    if (state.courseEntity && state.courseEntity.billboard) {
+      state.courseEntity.billboard.distanceDisplayCondition = iconDDC;
+    }
+
     if (state.trailEntity) {
       state.trailEntity.show = calculateTrailVisibility(uid);
     }
     if (state.courseEntity) {
-      state.courseEntity.show = isVisible || isSelected;
-      if (state.courseEntity.billboard) {
-        state.courseEntity.billboard.distanceDisplayCondition = iconDDC;
-      }
+      state.courseEntity.show = state.entity.show && state.lastData.course !== undefined;
     }
   });
-  throttledUpdateUnitList();
 }
 
 export function createDescription(data) {
   const {
-    uid,
     callsign,
-    remarks,
-    link_url,
-    emergency,
-    xmpp,
-    mail,
-    phone,
-    battery,
+    type,
+    uid,
     lat,
     lon,
     alt,
-    speed,
     course,
+    speed,
+    remarks,
+    link_url,
+    battery,
+    xmpp,
+    mail,
+    phone,
   } = data;
-  let html = `<div style="font-family: sans-serif; color: white;">`;
-  if (emergency && emergency.status === "active") {
-    html += `<div style="background: red; color: white; padding: 5px; text-align: center; font-weight: bold; margin-bottom: 10px;">${i18n.emergencyBanner.replace("{type}", emergency.type)}</div>`;
-  }
-  html += `<b>${i18n.callsignLabel}:</b> ${callsign}<br/><b>${i18n.uidLabel}:</b> ${uid}<br/>`;
+  let html = `<div style="font-family: sans-serif; padding: 5px;">`;
+  html += `<b style="font-size: 1.2em; color: #4af;">${callsign || uid}</b><br/>`;
+  html += `<small style="color: #888;">${type}</small><br/><br/>`;
 
   if (lat !== undefined && lon !== undefined) {
-    try {
-      const mgrsStr = mgrs.forward([lon, lat]);
-      html += `<b>MGRS:</b> ${mgrsStr}<br/>`;
-    } catch (e) {
-      console.error("MGRS failed", e);
-    }
-    html += `<b>Lat/Lon:</b> ${lat.toFixed(6)}, ${lon.toFixed(6)}<br/>`;
+    html += `<b>Pos:</b> ${lat.toFixed(5)}, ${lon.toFixed(5)}<br/>`;
+    html += `<b>MGRS:</b> ${getMGRS(lon, lat)}<br/>`;
   }
-  if (alt !== undefined && alt !== null)
-    html += `<b>Alt:</b> ${alt.toFixed(0)} m<br/>`;
-  if (speed !== undefined && speed !== null)
+  if (alt !== undefined) {
+    html += `<b>Alt:</b> ${alt.toFixed(1)}m<br/>`;
+  }
+  if (course !== undefined) {
+    html += `<b>Course:</b> ${course.toFixed(1)}°<br/>`;
+  }
+  if (speed !== undefined) {
     html += `<b>Speed:</b> ${(speed * 3.6).toFixed(1)} km/h<br/>`;
-  if (course !== undefined && course !== null)
-    html += `<b>Course:</b> ${course.toFixed(0)}°<br/>`;
+  }
 
   if (xmpp || mail || phone) {
     html += `<br/><b>Contact information:</b><br/>`;
@@ -330,8 +340,7 @@ export function createDescription(data) {
 export function updateUnitListUI() {
   if (!unitListDirty) return;
   const content = document.getElementById("unitListContent");
-  const panel = document.getElementById("unitListPanel");
-  if (!content || !panel || panel.classList.contains("hidden")) return;
+  if (!content) return;
 
   const categories = {
     incidents: { label: i18n.categoryIncidents, groups: {} },
@@ -343,7 +352,7 @@ export function updateUnitListUI() {
 
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state || !state.entity || !state.entity.show) return;
+    if (!state || state._isRemoved || !state.entity || !state.entity.show) return;
     const data = state.lastData;
     const uidLower = uid.toLowerCase();
     let cat = "other";
@@ -382,8 +391,8 @@ export function updateUnitListUI() {
       (sum, g) => sum + g.length,
       0,
     );
-    const catCollapsed = collapsedStates.has(catKey);
-    html += `<div class="unit-group ${catCollapsed ? "collapsed" : ""}" id="group-${catKey}">
+    const catExpanded = expandedStates.has(catKey);
+    html += `<div class="unit-group ${!catExpanded ? "collapsed" : ""}" id="group-${catKey}">
             <div class="unit-group-header" onclick="toggleCollapse('${catKey}')">${cat.label} (${totalCount})</div>
             <div class="unit-group-content">`;
     [
@@ -396,8 +405,8 @@ export function updateUnitListUI() {
       const units = cat.groups[affil];
       if (!units || units.length === 0) return;
       const subKey = `${catKey}-${affil}`;
-      const isSubCollapsed = collapsedStates.has(subKey);
-      html += `<div class="affiliation-group ${isSubCollapsed ? "collapsed" : ""}" id="group-${subKey}">
+      const isSubExpanded = expandedStates.has(subKey);
+      html += `<div class="affiliation-group ${!isSubExpanded ? "collapsed" : ""}" id="group-${subKey}">
                 <div class="affiliation-header" onclick="toggleCollapse('${subKey}')">${affil} (${units.length})</div>
                 <div class="affiliation-content">`;
       units
@@ -416,21 +425,101 @@ export function updateUnitListUI() {
   content.innerHTML =
     html ||
     `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
+  
+  updateStaffCommentsUI();
   unitListDirty = false;
+}
+
+export function updateStaffCommentsUI() {
+  const content = document.getElementById("staffCommentsContent");
+  if (!content) return;
+
+  const commentDefs = (appConfig.tak_staff_comments || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((def) => {
+      const [search, label] = def.split("=");
+      return { search: search.trim(), label: (label || search).trim() };
+    });
+
+  if (commentDefs.length === 0) {
+    content.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  commentDefs.forEach(({ search, label }) => {
+    const matchingUnits = [];
+    const searchLower = search.toLowerCase();
+
+    Object.keys(entityState).forEach((uid) => {
+      const state = entityState[uid];
+      if (!state || state._isRemoved) return;
+
+      const data = state.lastData;
+      const sc = data.staff_comment;
+
+      // Match if sc field matches the search pattern OR the label
+      let isMatch = sc === search || sc === label;
+
+      // Fallback: search search term in all properties
+      if (!isMatch) {
+        for (const key in data) {
+          const val = data[key];
+          if (
+            typeof val === "string" &&
+            val.toLowerCase().includes(searchLower)
+          ) {
+            isMatch = true;
+            break;
+          }
+        }
+      }
+
+      if (isMatch) {
+        matchingUnits.push({
+          uid: uid,
+          callsign: data.callsign,
+          color: state.lastRgbColor || "white",
+          iconUrl: state.lastIconUrl || "",
+        });
+      }
+    });
+    if (matchingUnits.length > 0) {
+      const groupKey = `staff-${search}`;
+      const isExpanded = expandedStates.has(groupKey);
+      html += `<div class="unit-group ${!isExpanded ? "collapsed" : ""}" id="group-${groupKey}">
+                <div class="unit-group-header" onclick="toggleCollapse('${groupKey}')">${search} (${matchingUnits.length})</div>
+                <div class="unit-group-content">`;
+
+      matchingUnits
+        .sort((a, b) => a.callsign.localeCompare(b.callsign))
+        .forEach((unit) => {
+          html += `<div class="unit-item" id="unit-staff-${unit.uid}" onclick="zoomToUnit('${unit.uid}')">
+                    <img class="unit-icon" src="${unit.iconUrl}" />
+                    <span class="unit-name" style="color: ${unit.color}">${unit.callsign}</span>
+                </div>`;
+        });
+      html += `</div></div>`;
+    }
+  });
+
+  content.innerHTML = html;
 }
 
 export const throttledUpdateUnitList = throttle(updateUnitListUI, 1000);
 
 window.toggleCollapse = function (key) {
-  if (collapsedStates.has(key)) collapsedStates.delete(key);
-  else collapsedStates.add(key);
+  if (expandedStates.has(key)) expandedStates.delete(key);
+  else expandedStates.add(key);
   unitListDirty = true;
   updateUnitListUI();
 };
 
 window.zoomToUnit = function (uid) {
   const state = entityState[uid];
-  if (state && viewer) {
+  if (state && !state._isRemoved && viewer) {
     viewer.selectedEntity = state.entity;
     viewer.flyTo(state.entity, {
       offset: new HeadingPitchRange(0, -Math.PI / 2, 100000),
@@ -440,68 +529,70 @@ window.zoomToUnit = function (uid) {
 
 function drawGroupIcon(name, role, how) {
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = 192;
+  canvas.height = 192;
   const ctx = canvas.getContext("2d");
-  const cx = 128;
-  const cy = 128;
+  const cx = 96,
+    cy = 96;
 
-  const groupColors = {
-    Cyan: "#00FFFF",
-    Green: "#00FF00",
-    Blue: "#0000FF",
-    Red: "#FF0000",
-    Yellow: "#FFFF00",
-    Magenta: "#FF00FF",
-    White: "#FFFFFF",
+  const groupColorMap = {
+    White: "#ffffff",
+    Yellow: "#ffff00",
+    Orange: "#ffa500",
+    Magenta: "#ff00ff",
+    Red: "#ff0000",
     Maroon: "#800000",
-    "Dark Blue": "#00008B",
-    "Dark Green": "#006400",
     Purple: "#800080",
-    Orange: "#FFA500",
-    Brown: "#A52A2A",
+    Cyan: "#00ffff",
+    Blue: "#0000ff",
+    Green: "#00ff00",
+    "Dark Green": "#006400",
+    Brown: "#a52a2a",
   };
+
   const roleAbbrMap = {
+    HQ: "HQ",
     "Team Member": "none",
     "Team Lead": "TL",
-    HQ: "HQ",
-    Sniper: "S",
-    Medic: "M",
+    Sniper: "SN",
+    Medic: "MD",
     "Forward Observer": "FO",
-    RTO: "R",
+    RTO: "RO",
     K9: "K9",
+    Pilot: "PL",
   };
-  const fillColor = groupColors[name] || name || "#FFFFFF";
-  const rawAbbr =
-    roleAbbrMap[role] || (role ? role.substring(0, 3).toUpperCase() : "");
+
+  const fillColor = groupColorMap[name] || "#ffffff";
+  const rawAbbr = roleAbbrMap[role] || (role ? role.substring(0, 3).toUpperCase() : "");
   const abbr = rawAbbr === "none" ? "" : rawAbbr;
 
   ctx.beginPath();
-  ctx.arc(cx, cy, 96, 0, 2 * Math.PI);
+  ctx.arc(cx, cy, 88, 0, 2 * Math.PI); // Slightly smaller radius (was 96)
   ctx.fillStyle = fillColor;
   ctx.fill();
-  ctx.lineWidth = 8;
+  ctx.lineWidth = 12; // Thicker border
   ctx.strokeStyle = "black";
   ctx.stroke();
 
   if (how !== "m-g") {
     ctx.beginPath();
-    ctx.moveTo(cx - 68, cy + 68);
-    ctx.lineTo(cx + 68, cy - 68);
+    ctx.moveTo(cx - 62, cy + 62);
+    ctx.lineTo(cx + 62, cy - 62);
     ctx.lineWidth = 16;
     ctx.strokeStyle = "black";
     ctx.stroke();
   }
 
   if (abbr) {
-    ctx.font = "bold 72px sans-serif";
+    ctx.font = "bold 80px sans-serif";
     const textMetrics = ctx.measureText(abbr);
     ctx.fillStyle = fillColor;
+    // Box behind text for legibility
     ctx.fillRect(
-      cx - textMetrics.width / 2 - 8,
-      cy - 44,
-      textMetrics.width + 16,
-      88,
+      cx - textMetrics.width / 2 - 10,
+      cy - 50,
+      textMetrics.width + 20,
+      100,
     );
     ctx.fillStyle = "black";
     ctx.textAlign = "center";
@@ -527,13 +618,25 @@ export async function updateEntity(incomingData) {
   for (const key in incomingData) {
     data[REVERSE_KEY_MAP[key] || key] = incomingData[key];
   }
-  const { uid } = data;
+  const uid = data.uid || data.i;
   if (!uid) return;
 
+  // RESCUE: If it's in the removal queue, but we got a fresh update, stop the removal
+  if (pendingRemovals.has(uid)) {
+    const rescuedState = pendingRemovals.get(uid);
+    pendingRemovals.delete(uid);
+    rescuedState._isRemoved = false;
+    entityState[uid] = rescuedState; // Re-add to active map
+  }
+
   let state = entityState[uid];
-  if (!state && pendingCreation.has(uid)) return;
+  if (!state && pendingCreation.has(uid)) {
+    // If already creating, wait a bit or ignore to avoid duplicates
+    return;
+  }
 
   if (state) {
+    if (state._isRemoved) return;
     data.uid = uid;
     for (const k in data) {
       if (data[k] !== undefined) state.lastData[k] = data[k];
@@ -547,15 +650,18 @@ export async function updateEntity(incomingData) {
     lat,
     lon,
     alt,
+    course,
+    stale,
     color,
     iconsetpath,
-    stale,
-    how,
-    group_role,
     group_name,
+    group_role,
+    how,
     squawk,
-    course,
   } = fullData;
+
+  // SAFETY: Filter non-finite coordinates
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
   const callsign = rawCallsign || uid || "Unknown";
 
@@ -599,7 +705,9 @@ export async function updateEntity(incomingData) {
   }
   const effectiveColor = color ? cesiumColor : getAffiliationColor(type);
   const useTeamCircle = !!group_name && !!group_role;
+  const staff_comment = fullData.staff_comment || "";
 
+  // FIX: Exclude staff_comment from key to prevent flickering
   const stateKey = useTeamCircle
     ? `group-${group_name}-${group_role}-${color}-${how}`
     : iconsetUrl
@@ -656,7 +764,7 @@ export async function updateEntity(incomingData) {
             outlineWidth: 2,
             outlineColor: Color.BLACK.withAlpha(0.5),
           }),
-          distanceDisplayCondition: DDC_UNSELECTED_TRAIL,
+          distanceDisplayCondition: ddcTactical,
           disableDepthTestDistance: HORIZON_LIMIT,
           clampToGround: true,
         },
@@ -672,13 +780,14 @@ export async function updateEntity(incomingData) {
           horizontalOrigin: HorizontalOrigin.CENTER,
           verticalOrigin: VerticalOrigin.CENTER,
           eyeOffset: new Cartesian3(0, 0, -15),
+          distanceDisplayCondition: ddcAlways,
           disableDepthTestDistance: HORIZON_LIMIT,
           heightReference: iconRef,
         },
-        show: true,
       });
 
       state = {
+        uid,
         entity,
         trailEntity,
         courseEntity,
@@ -687,26 +796,36 @@ export async function updateEntity(incomingData) {
         lastData: { ...fullData, callsign },
         lastIconUrl: "",
         lastPosition: position,
+        _isRemoved: false,
       };
+
+      // Double check if removed during creation
+      if (pendingRemovals.has(uid)) {
+        pendingCreation.delete(uid);
+        return;
+      }
+
       entityState[uid] = state;
       unitListDirty = true;
     } finally {
       pendingCreation.delete(uid);
     }
   } else {
+    // Update existing state
     if (!position.equals(state.lastPosition)) {
       state.entity.position = position;
       state.lastPosition = position;
+      state.history.push(anchorPosition);
+      if (state.history.length > 50) state.history.shift();
+      unitListDirty = true;
     }
+
     state.entity.description = description;
 
     if (state.entity.billboard.heightReference !== iconRef) {
       state.entity.billboard.heightReference = iconRef;
       state.entity.label.heightReference = iconRef;
     }
-
-    state.history.push(anchorPosition);
-    if (state.history.length > 100) state.history.shift();
 
     if (
       viewer.clock &&
@@ -718,25 +837,31 @@ export async function updateEntity(incomingData) {
       unitListDirty = true;
     }
 
-    const trailVisible = calculateVisibility(state.lastData) && viewer.selectedEntity && viewer.selectedEntity.id === uid;
+    const selectedId = safeGetId(viewer.selectedEntity);
+    const isSelected =
+      selectedId &&
+      (selectedId === uid ||
+        selectedId === uid + "-trail" ||
+        selectedId === uid + "-course");
+    const isVisible = calculateVisibility(state.lastData);
+    const trailVisible = isVisible && isSelected;
     state.trailEntity.show = trailVisible;
     if (trailVisible) {
       state.trailEntity.polyline.positions = [...state.history];
     }
   }
 
-  // Update Course Vector
   const hasCourse = course !== undefined && course !== null;
   if (hasCourse) {
     state.courseEntity.position = position;
-    // Dynamic leading arrow: always ahead of icon regardless of camera rotation
     if (
       !state.courseEntity.billboard.rotation ||
       typeof state.courseEntity.billboard.rotation.getValue !== "function"
     ) {
       state.courseEntity.billboard.rotation = new CallbackProperty(() => {
         const s = entityState[uid];
-        if (!s || !s.lastData || s.lastData.course === undefined) return 0;
+        if (!s || s._isRemoved || !s.lastData || s.lastData.course === undefined)
+          return 0;
         return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
       }, false);
     }
@@ -744,23 +869,26 @@ export async function updateEntity(incomingData) {
       !state.courseEntity.billboard.pixelOffset ||
       typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
     ) {
-      state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0); // Temporary sync
+      state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0);
       state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
         const s = entityState[uid];
-        if (!s || !s.lastData || s.lastData.course === undefined)
-          return new Cartesian2(0, 0);
+        if (
+          !s ||
+          s._isRemoved ||
+          !s.lastData ||
+          s.lastData.course === undefined
+        ) {
+          return new Cartesian2(0, -22);
+        }
         const angle =
           CesiumMath.toRadians(s.lastData.course) - viewer.camera.heading;
-        const dist = 22; // Pixels from center
+        const dist = 22;
         return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
       }, false);
     }
     state.courseEntity.billboard.heightReference = iconRef;
-    state.courseEntity.show = true;
-  } else if (state && state.courseEntity) {
-    state.courseEntity.show = false;
   }
-
+  
   if (state.lastStateKey !== stateKey) {
     let iconUrl, pixelOffset, width, height, billboardColor;
 
@@ -771,8 +899,8 @@ export async function updateEntity(incomingData) {
       height = cached.height;
       pixelOffset = cached.pixelOffset || new Cartesian2(0, 0);
       billboardColor = cached.color || Color.WHITE;
+      // We don't register here because we register when assigning to state.lastIconUrl below
     } else if (pendingIcons.has(stateKey)) {
-      // If someone else is already making this icon, wait for them
       const result = await pendingIcons.get(stateKey);
       iconUrl = result.blobUrl;
       width = result.width;
@@ -780,7 +908,6 @@ export async function updateEntity(incomingData) {
       pixelOffset = result.pixelOffset;
       billboardColor = result.color;
     } else {
-      // We are the ones making the icon
       const generateIcon = async () => {
         let iUrl,
           pOff = new Cartesian2(0, 0),
@@ -797,7 +924,13 @@ export async function updateEntity(incomingData) {
           iUrl = iconsetUrl;
           bCol = color ? cesiumColor : Color.WHITE;
         } else {
-          const symbolOptions = { size: 21, padding: 10 };
+          const symbolOptions = {
+            size: 21,
+            padding: 15,
+            infoColor: "black",
+            infoBackground: "rgba(255,255,255,0.5)",
+          };
+          if (staff_comment) symbolOptions.staffComments = staff_comment;
           const symbol = new ms.Symbol(sidc, symbolOptions);
           const canvas = symbol.asCanvas();
           const iconAnchor = symbol.getAnchor();
@@ -818,32 +951,30 @@ export async function updateEntity(incomingData) {
           height: h,
           color: bCol,
         };
+        registerBlobUsage(iUrl); // Pre-register for cache
         iconCache.set(stateKey, cacheEntry);
         return cacheEntry;
       };
-
-      const pendingPromise = generateIcon();
-      pendingIcons.set(stateKey, pendingPromise);
-      const result = await pendingPromise;
+      const iconPromise = generateIcon();
+      pendingIcons.set(stateKey, iconPromise);
+      const result = await iconPromise;
       pendingIcons.delete(stateKey);
-
       iconUrl = result.blobUrl;
+      pixelOffset = result.pixelOffset;
       width = result.width;
       height = result.height;
-      pixelOffset = result.pixelOffset;
       billboardColor = result.color;
     }
 
     // Re-verify state exists after async await
     state = entityState[uid];
-    if (!state) return;
+    if (!state || state._isRemoved) return;
 
     if (state.lastIconUrl !== iconUrl) {
       const oldIcon = state.lastIconUrl;
       registerBlobUsage(iconUrl);
       state.entity.billboard.image = iconUrl;
       state.lastIconUrl = iconUrl;
-      // Unregister old after new is set
       if (oldIcon) unregisterBlobUsage(oldIcon);
     }
 
@@ -856,63 +987,155 @@ export async function updateEntity(incomingData) {
     unitListDirty = true;
   }
 
-  const isSelected = viewer.selectedEntity && viewer.selectedEntity.id === uid;
-  const isVisible = calculateVisibility(fullData);
-
-  state.entity.show = isVisible || isSelected;
-  if (state.courseEntity) {
-    state.courseEntity.show = isVisible || isSelected;
-  }
-
-  // Only update staleAt if explicitly provided in this message
   if (stale) {
     state.staleAt = new Date(stale).getTime();
   }
-  
+
+  // Final visibility sync (covers selection changes and filter updates)
+  const isVisible = calculateVisibility(state.lastData);
+  const selectedId = safeGetId(viewer.selectedEntity);
+  const isSelected =
+    selectedId &&
+    (selectedId === uid ||
+      selectedId === uid + "-trail" ||
+      selectedId === uid + "-course");
+
+  state.entity.show = isVisible || isSelected;
+  if (state.courseEntity) {
+    state.courseEntity.show = state.entity.show && (state.lastData.course !== undefined);
+  }
+
   throttledUpdateUnitList();
+  updateStaffCommentsUI();
+}
+
+function processRemovalQueue() {
+  if (pendingRemovals.size === 0) {
+    removalProcessActive = false;
+    return;
+  }
+  if (removalProcessActive) return;
+  removalProcessActive = true;
+
+  const processBatch = () => {
+    if (!viewer || !viewer.entities) {
+      removalProcessActive = false;
+      return;
+    }
+
+    viewer.entities.suspendEvents();
+    try {
+      const entries = Array.from(pendingRemovals.entries());
+      const batchSize = 20;
+      const batch = entries.slice(0, batchSize);
+
+      batch.forEach(([uid, state]) => {
+        pendingRemovals.delete(uid);
+
+        if (state) {
+          // If a new state was created with same UID while this one was pending removal,
+          // don't remove anything - the new state owns these entities now OR has new ones.
+          // BUT: Usually we want to remove the OLD entities. 
+          // Re-verify if this is the CURRENT state for this UID
+          if (entityState[uid] === state) {
+             // If it is in entityState, it shouldn't be in pendingRemovals unless something is wrong.
+             return;
+          }
+
+          const subEntities = [
+            state.entity,
+            state.trailEntity,
+            state.courseEntity,
+          ].filter((ent) => ent !== null && ent !== undefined);
+
+          const selectedId = safeGetId(viewer.selectedEntity);
+          if (
+            selectedId &&
+            (selectedId === uid ||
+              selectedId === uid + "-trail" ||
+              selectedId === uid + "-course")
+          ) {
+            viewer.selectedEntity = undefined;
+          }
+          const trackedId = safeGetId(viewer.trackedEntity);
+          if (
+            trackedId &&
+            (trackedId === uid ||
+              trackedId === uid + "-trail" ||
+              trackedId === uid + "-course")
+          ) {
+            viewer.trackedEntity = undefined;
+          }
+
+          if (state.lastIconUrl) {
+            unregisterBlobUsage(state.lastIconUrl);
+          }
+
+          subEntities.forEach((ent) => {
+            if (!ent || !viewer.entities.contains(ent)) return;
+
+            if (ent === state.entity) state.entity = null;
+            if (ent === state.trailEntity) state.trailEntity = null;
+            if (ent === state.courseEntity) state.courseEntity = null;
+
+            ent.show = false;
+            // Clear properties to break potential circular refs or callback property chains
+            if (ent.billboard) {
+              ent.billboard.show = false;
+              ent.billboard.image = undefined;
+              ent.billboard.rotation = undefined;
+              ent.billboard.pixelOffset = undefined;
+            }
+            if (ent.label) {
+              ent.label.show = false;
+              ent.label.text = undefined;
+            }
+            viewer.entities.remove(ent);
+          });
+        }
+      });
+
+      unitListDirty = true;
+      throttledUpdateUnitList();
+    } finally {
+      viewer.entities.resumeEvents();
+
+      if (pendingRemovals.size > 0) {
+        requestAnimationFrame(processBatch);
+      } else {
+        removalProcessActive = false;
+      }
+    }
+  };
+
+  requestAnimationFrame(processBatch);
 }
 
 export function removeEntity(uid) {
   const state = entityState[uid];
   if (!state) return;
 
-  // Collect all Cesium entities associated with this vessel
-  const subEntities = [
-    state.entity,
-    state.trailEntity,
-    state.courseEntity,
-  ].filter(Boolean);
-
-  // CRITICAL: Clear selection and tracking BEFORE removal
-  // If Cesium is tracking or has selected an entity that is removed from the collection,
-  // it often crashes in the internal updateShows/render loop with "TypeError: s is undefined".
-  if (viewer.selectedEntity && subEntities.includes(viewer.selectedEntity)) {
-    viewer.selectedEntity = undefined;
-  }
-  if (viewer.trackedEntity && subEntities.includes(viewer.trackedEntity)) {
-    viewer.trackedEntity = undefined;
-  }
-
-  if (previouslySelectedEntityId === uid) {
-    previouslySelectedEntityId = null;
-  }
-
-  // Clear internal state and reference counting
-  if (state.lastIconUrl) {
-    unregisterBlobUsage(state.lastIconUrl);
-  }
-
-  // Remove all entities from the viewer
-  subEntities.forEach((ent) => {
-    viewer.entities.remove(ent);
-  });
-
   delete entityState[uid];
-  unitListDirty = true;
-  throttledUpdateUnitList();
+  state._isRemoved = true;
+
+  if (state.entity) state.entity.show = false;
+  if (state.trailEntity) state.trailEntity.show = false;
+  if (state.courseEntity) state.courseEntity.show = false;
+
+  pendingRemovals.set(uid, state);
+  if (!removalProcessActive) processRemovalQueue();
 }
 
 export function updateEntitySelectionVisibility(selectedEntity) {
+  const selectedId = safeGetId(selectedEntity);
+  let baseUid = selectedId;
+  if (selectedId) {
+    if (selectedId.endsWith("-trail"))
+      baseUid = selectedId.replace("-trail", "");
+    else if (selectedId.endsWith("-course"))
+      baseUid = selectedId.replace("-course", "");
+  }
+
   if (previouslySelectedEntityId && entityState[previouslySelectedEntityId]) {
     const prevState = entityState[previouslySelectedEntityId];
     if (prevState.entity && prevState.entity.label) {
@@ -920,13 +1143,15 @@ export function updateEntitySelectionVisibility(selectedEntity) {
       prevState.entity.label.disableDepthTestDistance = DDD_UNSELECTED;
     }
     if (prevState.trailEntity && prevState.trailEntity.polyline) {
-      prevState.trailEntity.polyline.distanceDisplayCondition = DDC_UNSELECTED_TRAIL;
-      prevState.trailEntity.show = calculateTrailVisibility(previouslySelectedEntityId);
+      prevState.trailEntity.polyline.distanceDisplayCondition = ddcTactical;
+      prevState.trailEntity.show = calculateTrailVisibility(
+        previouslySelectedEntityId,
+      );
     }
   }
 
-  if (selectedEntity && selectedEntity.id && entityState[selectedEntity.id]) {
-    const currentState = entityState[selectedEntity.id];
+  if (baseUid && entityState[baseUid]) {
+    const currentState = entityState[baseUid];
     if (currentState.entity && currentState.entity.label) {
       currentState.entity.label.distanceDisplayCondition = DDC_SELECTED;
       currentState.entity.label.disableDepthTestDistance = DDD_SELECTED;
@@ -935,7 +1160,7 @@ export function updateEntitySelectionVisibility(selectedEntity) {
       currentState.trailEntity.polyline.distanceDisplayCondition = DDC_SELECTED;
       currentState.trailEntity.show = true;
     }
-    previouslySelectedEntityId = selectedEntity.id;
+    previouslySelectedEntityId = baseUid;
   } else {
     previouslySelectedEntityId = null;
   }
@@ -945,14 +1170,13 @@ setInterval(() => {
   const now = Date.now();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state) return;
+    if (!state || state._isRemoved) return;
     // STALE GRACE PERIOD: 120s
-    // CoT stale times are often based on eventTime + small delta, 
-    // which fails if clocks are slightly out of sync.
-    // AIS often has very short stale times.
-    if (state.staleAt && now > (state.staleAt + 120000)) {
-        console.log(`Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`);
-        removeEntity(uid);
+    if (state.staleAt && now > state.staleAt + 120000) {
+      console.log(
+        `Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`,
+      );
+      removeEntity(uid);
     }
   });
-}, 5000);
+}, 30000);

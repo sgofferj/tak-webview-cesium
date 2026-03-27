@@ -77,11 +77,17 @@ function applyStaticTranslations() {
       el.title = i18n.trailsTitle || "Toggle unit trails";
     },
     toggleUnitList: (el) => {
-      el.innerText = i18n.unitsButton || "Units";
       el.title = i18n.unitsTitle || "Toggle unit list";
     },
-    unitListHeader: (el) =>
-      (el.innerText = i18n.activeUnitsHeader || "Active Units"),
+    sidebarHeaderView: (el) =>
+      (el.innerText = i18n.sidebarHeaderView || "View"),
+    sidebarHeaderFilter: (el) =>
+      (el.innerText = i18n.sidebarHeaderFilter || "Filter"),
+    sidebarHeaderTracks: (el) =>
+      (el.innerText = i18n.sidebarHeaderTracks || "Active Tracks"),
+    showInfo: (el) => {
+      el.innerText = "ⓘ " + (i18n.infoTitle || "Info");
+    },
   };
 
   for (const [id, action] of Object.entries(elements)) {
