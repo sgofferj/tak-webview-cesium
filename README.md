@@ -80,9 +80,8 @@ The following values are supported and can be provided either as environment var
 | `TAK_CALLSIGN` | `CesiumViewer` | Callsign used for enrollment and identification |
 | `TAK_UID` | `CesiumViewer-[Callsign]` | Unique ID for the viewer entity |
 | `SECRET_KEY` | (Random) | Secret for signing session cookies (Regenerated on every restart by default) |
-| `EPHEMERAL_DIR` | `certs/ephemeral` | Path to store temporary session certificates |
-| `ICONSETS_DIR` | `/iconsets` | Directory to scan for built-in iconsets |
 | `USER_ICONSETS_DIR` | `/user_iconsets` | Additional directory to scan for user-installed iconsets |
+| `LAYERS_CONFIG_FILE` | `customlayers.json` | Filename for custom layers configuration |
 | `TERRAIN_URL` | (Empty) | URL to a Cesium terrain provider (quantized-mesh or heightmap) |
 | `TERRAIN_EXAGGERATION` | `1.0` | Vertical exaggeration for terrain |
 | `INITIAL_LAT` | `60.1699` | Initial latitude for map center |
@@ -130,8 +129,7 @@ For instructions on how to set up the development environment, test, and deploy 
 
 ### Quick Start (Docker)
 1. Rename `.env.example` to `.env` and edit `TAK_HOST` to point to your server.
-2. Ensure the `certs/ephemeral` directory (or your configured `EPHEMERAL_DIR`) is writable by the container.
-3. Create and start the container:
+2. Create and start the container:
 
 ```yaml
 services:
@@ -142,7 +140,6 @@ services:
     env_file:
       - .env
     volumes:
-      - ./certs:/app/certs:rw
       - ./customlayers.json:/app/customlayers.json:ro
       - ./user_iconsets:/user_iconsets:ro
     restart: unless-stopped

@@ -21,7 +21,7 @@
   "categoryIncidents": "⚠️ Incidenter (GDACS)",
   "categoryAircraft": "✈️ Flygplan (ADSB)",
   "categoryVessels": "🚢 Fartyg (AIS)",
-  "categoryOther": "🎖️ Övriga enheter",
+  "categoryOther": "🎖️ Övriga spår",
   "worldLayersLabel": "Världskartor",
   "noActiveUnits": "Inga aktiva enheter",
   "emergencyBanner": "!!! NÖDLÄGE: {type} !!!",
@@ -39,5 +39,10 @@
   "contoursLabel": "Höjdkurvor",
   "squawk7500": "KAPNING",
   "squawk7600": "RADIOFEL",
-  "squawk7700": "NÖDSITUATION"
+  "squawk7700": "NÖDSITUATION",
+  "sidebarHeaderView": "Vy",
+  "sidebarHeaderFilter": "Filter",
+  "sidebarHeaderTracks": "Aktiva spår",
+  "infoTitle": "Information",
+  "resetViewLabel": "Återställ vy"
 }

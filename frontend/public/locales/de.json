@@ -21,7 +21,7 @@
   "categoryIncidents": "⚠️ Vorfälle (GDACS)",
   "categoryAircraft": "✈️ Flugzeuge (ADSB)",
   "categoryVessels": "🚢 Schiffe (AIS)",
-  "categoryOther": "🎖️ Andere Einheiten",
+  "categoryOther": "🎖️ Andere Tracks",
   "worldLayersLabel": "Weltkarten",
   "noActiveUnits": "Keine aktiven Einheiten",
   "emergencyBanner": "!!! NOTFALL: {type} !!!",
@@ -39,5 +39,10 @@
   "contoursLabel": "Höhenlinien",
   "squawk7500": "ENTFÜHRUNG",
   "squawk7600": "FUNKAUSFALL",
-  "squawk7700": "NOTFALL"
+  "squawk7700": "NOTFALL",
+  "sidebarHeaderView": "Ansicht",
+  "sidebarHeaderFilter": "Filter",
+  "sidebarHeaderTracks": "Aktive Tracks",
+  "infoTitle": "Informationen",
+  "resetViewLabel": "Ansicht zurücksetzen"
 }

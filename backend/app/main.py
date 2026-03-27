@@ -80,6 +80,14 @@ for uid, fs_path in user_iconset_mounts.items():
 
 
 # API Routes
+@app.get("/api/overlays/{filename}")
+async def get_overlay_file(filename: str) -> FileResponse:
+    file_path = os.path.join(settings._overlays_dir, filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    raise HTTPException(status_code=404, detail="Overlay file not found")
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -186,6 +194,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     # Check session auth for websocket as well
     session = websocket.scope.get("session", {})
     if not session.get("authenticated"):
+        await websocket.accept()
         await websocket.close(code=4001)
         return
 
