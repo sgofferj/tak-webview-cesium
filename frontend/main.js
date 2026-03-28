@@ -129,7 +129,7 @@ function updateLayerPickerUI() {
   };
 
   panel.querySelectorAll(".layer-item").forEach((item) => {
-    const name = item.querySelector(".layer-label")?.innerText?.trim();
+    const name = item.getAttribute("data-layer-name"); // Use data-layer-name for consistency
     const input = item.querySelector("input");
 
     if (item.classList.contains("baseLayer")) {
@@ -354,6 +354,7 @@ function setupAuthEvents() {
 function createLayerItem(l, isRadio, nameGroup, isActive) {
   const item = document.createElement("div");
   item.className = `layer-item ${nameGroup} ${isActive ? "active" : ""}`;
+  item.setAttribute("data-layer-name", l.name); // Store original name for identification
 
   let iconUrl = l.icon;
   if (!iconUrl) {
