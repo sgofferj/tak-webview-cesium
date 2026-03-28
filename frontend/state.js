@@ -539,13 +539,12 @@ export function updateStaffCommentsUI() {
 
   let html = "";
   commentDefs.forEach(({ search, label }) => {
-    const uids = staffCommentMap.get(search);
-    if (!uids || uids.size === 0) return;
-
+    const uids = staffCommentMap.get(search) || new Set(); // Ensure uids is a Set, even if empty
     const matchingUnits = [];
+
     uids.forEach(uid => {
       const state = entityState[uid];
-      if (state && !state._isRemoved) {
+      if (state && !state._isRemoved) { // Only show active, non-removed entities
         matchingUnits.push({
           uid: uid,
           callsign: state.lastData.callsign,
@@ -555,13 +554,13 @@ export function updateStaffCommentsUI() {
       }
     });
 
-    if (matchingUnits.length > 0) {
-      const groupKey = `staff-${search}`;
-      const isExpanded = expandedStates.has(groupKey);
-      html += `<div class="unit-group ${!isExpanded ? "collapsed" : ""}" id="group-${groupKey}">
-                <div class="unit-group-header" onclick="toggleCollapse('${groupKey}')">${search} (${matchingUnits.length})</div>
-                <div class="unit-group-content">`;
+    const groupKey = `staff-${search}`;
+    const isExpanded = expandedStates.has(groupKey);
+    html += `<div class="unit-group ${!isExpanded ? "collapsed" : ""}" id="group-${groupKey}">
+              <div class="unit-group-header" onclick="toggleCollapse('${groupKey}')">${label} (${matchingUnits.length})</div>
+              <div class="unit-group-content">`;
 
+    if (matchingUnits.length > 0) {
       matchingUnits
         .sort((a, b) => a.callsign.localeCompare(b.callsign))
         .forEach((unit) => {
@@ -570,11 +569,13 @@ export function updateStaffCommentsUI() {
                     <span class="unit-name" style="color: ${unit.color}">${unit.callsign}</span>
                 </div>`;
         });
-      html += `</div></div>`;
+    } else {
+      html += `<div style="text-align:center; padding:10px; color:#888; font-size:0.8em;">${i18n.noMatchingUnits || "No matching units"}</div>`;
     }
+    html += `</div></div>`;
   });
 
-  content.innerHTML = html;
+  content.innerHTML = html || `<div style="text-align:center; padding:20px; color:#888;">${i18n.noStaffCommentDefs || "No staff comment definitions configured."}</div>`;
 }
 
 export const throttledUpdateUnitList = throttle(updateUnitListUI, 1000);

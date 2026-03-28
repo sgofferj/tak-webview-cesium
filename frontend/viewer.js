@@ -258,13 +258,13 @@ export async function toggleOverlayLayer(layerConfig, active) {
         try {
           if (layerConfig.file_type === "geojson") {
             dataSource = await GeoJsonDataSource.load(layerConfig.url, {
-              clampToGround: false, // Changed to false to allow polygon outlines
+              clampToGround: true, // Reinstated to true for proper filling on terrain
             });
           } else if (layerConfig.file_type === "kml") {
             dataSource = await KmlDataSource.load(layerConfig.url, {
               canvas: viewer.canvas,
               camera: viewer.camera,
-              clampToGround: false, // Changed to false to allow polygon outlines
+              clampToGround: true, // Reinstated to true for proper filling on terrain
             });
           } else if (layerConfig.file_type === "czml") {
             dataSource = await CzmlDataSource.load(layerConfig.url);
@@ -296,9 +296,8 @@ export async function toggleOverlayLayer(layerConfig, active) {
               }
               if (entity.polygon) {
                 entity.polygon.classificationType = ClassificationType.BOTH;
-                // Explicitly set height to 0 relative to ground to allow outlines
-                entity.polygon.height = 0;
-                entity.polygon.heightReference = HeightReference.RELATIVE_TO_GROUND;
+                // Revert to clamping, as outlines are incompatible with terrain clamping.
+                // Outlines will be automatically disabled by Cesium.
               }
             });
             await viewer.dataSources.add(dataSource);
