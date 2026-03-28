@@ -263,10 +263,37 @@ export async function toggleOverlayLayer(layerConfig, active) {
 
             // Post-process entities for better visibility on terrain
             dataSource.entities.values.forEach((entity) => {
+              if (entity.billboard) {
+                entity.billboard.heightReference = HeightReference.CLAMP_TO_GROUND;
+                entity.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+              }
+              if (entity.label) {
+                entity.label.heightReference = HeightReference.CLAMP_TO_GROUND;
+                entity.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+              }
+              if (entity.point) {
+                entity.point.heightReference = HeightReference.CLAMP_TO_GROUND;
+                entity.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+              }
+              if (entity.polyline) {
+                entity.polyline.clampToGround = true;
+              }
+              if (entity.polygon) {
+                entity.polygon.classificationType = ClassificationType.BOTH;
+              }
+            });
+            await viewer.dataSources.add(dataSource);
+            activeOverlays.set(layerConfig.name, dataSource);
+          }
+        } catch (e) {
+          console.error(`Failed to load overlay file ${layerConfig.name}:`, e);
+        }
+      } else {
         const provider = await createImageryProvider(layerConfig);
         const cesiumLayer = viewer.imageryLayers.addImageryProvider(provider);
         activeOverlays.set(layerConfig.name, cesiumLayer);
       }
+    }
     }
   } else {
     const overlay = activeOverlays.get(layerConfig.name);
