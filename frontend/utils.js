@@ -11,7 +11,7 @@ import mgrs from "mgrs";
 
 // CoT Type to MIL-STD-2525 SIDC mapping
 export function cotToSidc(type) {
-  if (!type) return "SUGP------------";
+  if (!type) return "SUGP-----------";
   const et = type.split("-");
   let affil = (et[1] || "U").toUpperCase();
   if (affil.includes(".")) affil = "N";

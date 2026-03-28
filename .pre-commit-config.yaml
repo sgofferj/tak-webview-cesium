@@ -3,21 +3,21 @@ repos:
     hooks:
       - id: backend-lint
         name: Backend Lint (Ruff)
-        entry: bash -c "cd backend && ../venv/bin/ruff check ."
+        entry: bash -c "cd backend && .venv/bin/ruff check ."
         language: system
         types: [python]
         pass_filenames: false
 
       - id: backend-typecheck
         name: Backend Type Check (Mypy)
-        entry: bash -c "cd backend && ../venv/bin/mypy ."
+        entry: bash -c "cd backend && .venv/bin/mypy ."
         language: system
         types: [python]
         pass_filenames: false
 
       - id: backend-test
         name: Backend Tests (Pytest)
-        entry: bash -c "cd backend && ../venv/bin/pytest"
+        entry: bash -c "cd backend && .venv/bin/pytest"
         language: system
         types: [python]
         pass_filenames: false

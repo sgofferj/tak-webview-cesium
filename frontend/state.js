@@ -707,12 +707,12 @@ export async function updateEntity(incomingData) {
   const useTeamCircle = !!group_name && !!group_role;
   const staff_comment = fullData.staff_comment || "";
 
-  // FIX: Exclude staff_comment from key to prevent flickering
+  // Ensure staff_comment is part of the key for milsymbols so they cache correctly
   const stateKey = useTeamCircle
     ? `group-${group_name}-${group_role}-${color}-${how}`
     : iconsetUrl
       ? `icon-${iconsetUrl}-${rgbColor}`
-      : `${sidc}-${color}-${squawk}`;
+      : `${sidc}-${color}-${squawk}-${staff_comment}`;
 
   const description = createDescription({ ...fullData, callsign });
 

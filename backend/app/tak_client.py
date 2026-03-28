@@ -74,7 +74,8 @@ class TAKClient:
             maxsize=1000, ttl=60
         )
 
-        # Parse staff comments: "#shadowfleet=SF,#LEO=LEO" -> {"#shadowfleet": "SF", "#LEO": "LEO"}
+        # Parse staff comments:
+        # "#shadowfleet=SF,#LEO=LEO" -> {"#shadowfleet": "SF", "#LEO": "LEO"}
         self.staff_comments: dict[str, str] = {}
         if self.config.tak_staff_comments:
             # Strip quotes that might be passed from shell/docker
