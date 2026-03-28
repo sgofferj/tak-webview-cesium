@@ -1152,17 +1152,24 @@ function processRemovalQueue() {
           subEntities.forEach((ent) => {
             if (!ent || !viewer.entities.contains(ent)) return;
 
+            // Specifically handle courseEntity's dynamic properties
+            if (ent === state.courseEntity) {
+              if (ent.billboard) {
+                ent.billboard.rotation = undefined; // Detach CallbackProperty early
+                ent.billboard.pixelOffset = undefined; // Detach CallbackProperty early
+              }
+            }
+
             if (ent === state.entity) state.entity = null;
             if (ent === state.trailEntity) state.trailEntity = null;
             if (ent === state.courseEntity) state.courseEntity = null;
 
             ent.show = false;
-            // Clear properties to break potential circular refs or callback property chains
+            // Clear general properties to break potential circular refs
             if (ent.billboard) {
               ent.billboard.show = false;
               ent.billboard.image = undefined;
-              ent.billboard.rotation = undefined;
-              ent.billboard.pixelOffset = undefined;
+              // rotation and pixelOffset are already handled for courseEntity specifically
             }
             if (ent.label) {
               ent.label.show = false;
