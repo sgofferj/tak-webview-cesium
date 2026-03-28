@@ -335,6 +335,7 @@ export async function toggleOverlayLayer(layerConfig, active) {
           if (layerConfig.file_type === "geojson") {
             dataSource = await GeoJsonDataSource.load(layerConfig.url, {
               clampToGround: true, // Reinstated to true for proper filling on terrain
+              enablePickFeatures: false, // Disable picking for GeoJSON features
             });
           } else if (layerConfig.file_type === "kml") {
             dataSource = await KmlDataSource.load(layerConfig.url, {
