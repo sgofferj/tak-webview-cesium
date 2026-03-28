@@ -278,7 +278,7 @@ function applyOverlayStyling(dataSource, layerName) {
                   return parentEntity && parentEntity.show;
                 }, false),
               });
-              console.log(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline created with width ${style.width} and color ${style.color}.`);
+              // Removed verbose log for polyline outline creation
             } else {
               // Update existing polyline
               outlinePolyline.polyline.positions = positions;
@@ -291,7 +291,7 @@ function applyOverlayStyling(dataSource, layerName) {
                 const parentEntity = dataSource.entities.getById(entity.id);
                 return parentEntity && parentEntity.show;
               }, false);
-              console.log(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline updated with width ${style.width} and color ${style.color}.`);
+              // Removed verbose log for polyline outline update
             }
           } else {
             // Further enhanced logging to pinpoint the exact reason for skipping
@@ -318,6 +318,13 @@ function applyOverlayStyling(dataSource, layerName) {
     console.error("Failed to apply overlay styling", e);
   }
 }
+
+// List of all graphic property names on a Cesium Entity that can be pickable
+const allGraphicPropertyNames = [
+  "billboard", "box", "corridor", "cylinder", "ellipse", "ellipsoid",
+  "label", "model", "path", "point", "polygon", "polyline",
+  "polylineVolume", "rectangle", "wall"
+];
 
 export async function toggleOverlayLayer(layerConfig, active) {
   if (active) {
@@ -350,31 +357,35 @@ export async function toggleOverlayLayer(layerConfig, active) {
             dataSource.entities.values.forEach((entity) => {
               entity.pickable = false; // Disable infobox for the entity itself
 
+              // Explicitly disable picking for all defined graphic properties
+              allGraphicPropertyNames.forEach(propName => {
+                if (entity[propName]) {
+                  entity[propName].pickable = false;
+                }
+              });
+
+              // Apply height reference and depth test distance for common clamped types
+              // (These were previously duplicated, consolidating the picking here)
               if (entity.billboard) {
                 entity.billboard.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
-                entity.billboard.pickable = false; // Explicitly disable for billboard
               }
               if (entity.label) {
                 entity.label.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
-                entity.label.pickable = false; // Explicitly disable for label
               }
               if (entity.point) {
                 entity.point.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
-                entity.point.pickable = false; // Explicitly disable for point
               }
               if (entity.polyline) {
                 entity.polyline.clampToGround = true;
-                entity.polyline.pickable = false; // Explicitly disable for polyline
               }
               if (entity.polygon) {
                 entity.polygon.classificationType = ClassificationType.BOTH;
                 // Native Cesium polygon outlines are incompatible with terrain clamping.
                 // We handle outlines via a separate Polyline entity.
                 entity.polygon.outline = false; // Explicitly disable native outline
-                entity.polygon.pickable = false; // Explicitly disable for polygon fill
               }
             });
             await viewer.dataSources.add(dataSource);
@@ -416,7 +427,7 @@ export function clearOverlayLayers() {
 }
 
 export async function initViewer() {
-  console.log("Initializing Viewer. Current appConfig:", appConfig);
+  // console.log("Initializing Viewer. Current appConfig:", appConfig); // Removed verbose log
 
   const ionToken = appConfig.cesium_ion_token;
   if (ionToken) {
