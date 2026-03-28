@@ -23,6 +23,8 @@ import {
   GeoJsonDataSource,
   KmlDataSource,
   CzmlDataSource,
+  HeightReference,
+  ClassificationType,
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
 
@@ -207,6 +209,31 @@ function checkAnalysisAvailability() {
   }
 }
 
+function applyOverlayStyling(dataSource, layerName) {
+  const saved = localStorage.getItem(`overlay_style_${layerName}`);
+  if (!saved) return;
+  try {
+    const style = JSON.parse(saved);
+    dataSource.entities.values.forEach((entity) => {
+      if (entity.polyline) {
+        if (style.color) entity.polyline.material = Color.fromCssColorString(style.color);
+        if (style.width) entity.polyline.width = parseFloat(style.width);
+      }
+      if (entity.polygon) {
+        if (style.fillColor) {
+          entity.polygon.material = Color.fromCssColorString(style.fillColor).withAlpha(0.5);
+        }
+        if (style.color) {
+          entity.polygon.outlineColor = Color.fromCssColorString(style.color);
+          entity.polygon.outline = true;
+        }
+      }
+    });
+  } catch (e) {
+    console.error("Failed to apply overlay styling", e);
+  }
+}
+
 export async function toggleOverlayLayer(layerConfig, active) {
   if (active) {
     if (!activeOverlays.has(layerConfig.name)) {
@@ -214,23 +241,28 @@ export async function toggleOverlayLayer(layerConfig, active) {
         let dataSource;
         try {
           if (layerConfig.file_type === "geojson") {
-            dataSource = await GeoJsonDataSource.load(layerConfig.url);
+            dataSource = await GeoJsonDataSource.load(layerConfig.url, {
+              clampToGround: true,
+            });
           } else if (layerConfig.file_type === "kml") {
             dataSource = await KmlDataSource.load(layerConfig.url, {
               canvas: viewer.canvas,
               camera: viewer.camera,
+              clampToGround: true,
             });
           } else if (layerConfig.file_type === "czml") {
             dataSource = await CzmlDataSource.load(layerConfig.url);
           }
           if (dataSource) {
-            await viewer.dataSources.add(dataSource);
-            activeOverlays.set(layerConfig.name, dataSource);
-          }
-        } catch (e) {
-          console.error(`Failed to load overlay file ${layerConfig.name}:`, e);
-        }
-      } else {
+            // Prefer internal name if available for UI consistency
+            if (dataSource.name && dataSource.name !== "file") {
+              layerConfig.displayName = dataSource.name;
+            }
+
+            applyOverlayStyling(dataSource, layerConfig.name);
+
+            // Post-process entities for better visibility on terrain
+            dataSource.entities.values.forEach((entity) => {
         const provider = await createImageryProvider(layerConfig);
         const cesiumLayer = viewer.imageryLayers.addImageryProvider(provider);
         activeOverlays.set(layerConfig.name, cesiumLayer);
@@ -292,6 +324,19 @@ export async function initViewer() {
 
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.camera.percentageChanged = 0.01;
+
+  // Zulu Clock
+  const zuluClock = document.getElementById("zuluClock");
+  if (zuluClock) {
+    setInterval(() => {
+      const now = new Date();
+      const h = String(now.getUTCHours()).padStart(2, "0");
+      const m = String(now.getUTCMinutes()).padStart(2, "0");
+      const s = String(now.getUTCSeconds()).padStart(2, "0");
+      zuluClock.innerText = `${h}:${m}:${s}Z`;
+    }, 1000);
+  }
+
   currentBaseLayer = viewer.imageryLayers.get(0);
   currentBaseLayerConfig = defaultBase;
 
