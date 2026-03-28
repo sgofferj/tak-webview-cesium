@@ -296,6 +296,9 @@ export async function toggleOverlayLayer(layerConfig, active) {
               }
               if (entity.polygon) {
                 entity.polygon.classificationType = ClassificationType.BOTH;
+                // Explicitly set height to 0 relative to ground to allow outlines
+                entity.polygon.height = 0;
+                entity.polygon.heightReference = HeightReference.RELATIVE_TO_GROUND;
               }
             });
             await viewer.dataSources.add(dataSource);
