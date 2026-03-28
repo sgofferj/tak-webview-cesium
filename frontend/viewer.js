@@ -341,6 +341,7 @@ export async function toggleOverlayLayer(layerConfig, active) {
               canvas: viewer.canvas,
               camera: viewer.camera,
               clampToGround: true, // Reinstated to true for proper filling on terrain
+              enablePickFeatures: false, // Disable picking for KML features
             });
           } else if (layerConfig.file_type === "czml") {
             dataSource = await CzmlDataSource.load(layerConfig.url);
