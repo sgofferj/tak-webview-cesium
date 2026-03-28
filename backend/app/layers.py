@@ -29,11 +29,12 @@ file_overlays_cache: list[dict[str, Any]] = []
 async def scan_file_overlays() -> list[dict[str, Any]]:
     """Scans the overlays directory for GeoJSON, KML, and CZML files."""
     overlays: list[dict[str, Any]] = []
-    directory = settings.overlays_dir
-    if not os.path.exists(directory):
+    directory_path = Path(settings.overlays_dir)
+    if not await directory_path.exists():
         return overlays
 
-    for filename in os.listdir(directory):
+    async for file_path in directory_path.iterdir():
+        filename = file_path.name
         ext = filename.lower().split(".")[-1]
         file_type = ext if ext != "json" else "geojson"
         layer_name = filename
@@ -41,26 +42,24 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
 
         if file_type == "geojson":
             try:
-                file_path = os.path.join(directory, filename)
-                with open(file_path, "r", encoding="utf-8") as f:
-                    geojson_data = json.load(f)
+                async with await file_path.open(encoding="utf-8") as f:
+                    geojson_data = json.loads(await f.read())
                     if "name" in geojson_data and geojson_data["name"]:
                         display_name = geojson_data["name"]
                     elif (
                         "features" in geojson_data
                         and geojson_data["features"]
                         and "properties" in geojson_data["features"][0]
-                        and "name" in geojson_data["features"][0]["properties"]
-                        and geojson_data["features"][0]["properties"]["name"]
                     ):
-                        display_name = geojson_data["features"][0]["properties"]["name"]
+                        first_feature_props = geojson_data["features"][0]["properties"]
+                        if "name" in first_feature_props and first_feature_props["name"]:
+                            display_name = first_feature_props["name"]
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Could not parse GeoJSON file {filename} for name: {e}")
         elif file_type == "kml":
             try:
-                file_path = os.path.join(directory, filename)
-                parser = etree.XMLParser(recover=True)
-                root = etree.parse(file_path, parser=parser).getroot()
+                # KML parsing remains synchronous as lxml does not support async file ops directly
+                root = etree.parse(str(file_path), parser=etree.XMLParser(recover=True)).getroot()
                 # KML namespace can vary, try to find name tag directly or with common namespaces
                 name_el = root.find(".//{*}name")
                 if name_el is not None and name_el.text:
@@ -68,12 +67,11 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
             except (etree.LxmlError, OSError) as e:
                 logger.warning(f"Could not parse KML file {filename} for name: {e}")
 
-
         if ext in ["geojson", "json", "kml", "czml"]:
             overlays.append(
                 {
                     "name": layer_name,
-                    "displayName": display_name,  # Add displayName here
+                    "displayName": display_name,
                     "type": "file",
                     "url": f"/api/overlays/{filename}",
                     "file_type": file_type,
