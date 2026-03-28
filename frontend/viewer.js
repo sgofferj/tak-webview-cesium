@@ -266,9 +266,15 @@ function applyOverlayStyling(dataSource, layerName) {
                   width: parseFloat(style.width),
                   material: Color.fromCssColorString(style.color),
                   clampToGround: true,
-                  zIndex: 1, // Ensure it's above the polygon fill if possible (experimental)
+                  // Removed experimental zIndex as it may cause issues.
+                  // Polylines rendered on top of clamped polygons might still be obscured
+                  // depending on camera angle and Cesium's depth test.
                 },
-                show: entity.show, // Inherit visibility from parent
+                show: new CallbackProperty(() => {
+                  // Safely check if the parent entity still exists and is shown
+                  const parentEntity = dataSource.entities.getById(entity.id);
+                  return parentEntity && parentEntity.show;
+                }, false),
               });
             } else {
               // Update existing polyline
