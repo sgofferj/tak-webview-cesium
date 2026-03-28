@@ -1212,7 +1212,6 @@ function processRemovalQueue() {
             ent.show = false; // Ensure top-level show is false
             viewer.entities.remove(ent);
           });
-          });
         }
       });
 
