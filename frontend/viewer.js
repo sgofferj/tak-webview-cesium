@@ -293,7 +293,8 @@ function applyOverlayStyling(dataSource, layerName) {
               console.log(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline updated with width ${style.width} and color ${style.color}.`);
             }
           } else {
-            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polygon has no exterior hierarchy or empty positions. Polyline outline skipped.`);
+            // Enhanced logging to show the hierarchy object itself
+            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polygon has no exterior hierarchy or empty positions. Polyline outline skipped. Hierarchy:`, hierarchy);
             if (outlinePolyline) {
               dataSource.entities.remove(outlinePolyline); // Ensure old polyline is removed if polygon becomes degenerate
             }
