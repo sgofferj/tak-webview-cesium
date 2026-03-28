@@ -416,8 +416,12 @@
         <h3>Overlay Styling</h3>
         <p>Set visual styles for file overlays.</p>
         <div style="margin-bottom: 15px;">
-          <label for="overlayColor" style="display: block; margin-bottom: 5px; font-size: 0.9em;">Outline Color</label>
-          <input type="color" id="overlayColor" value="#00ffff" style="width: 100%; height: 35px; border: none; padding: 0;">
+          <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Outline Color</label>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <input type="color" id="overlayColor" value="#00ffff" style="flex-grow: 1; height: 35px; border: none; padding: 0;">
+            <label for="overlayBorderNone" style="font-size: 0.9em; white-space: nowrap;">None</label>
+            <input type="checkbox" id="overlayBorderNone" style="width: 18px; height: 18px; cursor: pointer;">
+          </div>
         </div>
         <div style="margin-bottom: 15px;">
           <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Fill Color</label>

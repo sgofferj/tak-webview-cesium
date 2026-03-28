@@ -231,17 +231,53 @@ function applyOverlayStyling(dataSource, layerName) {
         if (style.width) entity.polyline.width = parseFloat(style.width);
       }
       if (entity.polygon) {
+        // Apply fill style
         if (style.fillNone) {
-          entity.polygon.material = Color.TRANSPARENT; // Set fill to transparent if 'none' is chosen
+          entity.polygon.material = Color.TRANSPARENT;
         } else if (style.fillColor) {
-          // Apply transparency if available, default to 0.5 (as before)
           const alpha = style.transparency !== undefined ? parseFloat(style.transparency) : 0.5;
           entity.polygon.material = Color.fromCssColorString(style.fillColor).withAlpha(alpha);
         }
-        if (style.color) {
-          entity.polygon.outlineColor = Color.fromCssColorString(style.color);
-          entity.polygon.outlineWidth = parseFloat(style.width); // Apply outline width
-          entity.polygon.outline = true;
+
+        // Disable Cesium's native polygon outline (it won't render on terrain anyway)
+        entity.polygon.outline = false;
+
+        // Manage a separate polyline for the outline
+        const outlineId = `${entity.id}-outline`;
+        let outlinePolyline = dataSource.entities.getById(outlineId);
+
+        if (style.borderNone) {
+          if (outlinePolyline) {
+            dataSource.entities.remove(outlinePolyline);
+          }
+        } else {
+          // Get positions from the polygon hierarchy
+          const hierarchy = entity.polygon.hierarchy.getValue(JulianDate.now());
+          if (hierarchy && hierarchy.exterior) {
+            const positions = hierarchy.exterior;
+
+            if (!outlinePolyline) {
+              // Create new polyline
+              outlinePolyline = dataSource.entities.add({
+                id: outlineId,
+                parent: entity, // Associate with the main entity
+                polyline: {
+                  positions: positions,
+                  width: parseFloat(style.width),
+                  material: Color.fromCssColorString(style.color),
+                  clampToGround: true,
+                  zIndex: 1, // Ensure it's above the polygon fill if possible (experimental)
+                },
+                show: entity.show, // Inherit visibility from parent
+              });
+            } else {
+              // Update existing polyline
+              outlinePolyline.polyline.positions = positions;
+              outlinePolyline.polyline.width = parseFloat(style.width);
+              outlinePolyline.polyline.material = Color.fromCssColorString(style.color);
+              outlinePolyline.show = entity.show;
+            }
+          }
         }
       }
     });
@@ -296,8 +332,9 @@ export async function toggleOverlayLayer(layerConfig, active) {
               }
               if (entity.polygon) {
                 entity.polygon.classificationType = ClassificationType.BOTH;
-                // Revert to clamping, as outlines are incompatible with terrain clamping.
-                // Outlines will be automatically disabled by Cesium.
+                // Native Cesium polygon outlines are incompatible with terrain clamping.
+                // We handle outlines via a separate Polyline entity.
+                entity.polygon.outline = false; // Explicitly disable native outline
               }
             });
             await viewer.dataSources.add(dataSource);
