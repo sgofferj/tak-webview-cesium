@@ -1111,14 +1111,11 @@ function processRemovalQueue() {
         pendingRemovals.delete(uid);
 
         if (state) {
-          // If a new state was created with same UID while this one was pending removal,
-          // don't remove anything - the new state owns these entities now OR has new ones.
-          // BUT: Usually we want to remove the OLD entities. 
-          // Re-verify if this is the CURRENT state for this UID
-          if (entityState[uid] === state) {
-             // If it is in entityState, it shouldn't be in pendingRemovals unless something is wrong.
-             return;
-          }
+          // If a new entity with the same UID has been created and is active in entityState,
+          // we should still remove the *old* Cesium entities associated with this 'state'
+          // object, as the new entity will have its own Cesium entities.
+          // The rescue logic in updateEntity() should have removed 'state' from pendingRemovals
+          // if it was to be kept active. So, any 'state' remaining here must be removed.
 
           const subEntities = [
             state.entity,
