@@ -258,13 +258,13 @@ export async function toggleOverlayLayer(layerConfig, active) {
         try {
           if (layerConfig.file_type === "geojson") {
             dataSource = await GeoJsonDataSource.load(layerConfig.url, {
-              clampToGround: true,
+              clampToGround: false, // Changed to false to allow polygon outlines
             });
           } else if (layerConfig.file_type === "kml") {
             dataSource = await KmlDataSource.load(layerConfig.url, {
               canvas: viewer.canvas,
               camera: viewer.camera,
-              clampToGround: true,
+              clampToGround: false, // Changed to false to allow polygon outlines
             });
           } else if (layerConfig.file_type === "czml") {
             dataSource = await CzmlDataSource.load(layerConfig.url);
