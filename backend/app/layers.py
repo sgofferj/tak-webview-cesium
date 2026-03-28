@@ -52,12 +52,17 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                     ):
                         first_feature = geojson_data["features"][0]
                         first_feature_props = first_feature.get("properties")
-                        if first_feature_props and "name" in first_feature_props:
-                            if first_feature_props["name"]:
-                                display_name = first_feature_props["name"]
+                        if (
+                            first_feature_props
+                            and "name" in first_feature_props
+                            and first_feature_props["name"]
+                        ):
+                            display_name = first_feature_props["name"]
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(
-                    "Error parsing GeoJSON file %s for name: %s", filename, e
+                    "Error parsing GeoJSON file %s for name: %s",
+                    filename,
+                    e,
                 )
         elif file_type == "kml":
             try:
@@ -72,7 +77,9 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                     display_name = name_el.text
             except (etree.LxmlError, OSError) as e:
                 logger.warning(
-                    "Error parsing KML file %s for name: %s", filename, e
+                    "Error parsing KML file %s for name: %s",
+                    filename,
+                    e,
                 )
 
         if ext in ["geojson", "json", "kml", "czml"]:
