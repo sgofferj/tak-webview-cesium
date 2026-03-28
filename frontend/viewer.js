@@ -254,8 +254,9 @@ function applyOverlayStyling(dataSource, layerName) {
         } else {
           // Get positions from the polygon hierarchy
           const hierarchy = entity.polygon.hierarchy.getValue(JulianDate.now());
-          if (hierarchy && hierarchy.exterior && hierarchy.exterior.length > 0) {
-            const positions = hierarchy.exterior;
+          // Use hierarchy.positions for GeoJSON-like data, which contains the exterior ring directly
+          if (hierarchy && hierarchy.positions && hierarchy.positions.length > 0) {
+            const positions = hierarchy.positions;
 
             if (!outlinePolyline) {
               // Create new polyline
@@ -268,9 +269,7 @@ function applyOverlayStyling(dataSource, layerName) {
                   material: Color.fromCssColorString(style.color),
                   clampToGround: true,
                   disableDepthTestDistance: Number.POSITIVE_INFINITY, // Ensure polyline is always visible on top
-                  // Removed experimental zIndex as it may cause issues.
-                  // Polylines rendered on top of clamped polygons might still be obscured
-                  // depending on camera angle and Cesium's depth test.
+                  pickable: false, // Make the outline non-pickable to prevent infobox
                 },
                 show: new CallbackProperty(() => {
                   // Safely check if the parent entity still exists and is shown
@@ -285,6 +284,7 @@ function applyOverlayStyling(dataSource, layerName) {
               outlinePolyline.polyline.width = parseFloat(style.width);
               outlinePolyline.polyline.material = Color.fromCssColorString(style.color);
               outlinePolyline.polyline.disableDepthTestDistance = Number.POSITIVE_INFINITY; // Ensure this is also set on update
+              outlinePolyline.polyline.pickable = false; // Ensure it remains non-pickable on update
               // Ensure show property also uses CallbackProperty for dynamic updates
               outlinePolyline.show = new CallbackProperty(() => {
                 const parentEntity = dataSource.entities.getById(entity.id);
@@ -297,12 +297,12 @@ function applyOverlayStyling(dataSource, layerName) {
             let reason = "unknown";
             if (!hierarchy) {
               reason = "hierarchy is null/undefined";
-            } else if (!hierarchy.exterior) {
-              reason = "hierarchy.exterior is null/undefined";
-            } else if (!Array.isArray(hierarchy.exterior)) {
-              reason = `hierarchy.exterior is not an array (type: ${typeof hierarchy.exterior})`;
-            } else if (hierarchy.exterior.length === 0) {
-              reason = "hierarchy.exterior is an empty array";
+            } else if (!hierarchy.positions) {
+              reason = "hierarchy.positions is null/undefined";
+            } else if (!Array.isArray(hierarchy.positions)) {
+              reason = `hierarchy.positions is not an array (type: ${typeof hierarchy.positions})`;
+            } else if (hierarchy.positions.length === 0) {
+              reason = "hierarchy.positions is an empty array";
             }
             console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline skipped because: ${reason}. Full hierarchy object:`, hierarchy);
 
@@ -367,6 +367,7 @@ export async function toggleOverlayLayer(layerConfig, active) {
                 // Native Cesium polygon outlines are incompatible with terrain clamping.
                 // We handle outlines via a separate Polyline entity.
                 entity.polygon.outline = false; // Explicitly disable native outline
+                entity.polygon.pickable = false; // Disable infobox for polygon fill
               }
             });
             await viewer.dataSources.add(dataSource);
