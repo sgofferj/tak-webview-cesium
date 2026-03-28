@@ -80,7 +80,6 @@ The following values are supported and can be provided either as environment var
 | `TAK_CALLSIGN` | `CesiumViewer` | Callsign used for enrollment and identification |
 | `TAK_UID` | `CesiumViewer-[Callsign]` | Unique ID for the viewer entity |
 | `SECRET_KEY` | (Random) | Secret for signing session cookies (Regenerated on every restart by default) |
-| `USER_ICONSETS_DIR` | `/user_iconsets` | Additional directory to scan for user-installed iconsets |
 | `LAYERS_CONFIG_FILE` | `customlayers.json` | Filename for custom layers configuration |
 | `TERRAIN_URL` | (Empty) | URL to a Cesium terrain provider (quantized-mesh or heightmap) |
 | `TERRAIN_EXAGGERATION` | `1.0` | Vertical exaggeration for terrain |

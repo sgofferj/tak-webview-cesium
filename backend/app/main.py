@@ -40,9 +40,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     await load_layers()
 
-    # In dynamic session-based mode, the TAK client starts ONLY when a user actively logs in.
+    # In dynamic session-based mode, the TAK client starts ONLY
+    # when a user actively logs in.
     logger.info("Application startup. Waiting for user login to start TAK client.")
-
     yield
     # Shutdown
     await tak_client.stop()
@@ -82,7 +82,7 @@ for uid, fs_path in user_iconset_mounts.items():
 # API Routes
 @app.get("/api/overlays/{filename}")
 async def get_overlay_file(filename: str) -> FileResponse:
-    file_path = os.path.join(settings._overlays_dir, filename)
+    file_path = os.path.join(settings.overlays_dir, filename)
     if os.path.exists(file_path):
         return FileResponse(file_path)
     raise HTTPException(status_code=404, detail="Overlay file not found")

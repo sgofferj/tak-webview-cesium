@@ -69,7 +69,10 @@ class AuthManager:
     def save_credentials(
         self, username: str, password: str, server: str, salt: str | None = None
     ) -> None:
-        """Save login hash and server address. Uses provided salt or generates new one."""
+        """
+        Save login hash and server address.
+        Uses provided salt or generates new one.
+        """
         pw_hash, salt = self.hash_password(password, salt)
         self._storage_key = self._derive_fernet_key(password, salt)
 
@@ -113,7 +116,7 @@ class AuthManager:
                 return True
             return False
         except (OSError, json.JSONDecodeError) as e:
-            logger.error(f"Failed to verify credentials: {e}")
+            logger.error("Failed to verify credentials: %s", e)
             return False
 
     def is_enrolled(self) -> bool:
@@ -248,7 +251,10 @@ class AuthManager:
                 )
 
                 # 5. Sign Client (Using our hidden enrollment secret as password)
-                sign_url = f"{base_url}/signClient/v2?clientUid={uid}&version=4.10.0&token={enrollment_secret}"
+                sign_url = (
+                    f"{base_url}/signClient/v2?clientUid={uid}"
+                    f"&version=4.10.0&token={enrollment_secret}"
+                )
                 headers = {
                     "Accept": "application/xml",
                     "Content-Type": "application/octet-stream",
@@ -304,20 +310,20 @@ class AuthManager:
                 key_bytes = raw_private_key.private_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.NoEncryption(),  # We encrypt with Fernet instead
+                    encryption_algorithm=serialization.NoEncryption(),
                 )
                 f_box = Fernet(storage_key)
                 encrypted_key_blob = f_box.encrypt(key_bytes)
 
                 # Write files
-                with open(self.key_file, "wb") as f:
+                with open(self.key_file, "wb") as f:  # noqa: ASYNC101
                     f.write(encrypted_key_blob)
 
-                with open(self.cert_file, "wb") as f:
+                with open(self.cert_file, "wb") as f:  # noqa: ASYNC101
                     f.write(client_cert_pem)
 
                 if ca_certs:
-                    with open(self.ca_file, "wb") as f:
+                    with open(self.ca_file, "wb") as f:  # noqa: ASYNC101
                         for cert in ca_certs:
                             f.write(cert)
                             f.write(b"\n")

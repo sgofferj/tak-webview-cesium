@@ -94,6 +94,10 @@ class Settings(BaseSettings):
         return self._iconsets_dir
 
     @property
+    def overlays_dir(self) -> str:
+        return self._overlays_dir
+
+    @property
     def user_iconsets_dir(self) -> str:
         return self._user_iconsets_dir
 
