@@ -281,7 +281,11 @@ function applyOverlayStyling(dataSource, layerName) {
               outlinePolyline.polyline.positions = positions;
               outlinePolyline.polyline.width = parseFloat(style.width);
               outlinePolyline.polyline.material = Color.fromCssColorString(style.color);
-              outlinePolyline.show = entity.show;
+              // Ensure show property also uses CallbackProperty for dynamic updates
+              outlinePolyline.show = new CallbackProperty(() => {
+                const parentEntity = dataSource.entities.getById(entity.id);
+                return parentEntity && parentEntity.show;
+              }, false);
             }
           }
         }
