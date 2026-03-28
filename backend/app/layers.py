@@ -71,7 +71,8 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                     str(file_path), parser=etree.XMLParser(recover=True)
                 )
                 root = tree.getroot()
-                # KML namespace can vary, try to find name tag directly or with common namespaces
+                # KML namespace can vary.
+                # Try to find name tag directly or with common namespaces.
                 name_el = root.find(".//{*}name")
                 if name_el is not None and name_el.text:
                     display_name = name_el.text
