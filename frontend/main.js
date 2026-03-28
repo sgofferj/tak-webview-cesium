@@ -473,19 +473,22 @@ function populateLayerPicker() {
         if (label) label.innerText = l.displayName;
       }
 
-      item.addEventListener("click", async (e) => {
-        const input = item.querySelector("input");
-        if (e.target !== input) {
-          input.checked = !input.checked;
-        }
-        if (input.checked) {
-          item.classList.add("active");
-        } else {
-          item.classList.remove("active");
-        }
-        await toggleOverlayLayer(l, input.checked);
-        saveAppState();
-      });
+      // Turning off the left click response for file overlays as requested.
+      // The overlay can still be styled via right-click.
+      // To re-enable toggling, uncomment the following block.
+      // item.addEventListener("click", async (e) => {
+      //   const input = item.querySelector("input");
+      //   if (e.target !== input) {
+      //     input.checked = !input.checked;
+      //   }
+      //   if (input.checked) {
+      //     item.classList.add("active");
+      //   } else {
+      //     item.classList.remove("active");
+      //   }
+      //   await toggleOverlayLayer(l, input.checked);
+      //   saveAppState();
+      // });
 
       // Right-click styling modal
       if (l.type === "file") {
