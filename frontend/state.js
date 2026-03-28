@@ -369,8 +369,10 @@ function refreshStaffCommentDefinitions() {
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
     .map((def) => {
-      const [search, label] = def.split("=");
-      return { search: search.trim(), label: (label || search).trim() };
+      const [rawSearch, rawLabel] = def.split("=");
+      const search = rawSearch.trim().replace(/^['"]|['"]$/g, ''); // Strip outer quotes
+      const label = (rawLabel || rawSearch).trim().replace(/^['"]|['"]$/g, ''); // Strip outer quotes
+      return { search, label };
     });
   
   // Config changed, rebuild the map for all current entities
@@ -557,7 +559,7 @@ export function updateStaffCommentsUI() {
     const groupKey = `staff-${search}`;
     const isExpanded = expandedStates.has(groupKey);
     html += `<div class="unit-group ${!isExpanded ? "collapsed" : ""}" id="group-${groupKey}">
-              <div class="unit-group-header" onclick="toggleCollapse('${groupKey}')">${label} (${matchingUnits.length})</div>
+              <div class="unit-group-header" onclick="toggleCollapse('${groupKey}')">${search} (${matchingUnits.length})</div>
               <div class="unit-group-content">`;
 
     if (matchingUnits.length > 0) {
