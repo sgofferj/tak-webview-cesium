@@ -1161,18 +1161,57 @@ function processRemovalQueue() {
             if (ent === state.trailEntity) state.trailEntity = null;
             if (ent === state.courseEntity) state.courseEntity = null;
 
-            ent.show = false;
-            // Clear general properties to break potential circular refs
+            // Explicitly nullify all relevant properties to ensure Cesium fully detaches them
             if (ent.billboard) {
               ent.billboard.show = false;
               ent.billboard.image = undefined;
-              // rotation and pixelOffset are already handled for courseEntity specifically
+              ent.billboard.color = undefined;
+              ent.billboard.rotation = undefined; // Redundant for courseEntity but harmless
+              ent.billboard.pixelOffset = undefined; // Redundant for courseEntity but harmless
+              ent.billboard.distanceDisplayCondition = undefined;
+              ent.billboard.disableDepthTestDistance = undefined;
+              ent.billboard.heightReference = undefined;
             }
             if (ent.label) {
               ent.label.show = false;
               ent.label.text = undefined;
+              ent.label.fillColor = undefined;
+              ent.label.outlineColor = undefined;
+              ent.label.backgroundColor = undefined;
+              ent.label.distanceDisplayCondition = undefined;
+              ent.label.disableDepthTestDistance = undefined;
+              ent.label.heightReference = undefined;
             }
+            if (ent.point) {
+              ent.point.show = false;
+              ent.point.color = undefined;
+              ent.point.outlineColor = undefined;
+              ent.point.pixelSize = undefined;
+              ent.point.distanceDisplayCondition = undefined;
+              ent.point.disableDepthTestDistance = undefined;
+              ent.point.heightReference = undefined;
+            }
+            if (ent.polyline) {
+              ent.polyline.show = false;
+              ent.polyline.positions = undefined;
+              ent.polyline.width = undefined;
+              ent.polyline.material = undefined;
+              ent.polyline.clampToGround = undefined;
+              ent.polyline.distanceDisplayCondition = undefined;
+              ent.polyline.disableDepthTestDistance = undefined;
+            }
+            if (ent.polygon) {
+              ent.polygon.show = false;
+              ent.polygon.hierarchy = undefined;
+              ent.polygon.material = undefined;
+              ent.polygon.outline = undefined;
+              ent.polygon.classificationType = undefined;
+              ent.polygon.distanceDisplayCondition = undefined;
+            }
+
+            ent.show = false; // Ensure top-level show is false
             viewer.entities.remove(ent);
+          });
           });
         }
       });
