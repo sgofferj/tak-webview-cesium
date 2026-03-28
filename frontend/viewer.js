@@ -249,11 +249,12 @@ function applyOverlayStyling(dataSource, layerName) {
         if (style.borderNone) {
           if (outlinePolyline) {
             dataSource.entities.remove(outlinePolyline);
+            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline removed (borderNone).`);
           }
         } else {
           // Get positions from the polygon hierarchy
           const hierarchy = entity.polygon.hierarchy.getValue(JulianDate.now());
-          if (hierarchy && hierarchy.exterior) {
+          if (hierarchy && hierarchy.exterior && hierarchy.exterior.length > 0) {
             const positions = hierarchy.exterior;
 
             if (!outlinePolyline) {
@@ -277,6 +278,7 @@ function applyOverlayStyling(dataSource, layerName) {
                   return parentEntity && parentEntity.show;
                 }, false),
               });
+              console.log(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline created with width ${style.width} and color ${style.color}.`);
             } else {
               // Update existing polyline
               outlinePolyline.polyline.positions = positions;
@@ -288,6 +290,12 @@ function applyOverlayStyling(dataSource, layerName) {
                 const parentEntity = dataSource.entities.getById(entity.id);
                 return parentEntity && parentEntity.show;
               }, false);
+              console.log(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline updated with width ${style.width} and color ${style.color}.`);
+            }
+          } else {
+            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polygon has no exterior hierarchy or empty positions. Polyline outline skipped.`);
+            if (outlinePolyline) {
+              dataSource.entities.remove(outlinePolyline); // Ensure old polyline is removed if polygon becomes degenerate
             }
           }
         }
