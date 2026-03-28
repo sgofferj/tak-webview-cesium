@@ -264,13 +264,14 @@ function applyOverlayStyling(dataSource, layerName) {
               outlinePolyline = dataSource.entities.add({
                 id: outlineId,
                 parent: entity, // Associate with the main entity
+                pickable: false, // Disable picking for the outline entity itself
                 polyline: {
                   positions: positions,
                   width: parseFloat(style.width),
                   material: Color.fromCssColorString(style.color),
                   clampToGround: true,
                   disableDepthTestDistance: Number.POSITIVE_INFINITY, // Ensure polyline is always visible on top
-                  pickable: false, // Make the outline non-pickable to prevent infobox
+                  pickable: false, // Make the outline polyline graphic non-pickable
                 },
                 show: new CallbackProperty(() => {
                   // Safely check if the parent entity still exists and is shown
