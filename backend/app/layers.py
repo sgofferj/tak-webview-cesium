@@ -59,7 +59,9 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
         elif file_type == "kml":
             try:
                 # KML parsing remains synchronous as lxml does not support async file ops directly
-                root = etree.parse(str(file_path), parser=etree.XMLParser(recover=True)).getroot()
+                root = etree.parse(
+                    str(file_path), parser=etree.XMLParser(recover=True)
+                ).getroot()
                 # KML namespace can vary, try to find name tag directly or with common namespaces
                 name_el = root.find(".//{*}name")
                 if name_el is not None and name_el.text:
