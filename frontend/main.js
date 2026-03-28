@@ -30,6 +30,7 @@ import {
   getFilters,
   updateEntitySelectionVisibility,
   setCameraTilt,
+  setTabVisibility,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -177,9 +178,11 @@ async function startApp() {
     if (document.hidden) {
       console.log("Tab backgrounded: pausing rendering loop");
       viewer.useDefaultRenderLoop = false;
+      setTabVisibility(false);
     } else {
       console.log("Tab focused: resuming rendering loop");
       viewer.useDefaultRenderLoop = true;
+      setTabVisibility(true);
     }
   });
 }
@@ -458,6 +461,13 @@ function populateLayerPicker() {
   if (appConfig.overlay_layers && appConfig.overlay_layers.length > 0) {
     appConfig.overlay_layers.forEach((l) => {
       const item = createLayerItem(l, false, "overlayLayer", false);
+
+      // Handle internal name preference for label
+      if (l.displayName) {
+        const label = item.querySelector(".layer-label");
+        if (label) label.innerText = l.displayName;
+      }
+
       item.addEventListener("click", async (e) => {
         const input = item.querySelector("input");
         if (e.target !== input) {
@@ -471,8 +481,22 @@ function populateLayerPicker() {
         await toggleOverlayLayer(l, input.checked);
         saveAppState();
       });
+
+      // Right-click styling modal
+      if (l.type === "file") {
+        item.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          showOverlayStyleModal(l);
+        });
+      }
+
       overlayGrid.appendChild(item);
     });
+  } else {
+    const noOverlaysMessage = document.createElement("div");
+    noOverlaysMessage.style.cssText = "grid-column: 1 / -1; text-align: center; color: #888; font-size: 0.8em; padding: 10px;";
+    noOverlaysMessage.innerText = i18n.noOverlaysMessage || "No overlay files found.";
+    overlayGrid.appendChild(noOverlaysMessage);
   }
 
   // Analysis Section
@@ -538,6 +562,57 @@ function populateLayerPicker() {
     setContourSpacing(currentDensity);
     saveAppState();
   });
+
+  // Attach event listener for click outside modals
+  document.addEventListener("click", (e) => {
+    const overlayStyleModal = document.getElementById("overlayStyleModal");
+    if (
+      overlayStyleModal &&
+      !overlayStyleModal.classList.contains("modal-hidden") &&
+      !overlayStyleModal.contains(e.target) &&
+      e.target.id !== "saveOverlayStyle" &&
+      e.target.id !== "closeOverlayStyle"
+    ) {
+      overlayStyleModal.classList.add("modal-hidden");
+    }
+  }, true); // Use capture phase to ensure it runs before other click handlers
+
+}
+
+function showOverlayStyleModal(layer) {
+  const modal = document.getElementById("overlayStyleModal");
+  if (!modal) return;
+
+  const colorInput = document.getElementById("overlayColor");
+  const fillColorInput = document.getElementById("overlayFillColor");
+  const widthInput = document.getElementById("overlayWidth");
+  const saveBtn = document.getElementById("saveOverlayStyle");
+
+  const saved = localStorage.getItem(`overlay_style_${layer.name}`);
+  const currentStyle = saved ? JSON.parse(saved) : { color: "#00ffff", fillColor: "#00ffff", width: 2 };
+
+  colorInput.value = currentStyle.color;
+  fillColorInput.value = currentStyle.fillColor;
+  widthInput.value = currentStyle.width;
+
+  saveBtn.onclick = async () => {
+    const style = {
+      color: colorInput.value,
+      fillColor: fillColorInput.value,
+      width: widthInput.value,
+    };
+    localStorage.setItem(`overlay_style_${layer.name}`, JSON.stringify(style));
+    modal.classList.add("modal-hidden");
+    // Reload layer if it's active
+    const input = document.getElementById(`overlay-${CSS.escape(layer.name)}`);
+    if (input && input.checked) {
+      await toggleOverlayLayer(layer, false);
+      await toggleOverlayLayer(layer, true);
+    }
+  };
+
+  document.getElementById("closeOverlayStyle").onclick = () => modal.classList.add("modal-hidden");
+  modal.classList.remove("modal-hidden");
 }
 
 function setupEvents() {
@@ -614,12 +689,6 @@ function setupEvents() {
   });
 
   const updateZoom = () => {
-    const height = viewer.camera.positionCartographic.height;
-    const zoom = Math.floor(Math.log2(35200000 / height));
-    const zoomEl = document.getElementById("statusZoom");
-    if (zoomEl) zoomEl.innerText = `Z${Math.max(0, zoom)}`;
-
-    // Update camera tilt state (limit visual range if not looking straight down)
     const pitch = viewer.camera.pitch;
     // -PI/2 is straight down. If pitch is greater than -PI/2 + epsilon, we are tilted.
     const isTilted = pitch > -Math.PI / 2 + 0.1;
