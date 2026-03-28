@@ -66,7 +66,8 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                 )
         elif file_type == "kml":
             try:
-                # KML parsing remains synchronous as lxml does not support async file ops directly
+                # KML parsing remains synchronous as lxml does not support
+                # async file ops directly.
                 tree = etree.parse(
                     str(file_path), parser=etree.XMLParser(recover=True)
                 )
