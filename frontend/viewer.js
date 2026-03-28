@@ -266,6 +266,7 @@ function applyOverlayStyling(dataSource, layerName) {
                   width: parseFloat(style.width),
                   material: Color.fromCssColorString(style.color),
                   clampToGround: true,
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY, // Ensure polyline is always visible on top
                   // Removed experimental zIndex as it may cause issues.
                   // Polylines rendered on top of clamped polygons might still be obscured
                   // depending on camera angle and Cesium's depth test.
@@ -281,6 +282,7 @@ function applyOverlayStyling(dataSource, layerName) {
               outlinePolyline.polyline.positions = positions;
               outlinePolyline.polyline.width = parseFloat(style.width);
               outlinePolyline.polyline.material = Color.fromCssColorString(style.color);
+              outlinePolyline.polyline.disableDepthTestDistance = Number.POSITIVE_INFINITY; // Ensure this is also set on update
               // Ensure show property also uses CallbackProperty for dynamic updates
               outlinePolyline.show = new CallbackProperty(() => {
                 const parentEntity = dataSource.entities.getById(entity.id);
