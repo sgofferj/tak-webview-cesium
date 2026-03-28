@@ -40,7 +40,7 @@ export function generateRandomColor() {
 }
 
 export let viewer;
-const activeOverlays = new Map();
+export const activeOverlays = new Map(); // Export activeOverlays
 let currentBaseLayer = null;
 let currentBaseLayerConfig = null;
 let isDarkMode = false;
