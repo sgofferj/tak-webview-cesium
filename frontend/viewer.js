@@ -294,7 +294,6 @@ export async function toggleOverlayLayer(layerConfig, active) {
         activeOverlays.set(layerConfig.name, cesiumLayer);
       }
     }
-    }
   } else {
     const overlay = activeOverlays.get(layerConfig.name);
     if (overlay) {
