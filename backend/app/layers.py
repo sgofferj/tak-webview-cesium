@@ -54,7 +54,7 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                         if "name" in first_feature_props and first_feature_props["name"]:
                             display_name = first_feature_props["name"]
             except (json.JSONDecodeError, OSError) as e:
-                logger.warning(f"Could not parse GeoJSON file {filename} for name: {e}")
+                logger.warning("Error parsing GeoJSON file %s for name: %s", filename, e)
         elif file_type == "kml":
             try:
                 # KML parsing remains synchronous as lxml does not support async file ops directly
@@ -67,7 +67,7 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                 if name_el is not None and name_el.text:
                     display_name = name_el.text
             except (etree.LxmlError, OSError) as e:
-                logger.warning(f"Could not parse KML file {filename} for name: {e}")
+                logger.warning("Error parsing KML file %s for name: %s", filename, e)
 
         if ext in ["geojson", "json", "kml", "czml"]:
             overlays.append(
