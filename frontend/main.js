@@ -32,6 +32,7 @@ import {
   updateEntitySelectionVisibility,
   setCameraTilt,
   setTabVisibility,
+  updateStaffCommentsUI, // Import updateStaffCommentsUI
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -171,6 +172,8 @@ async function startApp() {
   }
 
   startWebSocket();
+  // Initialize staff comments UI after config and translations are loaded
+  updateStaffCommentsUI(); 
 
   // Start auto-save
   viewer.camera.moveEnd.addEventListener(saveAppState);
