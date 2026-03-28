@@ -53,6 +53,25 @@ const blobUsageRegistry = new Map();
 
 // Global tilt state (set by viewer.js)
 export let isCameraTilted = false;
+export let isTabVisible = true;
+
+const backgroundRemovalQueue = new Set();
+
+export function setTabVisibility(visible) {
+  isTabVisible = visible;
+  if (visible) {
+    processBackgroundRemovals();
+  }
+}
+
+function processBackgroundRemovals() {
+  if (backgroundRemovalQueue.size === 0) return;
+  const uids = Array.from(backgroundRemovalQueue);
+  backgroundRemovalQueue.clear();
+  uids.forEach((uid) => {
+    removeEntity(uid);
+  });
+}
 
 export function setCameraTilt(tilted) {
   if (isCameraTilted !== tilted) {
@@ -66,6 +85,10 @@ export let currentFilter = "";
 export let currentAffiliationFilter = "all";
 export let unitListDirty = true;
 export const expandedStates = new Set();
+
+export const staffCommentMap = new Map();
+let staffCommentDefinitions = [];
+let lastStaffCommentConfig = null;
 
 export let previouslySelectedEntityId = null;
 
@@ -337,6 +360,79 @@ export function createDescription(data) {
   return html;
 }
 
+function refreshStaffCommentDefinitions() {
+  if (lastStaffCommentConfig === appConfig.tak_staff_comments) return staffCommentDefinitions;
+  
+  lastStaffCommentConfig = appConfig.tak_staff_comments;
+  staffCommentDefinitions = (appConfig.tak_staff_comments || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((def) => {
+      const [search, label] = def.split("=");
+      return { search: search.trim(), label: (label || search).trim() };
+    });
+  
+  // Config changed, rebuild the map for all current entities
+  staffCommentMap.clear();
+  staffCommentDefinitions.forEach(def => {
+    staffCommentMap.set(def.search, new Set());
+  });
+
+  Object.keys(entityState).forEach(uid => {
+    const state = entityState[uid];
+    if (state && !state._isRemoved) {
+      _doUpdateStaffCommentMatching(uid, state.lastData, state);
+    }
+  });
+
+  return staffCommentDefinitions;
+}
+
+function checkStaffCommentMatch(data, search, label) {
+  const sc = data.staff_comment;
+  if (sc === search || sc === label) return true;
+
+  const searchLower = search.toLowerCase();
+  for (const key in data) {
+    const val = data[key];
+    if (typeof val === "string" && val.toLowerCase().includes(searchLower)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function _doUpdateStaffCommentMatching(uid, data, state) {
+  const currentMatches = new Set();
+  
+  staffCommentDefinitions.forEach(({ search, label }) => {
+    if (checkStaffCommentMatch(data, search, label)) {
+      currentMatches.add(search);
+      if (!staffCommentMap.has(search)) {
+        staffCommentMap.set(search, new Set());
+      }
+      staffCommentMap.get(search).add(uid);
+    }
+  });
+
+  // Remove from old matches that are no longer matches
+  if (state.matchedStaffComments) {
+    state.matchedStaffComments.forEach(oldSearch => {
+      if (!currentMatches.has(oldSearch)) {
+        const set = staffCommentMap.get(oldSearch);
+        if (set) set.delete(uid);
+      }
+    });
+  }
+  state.matchedStaffComments = currentMatches;
+}
+
+function updateStaffCommentMatching(uid, data, state) {
+  refreshStaffCommentDefinitions();
+  _doUpdateStaffCommentMatching(uid, data, state);
+}
+
 export function updateUnitListUI() {
   if (!unitListDirty) return;
   const content = document.getElementById("unitListContent");
@@ -434,14 +530,7 @@ export function updateStaffCommentsUI() {
   const content = document.getElementById("staffCommentsContent");
   if (!content) return;
 
-  const commentDefs = (appConfig.tak_staff_comments || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map((def) => {
-      const [search, label] = def.split("=");
-      return { search: search.trim(), label: (label || search).trim() };
-    });
+  const commentDefs = refreshStaffCommentDefinitions();
 
   if (commentDefs.length === 0) {
     content.innerHTML = "";
@@ -450,42 +539,22 @@ export function updateStaffCommentsUI() {
 
   let html = "";
   commentDefs.forEach(({ search, label }) => {
+    const uids = staffCommentMap.get(search);
+    if (!uids || uids.size === 0) return;
+
     const matchingUnits = [];
-    const searchLower = search.toLowerCase();
-
-    Object.keys(entityState).forEach((uid) => {
+    uids.forEach(uid => {
       const state = entityState[uid];
-      if (!state || state._isRemoved) return;
-
-      const data = state.lastData;
-      const sc = data.staff_comment;
-
-      // Match if sc field matches the search pattern OR the label
-      let isMatch = sc === search || sc === label;
-
-      // Fallback: search search term in all properties
-      if (!isMatch) {
-        for (const key in data) {
-          const val = data[key];
-          if (
-            typeof val === "string" &&
-            val.toLowerCase().includes(searchLower)
-          ) {
-            isMatch = true;
-            break;
-          }
-        }
-      }
-
-      if (isMatch) {
+      if (state && !state._isRemoved) {
         matchingUnits.push({
           uid: uid,
-          callsign: data.callsign,
+          callsign: state.lastData.callsign,
           color: state.lastRgbColor || "white",
           iconUrl: state.lastIconUrl || "",
         });
       }
     });
+
     if (matchingUnits.length > 0) {
       const groupKey = `staff-${search}`;
       const isExpanded = expandedStates.has(groupKey);
@@ -529,11 +598,11 @@ window.zoomToUnit = function (uid) {
 
 function drawGroupIcon(name, role, how) {
   const canvas = document.createElement("canvas");
-  canvas.width = 192;
-  canvas.height = 192;
+  canvas.width = 156;
+  canvas.height = 156;
   const ctx = canvas.getContext("2d");
-  const cx = 96,
-    cy = 96;
+  const cx = 78,
+    cy = 78;
 
   const groupColorMap = {
     White: "#ffffff",
@@ -567,32 +636,32 @@ function drawGroupIcon(name, role, how) {
   const abbr = rawAbbr === "none" ? "" : rawAbbr;
 
   ctx.beginPath();
-  ctx.arc(cx, cy, 88, 0, 2 * Math.PI); // Slightly smaller radius (was 96)
+  ctx.arc(cx, cy, 71.5, 0, 2 * Math.PI); // Proportional to 88 on 192
   ctx.fillStyle = fillColor;
   ctx.fill();
-  ctx.lineWidth = 12; // Thicker border
+  ctx.lineWidth = 12; // Keeps 2px border at 26x26 icon size
   ctx.strokeStyle = "black";
   ctx.stroke();
 
   if (how !== "m-g") {
     ctx.beginPath();
-    ctx.moveTo(cx - 62, cy + 62);
-    ctx.lineTo(cx + 62, cy - 62);
+    ctx.moveTo(cx - 50, cy + 50); // Proportional to 62 on 192
+    ctx.lineTo(cx + 50, cy - 50);
     ctx.lineWidth = 16;
     ctx.strokeStyle = "black";
     ctx.stroke();
   }
 
   if (abbr) {
-    ctx.font = "bold 80px sans-serif";
+    ctx.font = "bold 65px sans-serif"; // Proportional to 80 on 192
     const textMetrics = ctx.measureText(abbr);
     ctx.fillStyle = fillColor;
     // Box behind text for legibility
     ctx.fillRect(
-      cx - textMetrics.width / 2 - 10,
-      cy - 50,
-      textMetrics.width + 20,
-      100,
+      cx - textMetrics.width / 2 - 8,
+      cy - 40,
+      textMetrics.width + 16,
+      80,
     );
     ctx.fillStyle = "black";
     ctx.textAlign = "center";
@@ -620,6 +689,11 @@ export async function updateEntity(incomingData) {
   }
   const uid = data.uid || data.i;
   if (!uid) return;
+
+  // RESCUE: If it's in the background removal queue, but we got a fresh update, remove from queue
+  if (backgroundRemovalQueue.has(uid)) {
+    backgroundRemovalQueue.delete(uid);
+  }
 
   // RESCUE: If it's in the removal queue, but we got a fresh update, stop the removal
   if (pendingRemovals.has(uid)) {
@@ -918,8 +992,8 @@ export async function updateEntity(incomingData) {
         if (useTeamCircle) {
           const canvas = drawGroupIcon(group_name, group_role, how);
           iUrl = await canvasToBlobUrl(canvas);
-          w = 32;
-          h = 32;
+          w = 26;
+          h = 26;
         } else if (iconsetUrl) {
           iUrl = iconsetUrl;
           bCol = color ? cesiumColor : Color.WHITE;
@@ -1006,6 +1080,7 @@ export async function updateEntity(incomingData) {
   }
 
   throttledUpdateUnitList();
+  updateStaffCommentMatching(uid, state.lastData, state);
   updateStaffCommentsUI();
 }
 
@@ -1112,11 +1187,23 @@ function processRemovalQueue() {
 }
 
 export function removeEntity(uid) {
+  if (!isTabVisible) {
+    backgroundRemovalQueue.add(uid);
+    return;
+  }
   const state = entityState[uid];
   if (!state) return;
 
   delete entityState[uid];
   state._isRemoved = true;
+
+  // Clean up staff comment matches
+  if (state.matchedStaffComments) {
+    state.matchedStaffComments.forEach(search => {
+      const set = staffCommentMap.get(search);
+      if (set) set.delete(uid);
+    });
+  }
 
   if (state.entity) state.entity.show = false;
   if (state.trailEntity) state.trailEntity.show = false;
@@ -1170,7 +1257,7 @@ setInterval(() => {
   const now = Date.now();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state || state._isRemoved) return;
+    if (!state || state._isRemoved || backgroundRemovalQueue.has(uid)) return;
     // STALE GRACE PERIOD: 120s
     if (state.staleAt && now > state.staleAt + 120000) {
       console.log(
