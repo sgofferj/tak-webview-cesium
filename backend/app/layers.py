@@ -50,8 +50,13 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                         geojson_data.get("features")
                         and geojson_data["features"][0].get("properties")
                     ):
-                        first_feature_props = geojson_data["features"][0]["properties"]
-                        if "name" in first_feature_props and first_feature_props["name"]:
+                        first_feature = geojson_data["features"][0]
+                        first_feature_props = first_feature.get("properties")
+                        if (
+                            first_feature_props
+                            and "name" in first_feature_props
+                            and first_feature_props["name"]
+                        ):
                             display_name = first_feature_props["name"]
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning("Error parsing GeoJSON file %s for name: %s", filename, e)
