@@ -26,6 +26,7 @@ import {
   HeightReference,
   ClassificationType,
   JulianDate,
+  CallbackProperty, // Import CallbackProperty
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
 
@@ -345,8 +346,10 @@ export async function toggleOverlayLayer(layerConfig, active) {
 
             applyOverlayStyling(dataSource, layerConfig.name);
 
-            // Post-process entities for better visibility on terrain
+            // Post-process entities for better visibility on terrain and disable picking
             dataSource.entities.values.forEach((entity) => {
+              entity.pickable = false; // Disable infobox for all overlay entities
+
               if (entity.billboard) {
                 entity.billboard.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
@@ -367,7 +370,7 @@ export async function toggleOverlayLayer(layerConfig, active) {
                 // Native Cesium polygon outlines are incompatible with terrain clamping.
                 // We handle outlines via a separate Polyline entity.
                 entity.polygon.outline = false; // Explicitly disable native outline
-                entity.polygon.pickable = false; // Disable infobox for polygon fill
+                // entity.polygon.pickable = false; // This is now covered by entity.pickable = false above
               }
             });
             await viewer.dataSources.add(dataSource);
