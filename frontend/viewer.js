@@ -240,6 +240,7 @@ function applyOverlayStyling(dataSource, layerName) {
         }
         if (style.color) {
           entity.polygon.outlineColor = Color.fromCssColorString(style.color);
+          entity.polygon.outlineWidth = parseFloat(style.width); // Apply outline width
           entity.polygon.outline = true;
         }
       }
