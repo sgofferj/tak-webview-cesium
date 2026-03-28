@@ -27,6 +27,8 @@ import {
   ClassificationType,
   JulianDate,
   CallbackProperty, // Import CallbackProperty
+  ScreenSpaceEventHandler, // Import ScreenSpaceEventHandler
+  ScreenSpaceEventType, // Import ScreenSpaceEventType for click events
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
 
@@ -458,6 +460,27 @@ export async function initViewer() {
   });
 
   // Add a listener to immediately deselect any entity that belongs to an active overlay
+  // Intercept LEFT_CLICK events to prevent infobox for overlay entities
+  const handler = new ScreenSpaceEventHandler(viewer.canvas);
+  handler.setInputAction((click) => {
+    const pickedObject = viewer.scene.pick(click.position);
+    if (pickedObject && pickedObject.id) {
+      // Check if the picked object (entity) belongs to an active file overlay
+      for (const [layerName, overlay] of activeOverlays) {
+        // Only consider DataSources, as they hold file-based entities
+        if (overlay && overlay.entities && overlay.entities.contains(pickedObject.id)) {
+          viewer.selectedEntity = undefined; // Clear any potential selection
+          // Stop processing this click, effectively "hijacking" it
+          // This prevents Cesium's default picking behavior and thus the infobox.
+          return;
+        }
+      }
+    }
+  }, ScreenSpaceEventType.LEFT_CLICK);
+
+  // Existing listener to immediately deselect any entity that belongs to an active overlay.
+  // This listener will now act as a secondary failsafe, as the ScreenSpaceEventHandler
+  // should prevent selection of overlay entities in the first place.
   viewer.selectedEntityChanged.addEventListener(() => {
     const selectedEntity = viewer.selectedEntity;
     if (selectedEntity) {
