@@ -293,8 +293,19 @@ function applyOverlayStyling(dataSource, layerName) {
               console.log(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline updated with width ${style.width} and color ${style.color}.`);
             }
           } else {
-            // Enhanced logging to show the hierarchy object itself
-            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polygon has no exterior hierarchy or empty positions. Polyline outline skipped. Hierarchy:`, hierarchy);
+            // Further enhanced logging to pinpoint the exact reason for skipping
+            let reason = "unknown";
+            if (!hierarchy) {
+              reason = "hierarchy is null/undefined";
+            } else if (!hierarchy.exterior) {
+              reason = "hierarchy.exterior is null/undefined";
+            } else if (!Array.isArray(hierarchy.exterior)) {
+              reason = `hierarchy.exterior is not an array (type: ${typeof hierarchy.exterior})`;
+            } else if (hierarchy.exterior.length === 0) {
+              reason = "hierarchy.exterior is an empty array";
+            }
+            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline skipped because: ${reason}. Full hierarchy object:`, hierarchy);
+
             if (outlinePolyline) {
               dataSource.entities.remove(outlinePolyline); // Ensure old polyline is removed if polygon becomes degenerate
             }
