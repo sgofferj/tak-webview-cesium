@@ -589,6 +589,7 @@ function showOverlayStyleModal(layer) {
   if (!modal) return;
 
   const colorInput = document.getElementById("overlayColor");
+  const borderNoneCheckbox = document.getElementById("overlayBorderNone"); // New checkbox
   const fillColorInput = document.getElementById("overlayFillColor");
   const fillNoneCheckbox = document.getElementById("overlayFillNone");
   const transparencyInput = document.getElementById("overlayTransparency");
@@ -601,6 +602,7 @@ function showOverlayStyleModal(layer) {
     currentStyle = JSON.parse(saved);
     // Ensure all properties exist from older saves
     currentStyle.color = currentStyle.color || "#00ffff";
+    currentStyle.borderNone = currentStyle.borderNone || false; // New property
     currentStyle.fillColor = currentStyle.fillColor || "#00ffff";
     currentStyle.width = currentStyle.width !== undefined ? currentStyle.width : 2;
     currentStyle.fillNone = currentStyle.fillNone || false;
@@ -608,27 +610,38 @@ function showOverlayStyleModal(layer) {
   } else {
     // Generate random color if no saved style
     const randomColor = generateRandomColor();
-    currentStyle = { color: randomColor, fillColor: randomColor, width: 2, fillNone: false, transparency: 0.5 };
+    currentStyle = { color: randomColor, borderNone: false, fillColor: randomColor, width: 2, fillNone: false, transparency: 0.5 };
   }
 
   colorInput.value = currentStyle.color;
+  borderNoneCheckbox.checked = currentStyle.borderNone; // Set state of new checkbox
   fillColorInput.value = currentStyle.fillColor;
   fillNoneCheckbox.checked = currentStyle.fillNone;
   transparencyInput.value = currentStyle.transparency * 100; // Convert to percentage
   widthInput.value = currentStyle.width;
 
-  // Add event listener for fillNoneCheckbox
+  // Event listener for borderNoneCheckbox
+  borderNoneCheckbox.onchange = () => {
+    colorInput.disabled = borderNoneCheckbox.checked;
+    widthInput.disabled = borderNoneCheckbox.checked;
+  };
+  // Initialize disabled state for border controls
+  colorInput.disabled = borderNoneCheckbox.checked;
+  widthInput.disabled = borderNoneCheckbox.checked;
+
+  // Add event listener for fillNoneCheckbox (existing)
   fillNoneCheckbox.onchange = () => {
     fillColorInput.disabled = fillNoneCheckbox.checked;
     transparencyInput.disabled = fillNoneCheckbox.checked;
   };
-  // Initialize disabled state
+  // Initialize disabled state (existing)
   fillColorInput.disabled = fillNoneCheckbox.checked;
   transparencyInput.disabled = fillNoneCheckbox.checked;
 
   saveBtn.onclick = async () => {
     const style = {
       color: colorInput.value,
+      borderNone: borderNoneCheckbox.checked, // Save new borderNone state
       fillColor: fillColorInput.value,
       width: widthInput.value,
       fillNone: fillNoneCheckbox.checked,
