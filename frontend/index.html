@@ -390,7 +390,6 @@
       </div>
 
       <div id="statusBar" class="hidden">
-        <div id="zuluClock"></div>
         <div id="statusCert">
           Cert: <span id="certCN"></span> (<span id="certExpiry"></span>)
         </div>
@@ -400,6 +399,7 @@
           <button id="authLogout">Logout</button>
           <button id="authForget">Forget</button>
         </div>
+        <div id="zuluClock"></div>
       </div>
     </div>
 
@@ -420,8 +420,14 @@
           <input type="color" id="overlayColor" value="#00ffff" style="width: 100%; height: 35px; border: none; padding: 0;">
         </div>
         <div style="margin-bottom: 15px;">
-          <label for="overlayFillColor" style="display: block; margin-bottom: 5px; font-size: 0.9em;">Fill Color</label>
-          <input type="color" id="overlayFillColor" value="#00ffff" style="width: 100%; height: 35px; border: none; padding: 0;">
+          <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Fill Color</label>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <input type="color" id="overlayFillColor" value="#00ffff" style="flex-grow: 1; height: 35px; border: none; padding: 0;">
+            <label for="overlayFillNone" style="font-size: 0.9em; white-space: nowrap;">None</label>
+            <input type="checkbox" id="overlayFillNone" style="width: 18px; height: 18px; cursor: pointer;">
+          </div>
+          <label for="overlayTransparency" style="display: block; margin-bottom: 5px; font-size: 0.9em;">Fill Transparency (%)</label>
+          <input type="range" id="overlayTransparency" min="0" max="100" value="50" step="1" style="width: 100%; -webkit-appearance: none; appearance: none; height: 8px; background: #555; border-radius: 5px; outline: none; transition: opacity .2s;">
         </div>
         <div style="margin-bottom: 20px;">
           <label for="overlayWidth" style="display: block; margin-bottom: 5px; font-size: 0.9em;">Outline Width</label>

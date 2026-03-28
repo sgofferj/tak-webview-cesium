@@ -35,13 +35,48 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
 
     for filename in os.listdir(directory):
         ext = filename.lower().split(".")[-1]
+        file_type = ext if ext != "json" else "geojson"
+        layer_name = filename
+        display_name = filename
+
+        if file_type == "geojson":
+            try:
+                file_path = os.path.join(directory, filename)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    geojson_data = json.load(f)
+                    if "name" in geojson_data and geojson_data["name"]:
+                        display_name = geojson_data["name"]
+                    elif (
+                        "features" in geojson_data
+                        and geojson_data["features"]
+                        and "properties" in geojson_data["features"][0]
+                        and "name" in geojson_data["features"][0]["properties"]
+                        and geojson_data["features"][0]["properties"]["name"]
+                    ):
+                        display_name = geojson_data["features"][0]["properties"]["name"]
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Could not parse GeoJSON file {filename} for name: {e}")
+        elif file_type == "kml":
+            try:
+                file_path = os.path.join(directory, filename)
+                parser = etree.XMLParser(recover=True)
+                root = etree.parse(file_path, parser=parser).getroot()
+                # KML namespace can vary, try to find name tag directly or with common namespaces
+                name_el = root.find(".//{*}name")
+                if name_el is not None and name_el.text:
+                    display_name = name_el.text
+            except (etree.LxmlError, OSError) as e:
+                logger.warning(f"Could not parse KML file {filename} for name: {e}")
+
+
         if ext in ["geojson", "json", "kml", "czml"]:
             overlays.append(
                 {
-                    "name": filename,
+                    "name": layer_name,
+                    "displayName": display_name,  # Add displayName here
                     "type": "file",
                     "url": f"/api/overlays/{filename}",
-                    "file_type": ext if ext != "json" else "geojson",
+                    "file_type": file_type,
                     "category": "Local Files",
                     "overlay": True,
                 }

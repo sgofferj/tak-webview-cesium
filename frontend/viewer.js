@@ -25,8 +25,19 @@ import {
   CzmlDataSource,
   HeightReference,
   ClassificationType,
+  JulianDate,
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
+
+// Utility to generate a random hex color
+export function generateRandomColor() {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
 
 export let viewer;
 const activeOverlays = new Map();
@@ -220,8 +231,12 @@ function applyOverlayStyling(dataSource, layerName) {
         if (style.width) entity.polyline.width = parseFloat(style.width);
       }
       if (entity.polygon) {
-        if (style.fillColor) {
-          entity.polygon.material = Color.fromCssColorString(style.fillColor).withAlpha(0.5);
+        if (style.fillNone) {
+          entity.polygon.material = Color.TRANSPARENT; // Set fill to transparent if 'none' is chosen
+        } else if (style.fillColor) {
+          // Apply transparency if available, default to 0.5 (as before)
+          const alpha = style.transparency !== undefined ? parseFloat(style.transparency) : 0.5;
+          entity.polygon.material = Color.fromCssColorString(style.fillColor).withAlpha(alpha);
         }
         if (style.color) {
           entity.polygon.outlineColor = Color.fromCssColorString(style.color);
