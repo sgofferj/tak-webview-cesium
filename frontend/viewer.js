@@ -457,6 +457,20 @@ export async function initViewer() {
     terrainExaggerationRelativeHeight: 0.0,
   });
 
+  // Add a listener to immediately deselect any entity that belongs to an active overlay
+  viewer.selectedEntityChanged.addEventListener(() => {
+    const selectedEntity = viewer.selectedEntity;
+    if (selectedEntity) {
+      for (const [layerName, overlay] of activeOverlays) {
+        // Check if the overlay is a DataSource (for file types) and contains the selected entity
+        if (overlay && overlay.entities && overlay.entities.contains(selectedEntity)) {
+          viewer.selectedEntity = undefined; // Deselect it immediately
+          break; // Stop checking further overlays
+        }
+      }
+    }
+  });
+
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.camera.percentageChanged = 0.01;
 
