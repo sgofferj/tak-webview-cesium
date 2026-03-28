@@ -22,7 +22,8 @@ import {
   getCameraState,
   setCameraState,
   getLayerState,
-  generateRandomColor, // Import the new utility
+  generateRandomColor,
+  activeOverlays, // Import activeOverlays
 } from "./viewer.js";
 import {
   entityState,
@@ -666,6 +667,21 @@ function showOverlayStyleModal(layer) {
 
 function setupEvents() {
   viewer.selectedEntityChanged.addEventListener((entity) => {
+    // Prevent infoBox for file overlay entities
+    if (entity && entity.dataSource) {
+      for (const [overlayName, dataSource] of activeOverlays.entries()) {
+        // Check if the current overlay is a DataSource (file overlay) and matches the entity's dataSource
+        if (dataSource.entities && dataSource === entity.dataSource) {
+          // Find the corresponding layer configuration to confirm it's a 'file' type
+          const layerConfig = appConfig.overlay_layers.find(l => l.name === overlayName && l.type === 'file');
+          if (layerConfig) {
+            viewer.selectedEntity = undefined; // Deselect to prevent infoBox
+            return; // Stop further processing for this selection
+          }
+        }
+      }
+    }
+
     // REDIRECT SELECTION: If we clicked on a course arrow or trail, select the main entity instead
     if (
       entity &&
