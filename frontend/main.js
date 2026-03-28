@@ -375,7 +375,7 @@ function createLayerItem(l, isRadio, nameGroup, isActive) {
   item.innerHTML = `
         <div class="layer-thumb" style="background-image: url('${iconUrl}')"></div>
         <div class="layer-label">${l.name}</div>
-        <input type="${isRadio ? "radio" : "checkbox"}" name="${nameGroup}" ${
+        <input type="${isRadio ? "radio" : "checkbox"}" id="${nameGroup === 'overlayLayer' ? `overlay-${CSS.escape(l.name)}` : ''}" name="${nameGroup}" ${
           isActive ? "checked" : ""
         }>
     `;
@@ -636,11 +636,11 @@ function showOverlayStyleModal(layer) {
     };
     localStorage.setItem(`overlay_style_${layer.name}`, JSON.stringify(style));
     modal.classList.add("modal-hidden");
-    // Reload layer if it's active
+    // Reload layer if it's active. The input's ID is specifically for overlay layers.
     const input = document.getElementById(`overlay-${CSS.escape(layer.name)}`);
     if (input && input.checked) {
-      await toggleOverlayLayer(layer, false);
-      await toggleOverlayLayer(layer, true);
+      await toggleOverlayLayer(layer, false); // Deactivate
+      await toggleOverlayLayer(layer, true);  // Reactivate to apply new style
     }
   };
 
