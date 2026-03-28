@@ -348,29 +348,33 @@ export async function toggleOverlayLayer(layerConfig, active) {
 
             // Post-process entities for better visibility on terrain and disable picking
             dataSource.entities.values.forEach((entity) => {
-              entity.pickable = false; // Disable infobox for all overlay entities
+              entity.pickable = false; // Disable infobox for the entity itself
 
               if (entity.billboard) {
                 entity.billboard.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+                entity.billboard.pickable = false; // Explicitly disable for billboard
               }
               if (entity.label) {
                 entity.label.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+                entity.label.pickable = false; // Explicitly disable for label
               }
               if (entity.point) {
                 entity.point.heightReference = HeightReference.CLAMP_TO_GROUND;
                 entity.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+                entity.point.pickable = false; // Explicitly disable for point
               }
               if (entity.polyline) {
                 entity.polyline.clampToGround = true;
+                entity.polyline.pickable = false; // Explicitly disable for polyline
               }
               if (entity.polygon) {
                 entity.polygon.classificationType = ClassificationType.BOTH;
                 // Native Cesium polygon outlines are incompatible with terrain clamping.
                 // We handle outlines via a separate Polyline entity.
                 entity.polygon.outline = false; // Explicitly disable native outline
-                // entity.polygon.pickable = false; // This is now covered by entity.pickable = false above
+                entity.polygon.pickable = false; // Explicitly disable for polygon fill
               }
             });
             await viewer.dataSources.add(dataSource);
