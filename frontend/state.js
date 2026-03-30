@@ -55,7 +55,7 @@ const blobUsageRegistry = new Map();
 export let isCameraTilted = false;
 export let isTabVisible = true;
 
-const backgroundRemovalQueue = new Set(); // For UIDs removed while tab is in background
+const entityRemovalQueue = new Set(); // Unified queue for all entities pending removal
 const foregroundReconciliationQueue = new Set(); // For UIDs needing Cesium updates/creations while tab is in foreground
 
 // Function to process entities in the foreground reconciliation queue
@@ -99,10 +99,10 @@ export async function setTabVisibility(visible) {
   if (visible) {
     // console.debug("Tab focused: reconciling pending Cesium operations.");
 
-    // Step 1: Process removals that were deferred while in background
-    await processBackgroundRemovalsOnFocus();
+    // When tab becomes visible, kick off the processing for any entities queued for removal.
+    requestAnimationFrame(processRemovalQueue);
 
-    // Step 2: Reconcile all entities that were updated/created while hidden
+    // Reconcile all entities that were updated/created while hidden
     const reconcilePromises = [];
     for (const uid in entityState) {
       const state = entityState[uid];
@@ -181,9 +181,6 @@ const pendingCreation = new Set();
 // Track pending icon generations to prevent race conditions
 const pendingIcons = new Map();
 
-// QUEUED REMOVAL SYSTEM to prevent Cesium rendering crashes
-const pendingRemovals = new Map(); // UID -> state
-let removalProcessActive = false;
 
 function safeGetId(entity) {
   return entity && entity.id ? entity.id : null;
@@ -756,20 +753,14 @@ export function updateEntity(incomingData) { // Made non-async
   const uid = data.uid || data.i;
   if (!uid) return;
 
-  // If a new update for this UID comes in while it's in the background removal queue,
-  // remove it from the queue and proceed with normal update/creation.
-  if (backgroundRemovalQueue.has(uid)) {
-    backgroundRemovalQueue.delete(uid);
-  }
-
-  // If an entity with this UID is currently scheduled for removal, cancel the removal.
-  // The old state object and its Cesium entities will be eventually garbage collected.
-  if (pendingRemovals.has(uid)) {
-    pendingRemovals.delete(uid);
-  }
-
-  // Check if an active state object exists for this UID
   let state = entityState[uid];
+
+  // Resurrection logic: If an update arrives for an entity that's marked for
+  // removal but not yet processed, we cancel its removal and bring it back to life.
+  if (state && state._isRemoved) {
+    state._isRemoved = false;
+    entityRemovalQueue.delete(uid); // Cancel its removal.
+  }
 
   // If no active state, it's either a brand new entity or one that was removed and now returning.
   if (!state) {
@@ -1169,6 +1160,15 @@ async function _reconcileCesiumEntity(uid, data) {
       pendingIcons.set(stateKey, iconPromise);
       const result = await iconPromise;
       pendingIcons.delete(stateKey);
+
+      // CRITICAL SAFETY CHECK: Re-fetch the state and verify the entity hasn't been
+      // removed while we were waiting for the icon to be generated.
+      state = entityState[uid];
+      if (!state || state._isRemoved) {
+        unregisterBlobUsage(result.blobUrl); // Clean up the orphaned blob
+        return; // Abort reconciliation
+      }
+
       iconUrl = result.blobUrl;
       pixelOffset = result.pixelOffset;
       width = result.width;
@@ -1303,106 +1303,64 @@ function _doRemoveEntity(uid, state) {
   state._pendingCesiumReconcile = false; // No longer needs reconciliation, it's gone
 }
 
-// Existing removeEntity function, modified to use _doRemoveEntity
+function processRemovalQueue() {
+  // Don't process the queue if the tab is hidden or the queue is empty.
+  if (!isTabVisible || entityRemovalQueue.size === 0) {
+    return;
+  }
+
+  if (!viewer || !viewer.entities) return;
+
+  viewer.entities.suspendEvents();
+  try {
+    const uidsToProcess = Array.from(entityRemovalQueue);
+    entityRemovalQueue.clear();
+
+    for (const uid of uidsToProcess) {
+      const state = entityState[uid];
+      // Check if the entity still exists and is still marked for removal.
+      // It's possible it was "resurrected" by a new update before being processed.
+      if (state && state._isRemoved) {
+        _doRemoveEntity(uid, state);
+        // CRITICAL: Delete from state map only AFTER Cesium objects are removed.
+        delete entityState[uid];
+      }
+    }
+    unitListDirty = true;
+  } finally {
+    viewer.entities.resumeEvents();
+    // Trigger a UI update after the batch removal is complete.
+    throttledUpdateUnitList();
+  }
+}
+
 export function removeEntity(uid) {
   const state = entityState[uid];
-  if (!state || state._isRemoved) return;
+  if (!state || state._isRemoved) {
+    return; // Already removed or in queue
+  }
 
-  // Mark for logical removal
+  // 1. Mark for logical removal. This is the new gatekeeper for all other functions.
   state._isRemoved = true;
 
-  // Clean up staff comment matches
+  // 2. Clean up non-Cesium state data (e.g., staff comments).
   if (state.matchedStaffComments) {
-    state.matchedStaffComments.forEach(search => {
+    state.matchedStaffComments.forEach((search) => {
       const set = staffCommentMap.get(search);
       if (set) set.delete(uid);
     });
   }
 
-  // Defer actual Cesium removal if tab is not visible
-  if (!isTabVisible) {
-    backgroundRemovalQueue.add(uid); // Add UID to the queue for processing when visible
-    // Do NOT delete from entityState here; keep the state object for reconciliation later
-  } else {
-    // If tab is visible, immediately delete from entityState and add to pendingRemovals for batch processing
-    delete entityState[uid];
-    pendingRemovals.set(uid, state);
-    if (!removalProcessActive) processRemovalQueue();
-  }
+  // 3. Add to the single removal queue.
+  entityRemovalQueue.add(uid);
 
+  // 4. Ensure the removal processor will run on the next animation frame.
+  requestAnimationFrame(processRemovalQueue);
+
+  // 5. Immediately update UI lists.
   unitListDirty = true;
-  throttledUpdateUnitList(); // Update unit list immediately if tab is visible
+  throttledUpdateUnitList();
   updateStaffCommentsUI();
-}
-
-// Modified processRemovalQueue to use _doRemoveEntity
-function processRemovalQueue() {
-  if (pendingRemovals.size === 0) {
-    removalProcessActive = false;
-    return;
-  }
-  if (removalProcessActive) return;
-  removalProcessActive = true;
-
-  const processBatch = () => {
-    if (!viewer || !viewer.entities) {
-      removalProcessActive = false;
-      return;
-    }
-
-    viewer.entities.suspendEvents();
-    try {
-      const entries = Array.from(pendingRemovals.entries());
-      const batchSize = 20;
-      const batch = entries.slice(0, batchSize);
-
-      batch.forEach(([uid, state]) => {
-        pendingRemovals.delete(uid);
-
-        if (state && state._isRemoved) {
-          _doRemoveEntity(uid, state);
-        }
-      });
-      unitListDirty = true; // Mark dirty for UI update after batch removal
-    } finally {
-      viewer.entities.resumeEvents();
-
-      if (pendingRemovals.size > 0) {
-        requestAnimationFrame(processBatch);
-      } else {
-        removalProcessActive = false;
-      }
-    }
-    throttledUpdateUnitList(); // Trigger UI update after batch, potentially multiple times
-  };
-
-  requestAnimationFrame(processBatch);
-}
-
-// Original processBackgroundRemovals function (renamed and repurposed)
-// This function will now be called by setTabVisibility to clear the queue
-// of UIDs that were removed while the tab was in the background.
-async function processBackgroundRemovalsOnFocus() {
-  if (backgroundRemovalQueue.size === 0) return;
-  // console.debug(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
-  
-  const uidsToProcess = Array.from(backgroundRemovalQueue);
-  backgroundRemovalQueue.clear(); // Clear the queue immediately
-
-  viewer.entities.suspendEvents(); // Suspend events for batch removal
-  try {
-    for (const uid of uidsToProcess) {
-      const state = entityState[uid];
-      if (state && state._isRemoved) { // Ensure it's still marked for removal
-        _doRemoveEntity(uid, state);
-        delete entityState[uid]; // Now delete from entityState as Cesium entities are removed
-      }
-    }
-  } finally {
-    viewer.entities.resumeEvents();
-  }
-  unitListDirty = true;
-  // UI updates will be triggered by setTabVisibility after all reconciliation
 }
 
 export function updateEntitySelectionVisibility(selectedEntity) {
@@ -1453,9 +1411,9 @@ setInterval(() => {
   const now = Date.now();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    // Don't process if already logically removed, or pending Cesium removal/reconciliation,
-    // or currently in the foreground reconciliation queue (it will be processed shortly).
-    if (!state || state._isRemoved || pendingRemovals.has(uid) || backgroundRemovalQueue.has(uid) || state._pendingCesiumReconcile || foregroundReconciliationQueue.has(uid)) return;
+    // Don't process if already logically removed, queued for removal, pending reconciliation,
+    // or in the foreground reconciliation queue.
+    if (!state || state._isRemoved || entityRemovalQueue.has(uid) || state._pendingCesiumReconcile || foregroundReconciliationQueue.has(uid)) return;
 
     // STALE GRACE PERIOD: 120s
     if (state.staleAt && now > state.staleAt + 120000) {
