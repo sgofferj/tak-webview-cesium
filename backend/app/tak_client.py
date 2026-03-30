@@ -202,7 +202,15 @@ class TAKClient:
             if not uid or not ctype:
                 return None
 
+            # Discard specific CoT types or those containing "ping" / "pong"
+            # as these are internal server messages and not actual entities.
             if ctype == "t-x-c-t":
+                return None
+            
+            # Check for ping/pong in uid or callsign (case-insensitive)
+            # Some servers send pings with different CoT types but specific uids/callsigns
+            uid_lower = uid.lower()
+            if "ping" in uid_lower or "pong" in uid_lower or "takping" in uid_lower or "takpong" in uid_lower:
                 return None
 
             point = root.find("point")
