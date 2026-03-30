@@ -1369,10 +1369,14 @@ export function updateEntitySelectionVisibility(selectedEntity) {
 }
 
 setInterval(() => {
+  if (!isTabVisible) {
+    return;
+  }
   const now = Date.now();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state || state._isRemoved || backgroundRemovalQueue.has(uid)) return;
+    if (!state || state._isRemoved || pendingRemovals.has(uid) || backgroundRemovalQueue.has(uid)) return;
+
     // STALE GRACE PERIOD: 120s
     if (state.staleAt && now > state.staleAt + 120000) {
       console.log(
