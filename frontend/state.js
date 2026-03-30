@@ -1244,53 +1244,6 @@ function _doRemoveEntity(uid, state) {
       }
     }
 
-    // Explicitly nullify all relevant properties to ensure Cesium fully detaches them
-    if (ent.billboard) {
-      ent.billboard.show = false;
-      ent.billboard.image = undefined;
-      ent.billboard.color = undefined;
-      ent.billboard.rotation = undefined;
-      ent.billboard.pixelOffset = undefined;
-      ent.billboard.distanceDisplayCondition = undefined;
-      ent.billboard.disableDepthTestDistance = undefined;
-      ent.billboard.heightReference = undefined;
-    }
-    if (ent.label) {
-      ent.label.show = false;
-      ent.label.text = undefined;
-      ent.label.fillColor = undefined;
-      ent.label.outlineColor = undefined;
-      ent.label.backgroundColor = undefined;
-      ent.label.distanceDisplayCondition = undefined;
-      ent.label.disableDepthTestDistance = undefined;
-      ent.label.heightReference = undefined;
-    }
-    if (ent.point) {
-      ent.point.show = false;
-      ent.point.color = undefined;
-      ent.point.outlineColor = undefined;
-      ent.point.pixelSize = undefined;
-      ent.point.distanceDisplayCondition = undefined;
-      ent.point.disableDepthTestDistance = undefined;
-      ent.point.heightReference = undefined;
-    }
-    if (ent.polyline) {
-      ent.polyline.show = false;
-      ent.polyline.positions = undefined;
-      ent.polyline.width = undefined;
-      ent.polyline.material = undefined;
-      ent.polyline.clampToGround = undefined;
-      ent.polyline.distanceDisplayCondition = undefined;
-      ent.polyline.disableDepthTestDistance = undefined;
-    }
-    if (ent.polygon) {
-      ent.polygon.show = false;
-      ent.polygon.hierarchy = undefined;
-      ent.polygon.material = undefined;
-      ent.polygon.outline = undefined;
-      ent.polygon.classificationType = undefined;
-      ent.polygon.distanceDisplayCondition = undefined;
-    }
 
     ent.show = false; // Ensure top-level show is false
     viewer.entities.remove(ent);
