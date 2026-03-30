@@ -698,29 +698,178 @@ export async function updateEntity(incomingData) {
     backgroundRemovalQueue.delete(uid);
   }
 
-  // RESCUE: If it's in the removal queue, but we got a fresh update, stop the removal
-  if (pendingRemovals.has(uid)) {
-    const rescuedState = pendingRemovals.get(uid);
-    pendingRemovals.delete(uid);
-    rescuedState._isRemoved = false;
-    entityState[uid] = rescuedState; // Re-add to active map
+  // If a new update for this UID comes in while it's in the background removal queue,
+  // remove it from the queue and proceed with normal update/creation.
+  if (backgroundRemovalQueue.has(uid)) {
+    backgroundRemovalQueue.delete(uid);
   }
 
+  // If an entity with this UID is currently scheduled for removal, cancel the removal.
+  // The old state object and its Cesium entities will be eventually garbage collected.
+  if (pendingRemovals.has(uid)) {
+    pendingRemovals.delete(uid);
+  }
+
+  // Check if an active state object exists for this UID
   let state = entityState[uid];
-  if (!state && pendingCreation.has(uid)) {
-    // If already creating, wait a bit or ignore to avoid duplicates
+
+  // If no active state, it's either a brand new entity or one that was removed and now returning.
+  if (!state) {
+    // If already creating, ignore to avoid duplicates (important for async calls)
+    if (pendingCreation.has(uid)) {
+      return;
+    }
+    // If no type information, we cannot create a new entity.
+    if (!data.type) {
+      return;
+    }
+
+    // This is a new entity or a resurrected one; initiate creation process.
+    pendingCreation.add(uid);
+    try {
+      // Use the incoming data as the initial fullData for creation
+      const initialFullData = { ...data, uid };
+      const callsign = initialFullData.callsign || initialFullData.uid || "Unknown";
+
+      // SAFETY: Filter non-finite coordinates for initial creation
+      if (!Number.isFinite(initialFullData.lat) || !Number.isFinite(initialFullData.lon)) {
+        console.warn(`Attempted to create entity ${uid} with non-finite coordinates: lat=${initialFullData.lat}, lon=${initialFullData.lon}`);
+        return;
+      }
+
+      const typeParts = (initialFullData.type || "").toLowerCase().split("-");
+      const isAir = typeParts[0] === "a" && typeParts[2] === "a";
+      const iconHeight =
+        isAir && initialFullData.alt !== undefined && initialFullData.alt < 9000000 ? initialFullData.alt : GROUND_OFFSET;
+      const iconRef = isAir
+        ? HeightReference.NONE
+        : HeightReference.CLAMP_TO_GROUND;
+      const position = Cartesian3.fromDegrees(initialFullData.lon, initialFullData.lat, iconHeight);
+      const anchorPosition = Cartesian3.fromDegrees(initialFullData.lon, initialFullData.lat, 0);
+
+      const description = createDescription({ ...initialFullData, callsign });
+
+      const entity = viewer.entities.add({
+        id: uid,
+        name: callsign,
+        position: position,
+        billboard: {
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          verticalOrigin: VerticalOrigin.CENTER,
+          eyeOffset: new Cartesian3(0, 0, -10),
+          distanceDisplayCondition: ddcAlways,
+          disableDepthTestDistance: HORIZON_LIMIT,
+          heightReference: iconRef,
+        },
+        label: {
+          text: callsign,
+          font: "bold 14px sans-serif",
+          style: LabelStyle.FILL_AND_OUTLINE,
+          fillColor: Color.WHITE,
+          outlineColor: Color.BLACK,
+          outlineWidth: 4,
+          showBackground: true,
+          backgroundColor: new Color(0, 0, 0, 0.4),
+          backgroundPadding: new Cartesian2(7, 5),
+          verticalOrigin: VerticalOrigin.BOTTOM,
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          pixelOffset: new Cartesian2(0, -25),
+          eyeOffset: new Cartesian3(0, 0, -20),
+          distanceDisplayCondition: DDC_UNSELECTED_LABEL,
+          disableDepthTestDistance: DDD_UNSELECTED,
+          heightReference: iconRef,
+          show: true,
+        },
+        description: description,
+      });
+
+      // Trail entity creation
+      const history = [anchorPosition, anchorPosition];
+      const effectiveColorInitial = initialFullData.color 
+        ? Color.fromBytes(
+            (parseInt(initialFullData.color) >> 16) & 0xff,
+            (parseInt(initialFullData.color) >> 8) & 0xff,
+            parseInt(initialFullData.color) & 0xff,
+            255
+          )
+        : getAffiliationColor(initialFullData.type);
+
+      const trailEntity = viewer.entities.add({
+        id: uid + "-trail",
+        polyline: {
+          positions: history,
+          width: 3,
+          material: new PolylineOutlineMaterialProperty({
+            color: effectiveColorInitial,
+            outlineWidth: 2,
+            outlineColor: Color.BLACK.withAlpha(0.5),
+          }),
+          distanceDisplayCondition: ddcTactical,
+          disableDepthTestDistance: HORIZON_LIMIT,
+          clampToGround: true,
+        },
+        show: false,
+      });
+
+      // Course entity creation
+      const courseEntity = viewer.entities.add({
+        id: uid + "-course",
+        billboard: {
+          image: renderGoogleIcon("triangle", "white", 24, true, true),
+          width: 16,
+          height: 16,
+          horizontalOrigin: HorizontalOrigin.CENTER,
+          verticalOrigin: VerticalOrigin.CENTER,
+          eyeOffset: new Cartesian3(0, 0, -15),
+          distanceDisplayCondition: ddcAlways,
+          disableDepthTestDistance: HORIZON_LIMIT,
+          heightReference: iconRef,
+        },
+      });
+
+      state = {
+        uid,
+        entity,
+        trailEntity,
+        courseEntity,
+        history,
+        lastStateKey: "",
+        lastData: initialFullData,
+        lastIconUrl: "",
+        lastPosition: position,
+        _isRemoved: false,
+      };
+
+      entityState[uid] = state;
+      unitListDirty = true;
+    } catch (error) {
+      console.error(`Error creating entity ${uid}:`, error);
+      // Ensure pendingCreation is cleared even on error
+      if (pendingCreation.has(uid)) {
+        pendingCreation.delete(uid);
+      }
+      return; // Stop processing if creation fails
+    } finally {
+      pendingCreation.delete(uid); // Ensure this runs
+    }
+  }
+
+  // --- Now proceed with updating the entity (either newly created or existing) ---
+  // Re-fetch state, as it might have just been created in the block above
+  state = entityState[uid]; 
+
+  // Safeguard against state becoming invalid between async operations or if initial creation failed
+  if (!state || state._isRemoved) {
     return;
   }
 
-  if (state) {
-    if (state._isRemoved) return;
-    data.uid = uid;
-    for (const k in data) {
-      if (data[k] !== undefined) state.lastData[k] = data[k];
-    }
-  } else if (!data.type) return;
+  // Update lastData for existing or newly created entity with incoming data
+  data.uid = uid; // Ensure uid is set
+  for (const k in data) {
+    if (data[k] !== undefined) state.lastData[k] = data[k];
+  }
 
-  const fullData = state ? state.lastData : data;
+  // Extract properties from the updated lastData
   const {
     callsign: rawCallsign,
     type,
@@ -735,10 +884,13 @@ export async function updateEntity(incomingData) {
     group_role,
     how,
     squawk,
-  } = fullData;
+  } = state.lastData; // Always use state.lastData after initial merge
 
-  // SAFETY: Filter non-finite coordinates
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  // SAFETY: Filter non-finite coordinates for updates as well
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    console.warn(`Skipping update for entity ${uid} due to non-finite coordinates: lat=${lat}, lon=${lon}`);
+    return;
+  }
 
   const callsign = rawCallsign || uid || "Unknown";
 
@@ -782,7 +934,7 @@ export async function updateEntity(incomingData) {
   }
   const effectiveColor = color ? cesiumColor : getAffiliationColor(type);
   const useTeamCircle = !!group_name && !!group_role;
-  const staff_comment = fullData.staff_comment || "";
+  const staff_comment = state.lastData.staff_comment || ""; // Use state.lastData.staff_comment
 
   // Ensure staff_comment is part of the key for milsymbols so they cache correctly
   const stateKey = useTeamCircle
@@ -791,181 +943,105 @@ export async function updateEntity(incomingData) {
       ? `icon-${iconsetUrl}-${rgbColor}`
       : `${sidc}-${color}-${squawk}-${staff_comment}`;
 
-  const description = createDescription({ ...fullData, callsign });
+  const description = createDescription({ ...state.lastData, callsign }); // Use state.lastData for description
 
-  if (!state) {
-    pendingCreation.add(uid);
-    try {
-      const history = [anchorPosition, anchorPosition];
-      const entity = viewer.entities.add({
-        id: uid,
-        name: callsign,
-        position: position,
-        billboard: {
-          horizontalOrigin: HorizontalOrigin.CENTER,
-          verticalOrigin: VerticalOrigin.CENTER,
-          eyeOffset: new Cartesian3(0, 0, -10),
-          distanceDisplayCondition: ddcAlways,
-          disableDepthTestDistance: HORIZON_LIMIT,
-          heightReference: iconRef,
-        },
-        label: {
-          text: callsign,
-          font: "bold 14px sans-serif",
-          style: LabelStyle.FILL_AND_OUTLINE,
-          fillColor: Color.WHITE,
-          outlineColor: Color.BLACK,
-          outlineWidth: 4,
-          showBackground: true,
-          backgroundColor: new Color(0, 0, 0, 0.4),
-          backgroundPadding: new Cartesian2(7, 5),
-          verticalOrigin: VerticalOrigin.BOTTOM,
-          horizontalOrigin: HorizontalOrigin.CENTER,
-          pixelOffset: new Cartesian2(0, -25),
-          eyeOffset: new Cartesian3(0, 0, -20),
-          distanceDisplayCondition: DDC_UNSELECTED_LABEL,
-          disableDepthTestDistance: DDD_UNSELECTED,
-          heightReference: iconRef,
-          show: true,
-        },
-        description: description,
-      });
+  // Update existing state (this block now handles *all* updates, whether newly created or existing)
+  if (!position.equals(state.lastPosition)) {
+    state.entity.position = position;
+    state.lastPosition = position;
+    state.history.push(anchorPosition);
+    if (state.history.length > 50) state.history.shift();
+    unitListDirty = true;
+  }
 
-      const trailEntity = viewer.entities.add({
-        id: uid + "-trail",
-        polyline: {
-          positions: history,
-          width: 3,
-          material: new PolylineOutlineMaterialProperty({
-            color: effectiveColor,
-            outlineWidth: 2,
-            outlineColor: Color.BLACK.withAlpha(0.5),
-          }),
-          distanceDisplayCondition: ddcTactical,
-          disableDepthTestDistance: HORIZON_LIMIT,
-          clampToGround: true,
-        },
-        show: false,
-      });
+  state.entity.description = description;
 
-      const courseEntity = viewer.entities.add({
-        id: uid + "-course",
-        billboard: {
-          image: renderGoogleIcon("triangle", "white", 24, true, true),
-          width: 16,
-          height: 16,
-          horizontalOrigin: HorizontalOrigin.CENTER,
-          verticalOrigin: VerticalOrigin.CENTER,
-          eyeOffset: new Cartesian3(0, 0, -15),
-          distanceDisplayCondition: ddcAlways,
-          disableDepthTestDistance: HORIZON_LIMIT,
-          heightReference: iconRef,
-        },
-      });
+  if (state.entity.billboard.heightReference !== iconRef) {
+    state.entity.billboard.heightReference = iconRef;
+    state.entity.label.heightReference = iconRef;
+  }
 
-      state = {
-        uid,
-        entity,
-        trailEntity,
-        courseEntity,
-        history,
-        lastStateKey: "",
-        lastData: { ...fullData, callsign },
-        lastIconUrl: "",
-        lastPosition: position,
-        _isRemoved: false,
-      };
+  if (
+    viewer.clock &&
+    state.entity.label &&
+    state.entity.label.text &&
+    state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign
+  ) {
+    state.entity.label.text = callsign;
+    unitListDirty = true;
+  }
 
-      // Double check if removed during creation
-      if (pendingRemovals.has(uid)) {
-        pendingCreation.delete(uid);
-        return;
-      }
+  // Update trail color if it changed
+  if (!state.lastRgbColor || state.lastRgbColor !== rgbColor) {
+    state.trailEntity.polyline.material = new PolylineOutlineMaterialProperty({
+      color: effectiveColor,
+      outlineWidth: 2,
+      outlineColor: Color.BLACK.withAlpha(0.5),
+    });
+    state.lastRgbColor = rgbColor;
+  }
 
-      entityState[uid] = state;
-      unitListDirty = true;
-    } finally {
-      pendingCreation.delete(uid);
-    }
-  } else {
-    // Update existing state
-    if (!position.equals(state.lastPosition)) {
-      state.entity.position = position;
-      state.lastPosition = position;
-      state.history.push(anchorPosition);
-      if (state.history.length > 50) state.history.shift();
-      unitListDirty = true;
-    }
 
-    state.entity.description = description;
-
-    if (state.entity.billboard.heightReference !== iconRef) {
-      state.entity.billboard.heightReference = iconRef;
-      state.entity.label.heightReference = iconRef;
-    }
-
-    if (
-      viewer.clock &&
-      state.entity.label &&
-      state.entity.label.text &&
-      state.entity.label.text.getValue(viewer.clock.currentTime) !== callsign
-    ) {
-      state.entity.label.text = callsign;
-      unitListDirty = true;
-    }
-
-    const selectedId = safeGetId(viewer.selectedEntity);
-    const isSelected =
-      selectedId &&
-      (selectedId === uid ||
-        selectedId === uid + "-trail" ||
-        selectedId === uid + "-course");
-    const isVisible = calculateVisibility(state.lastData);
-    const trailVisible = isVisible && isSelected;
-    state.trailEntity.show = trailVisible;
-    if (trailVisible) {
-      state.trailEntity.polyline.positions = [...state.history];
-    }
+  const selectedId = safeGetId(viewer.selectedEntity);
+  const isSelected =
+    selectedId &&
+    (selectedId === uid ||
+      selectedId === uid + "-trail" ||
+      selectedId === uid + "-course");
+  const isVisible = calculateVisibility(state.lastData);
+  const trailVisible = isVisible && isSelected;
+  state.trailEntity.show = trailVisible;
+  if (trailVisible) {
+    state.trailEntity.polyline.positions = [...state.history];
   }
 
   const hasCourse = course !== undefined && course !== null;
-  if (hasCourse) {
-    state.courseEntity.position = position;
-    if (
-      !state.courseEntity.billboard.rotation ||
-      typeof state.courseEntity.billboard.rotation.getValue !== "function"
-    ) {
-      state.courseEntity.billboard.rotation = new CallbackProperty(() => {
-        const s = entityState[uid];
-        if (!s || s._isRemoved || !s.lastData || s.lastData.course === undefined)
-          return 0;
-        return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
-      }, false);
+  // Ensure courseEntity exists and then update it
+  if (state.courseEntity) {
+    if (hasCourse) {
+      state.courseEntity.position = position;
+      if (
+        !state.courseEntity.billboard.rotation ||
+        typeof state.courseEntity.billboard.rotation.getValue !== "function"
+      ) {
+        state.courseEntity.billboard.rotation = new CallbackProperty(() => {
+          const s = entityState[uid];
+          // Ensure s exists and is not removed before accessing its properties
+          if (!s || s._isRemoved || !s.lastData || s.lastData.course === undefined)
+            return 0;
+          return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
+        }, false);
+      }
+      if (
+        !state.courseEntity.billboard.pixelOffset ||
+        typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
+      ) {
+        state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0); // Resetting to ensure CallbackProperty is set
+        state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
+          const s = entityState[uid];
+          // Ensure s exists and is not removed before accessing its properties
+          if (
+            !s ||
+            s._isRemoved ||
+            !s.lastData ||
+            s.lastData.course === undefined
+          ) {
+            return new Cartesian2(0, -22);
+          }
+          const angle =
+            CesiumMath.toRadians(s.lastData.course) - viewer.camera.heading;
+          const dist = 22;
+          return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
+        }, false);
+      }
+      state.courseEntity.billboard.heightReference = iconRef;
+      state.courseEntity.show = state.entity.show; // Ensure visibility sync with main entity
+    } else {
+      state.courseEntity.show = false; // Hide if no course data
     }
-    if (
-      !state.courseEntity.billboard.pixelOffset ||
-      typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
-    ) {
-      state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0);
-      state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
-        const s = entityState[uid];
-        if (
-          !s ||
-          s._isRemoved ||
-          !s.lastData ||
-          s.lastData.course === undefined
-        ) {
-          return new Cartesian2(0, -22);
-        }
-        const angle =
-          CesiumMath.toRadians(s.lastData.course) - viewer.camera.heading;
-        const dist = 22;
-        return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
-      }, false);
-    }
-    state.courseEntity.billboard.heightReference = iconRef;
   }
-  
+
+
   if (state.lastStateKey !== stateKey) {
     let iconUrl, pixelOffset, width, height, billboardColor;
 
@@ -1043,7 +1119,7 @@ export async function updateEntity(incomingData) {
       billboardColor = result.color;
     }
 
-    // Re-verify state exists after async await
+    // Re-verify state exists after async await, and is not removed
     state = entityState[uid];
     if (!state || state._isRemoved) return;
 
@@ -1060,7 +1136,7 @@ export async function updateEntity(incomingData) {
     state.entity.billboard.pixelOffset = pixelOffset;
     state.entity.billboard.color = billboardColor;
     state.lastStateKey = stateKey;
-    state.lastRgbColor = rgbColor;
+    state.lastRgbColor = rgbColor; // Update rgbColor on state
     unitListDirty = true;
   }
 
