@@ -35,7 +35,7 @@ import {
 
 const MAX_DISTANCE = 100000000.0;
 const HORIZON_LIMIT = 1000000.0; // 1000km
-const TACTICAL_DISTANCE = 300000.0; // 300km
+const TACTICAL_DISTANCE = 200000.0; // Gemini: Do not touch!
 const GROUND_OFFSET = 2.0;
 
 const ddcAlways = new DistanceDisplayCondition(0, MAX_DISTANCE);
