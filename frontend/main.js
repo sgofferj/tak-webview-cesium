@@ -158,9 +158,9 @@ async function startApp() {
   await loadConfig();
   await loadTranslations();
   await initViewer();
+  setupEvents();
   // Ensure no entity is selected initially to prevent trails from showing
   viewer.selectedEntity = undefined; 
-  setupEvents();
   populateLayerPicker();
 
   // Try to load state
