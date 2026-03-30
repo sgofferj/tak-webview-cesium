@@ -263,7 +263,9 @@ export function calculateTrailVisibility(uid) {
       selectedId === uid + "-trail" ||
       selectedId === uid + "-course");
   const isVisible = calculateVisibility(state.lastData);
-  return isVisible && isSelected;
+  const result = isVisible && isSelected;
+  console.debug(`    calculateTrailVisibility for ${uid}: isVisible=${isVisible}, isSelected=${isSelected}, selectedId=${selectedId}. Result=${result}`);
+  return result;
 }
 
 export function applyFilter() {
