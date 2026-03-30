@@ -88,32 +88,6 @@ export async function setTabVisibility(visible) {
   }
 }
 
-// This function was previously named `processBackgroundRemovals` and
-// its logic was inside `setTabVisibility`. It's now explicitly handling
-// the deferred removals when the tab comes into focus.
-async function processBackgroundRemovalsOnFocus() {
-  if (backgroundRemovalQueue.size === 0) return;
-  console.log(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
-  
-  const uidsToProcess = Array.from(backgroundRemovalQueue);
-  backgroundRemovalQueue.clear(); // Clear the queue immediately
-
-  viewer.entities.suspendEvents(); // Suspend events for batch removal
-  try {
-    for (const uid of uidsToProcess) {
-      const state = entityState[uid];
-      if (state && state._isRemoved) { // Ensure it's still marked for removal
-        _doRemoveEntity(uid, state);
-        delete entityState[uid]; // Now delete from entityState as Cesium entities are removed
-      }
-    }
-  } finally {
-    viewer.entities.resumeEvents();
-  }
-  unitListDirty = true;
-  // UI updates will be triggered by setTabVisibility after all reconciliation
-}
-
 export function setCameraTilt(tilted) {
   if (isCameraTilted !== tilted) {
     isCameraTilted = tilted;
