@@ -185,6 +185,11 @@ async function startApp() {
   // Initialize staff comments UI after config and translations are loaded
   updateStaffCommentsUI(); 
 
+  // FINAL SANITY CHECK: Ensure no entity is selected after initialization is complete.
+  // This robustly prevents trails from showing on load due to any race conditions
+  // with entity creation or state loading.
+  viewer.selectedEntity = undefined;
+
   // Start auto-save
   viewer.camera.moveEnd.addEventListener(saveAppState);
 
