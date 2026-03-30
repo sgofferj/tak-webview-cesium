@@ -64,7 +64,7 @@ async function processForegroundReconciliationQueue() {
     return;
   }
 
-  console.log(`Processing ${foregroundReconciliationQueue.size} foreground Cesium reconciliations.`);
+  console.debug(`Processing ${foregroundReconciliationQueue.size} foreground Cesium reconciliations.`);
   const uidsToProcess = Array.from(foregroundReconciliationQueue);
   foregroundReconciliationQueue.clear(); // Clear the queue immediately
 
@@ -97,7 +97,7 @@ const throttledReconcileForegroundEntities = throttle(processForegroundReconcili
 export async function setTabVisibility(visible) {
   isTabVisible = visible;
   if (visible) {
-    console.log("Tab focused: reconciling pending Cesium operations.");
+    console.debug("Tab focused: reconciling pending Cesium operations.");
 
     // Step 1: Process removals that were deferred while in background
     await processBackgroundRemovalsOnFocus();
@@ -124,7 +124,7 @@ export async function setTabVisibility(visible) {
     updateStaffCommentsUI();
 
   } else {
-    console.log("Tab backgrounded: pausing Cesium entity reconciliation.");
+    console.debug("Tab backgrounded: pausing Cesium entity reconciliation.");
     // Clear any pending foreground reconciliations, they will be handled by the _pendingCesiumReconcile flag
     foregroundReconciliationQueue.clear();
   }
@@ -1378,7 +1378,7 @@ function processRemovalQueue() {
 // of UIDs that were removed while the tab was in the background.
 async function processBackgroundRemovalsOnFocus() {
   if (backgroundRemovalQueue.size === 0) return;
-  console.log(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
+  console.debug(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
   
   const uidsToProcess = Array.from(backgroundRemovalQueue);
   backgroundRemovalQueue.clear(); // Clear the queue immediately
@@ -1452,7 +1452,7 @@ setInterval(() => {
 
     // STALE GRACE PERIOD: 120s
     if (state.staleAt && now > state.staleAt + 120000) {
-      console.log(
+      console.debug(
         `Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`,
       );
       removeEntity(uid); // removeEntity will handle deferring Cesium cleanup if tab is hidden

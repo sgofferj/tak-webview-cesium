@@ -158,6 +158,8 @@ async function startApp() {
   await loadConfig();
   await loadTranslations();
   await initViewer();
+  // Ensure no entity is selected initially to prevent trails from showing
+  viewer.selectedEntity = undefined; 
   setupEvents();
   populateLayerPicker();
 
@@ -171,6 +173,8 @@ async function startApp() {
     await setTerrain(false);
     updateLayerPickerUI();
   }
+  // Ensure filters are applied after loading app state (or defaults) to correctly set visibility
+  applyFilter();
 
   startWebSocket();
   // Initialize staff comments UI after config and translations are loaded
@@ -181,11 +185,11 @@ async function startApp() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      console.log("Tab backgrounded: pausing rendering loop");
+      console.debug("Tab backgrounded: pausing rendering loop");
       viewer.useDefaultRenderLoop = false;
       setTabVisibility(false);
     } else {
-      console.log("Tab focused: resuming rendering loop");
+      console.debug("Tab focused: resuming rendering loop");
       viewer.useDefaultRenderLoop = true;
       setTabVisibility(true);
     }
