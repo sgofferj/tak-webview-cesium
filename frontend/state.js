@@ -982,19 +982,6 @@ export async function updateEntity(incomingData) {
   }
 
 
-  const selectedId = safeGetId(viewer.selectedEntity);
-  const isSelected =
-    selectedId &&
-    (selectedId === uid ||
-      selectedId === uid + "-trail" ||
-      selectedId === uid + "-course");
-  const isVisible = calculateVisibility(state.lastData);
-  const trailVisible = isVisible && isSelected;
-  state.trailEntity.show = trailVisible;
-  if (trailVisible) {
-    state.trailEntity.polyline.positions = [...state.history];
-  }
-
   const hasCourse = course !== undefined && course !== null;
   // Ensure courseEntity exists and then update it
   if (state.courseEntity) {
@@ -1154,6 +1141,13 @@ export async function updateEntity(incomingData) {
       selectedId === uid + "-course");
 
   state.entity.show = isVisible || isSelected;
+
+  const trailVisible = isVisible && isSelected;
+  state.trailEntity.show = trailVisible;
+  if (trailVisible) {
+    state.trailEntity.polyline.positions = [...state.history];
+  }
+
   if (state.courseEntity) {
     state.courseEntity.show = state.entity.show && (state.lastData.course !== undefined);
   }
