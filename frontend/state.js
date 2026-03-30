@@ -64,7 +64,7 @@ async function processForegroundReconciliationQueue() {
     return;
   }
 
-  console.debug(`Processing ${foregroundReconciliationQueue.size} foreground Cesium reconciliations.`);
+  // console.debug(`Processing ${foregroundReconciliationQueue.size} foreground Cesium reconciliations.`);
   const uidsToProcess = Array.from(foregroundReconciliationQueue);
   foregroundReconciliationQueue.clear(); // Clear the queue immediately
 
@@ -97,7 +97,7 @@ const throttledReconcileForegroundEntities = throttle(processForegroundReconcili
 export async function setTabVisibility(visible) {
   isTabVisible = visible;
   if (visible) {
-    console.debug("Tab focused: reconciling pending Cesium operations.");
+    // console.debug("Tab focused: reconciling pending Cesium operations.");
 
     // Step 1: Process removals that were deferred while in background
     await processBackgroundRemovalsOnFocus();
@@ -124,7 +124,7 @@ export async function setTabVisibility(visible) {
     updateStaffCommentsUI();
 
   } else {
-    console.debug("Tab backgrounded: pausing Cesium entity reconciliation.");
+    // console.debug("Tab backgrounded: pausing Cesium entity reconciliation.");
     // Clear any pending foreground reconciliations, they will be handled by the _pendingCesiumReconcile flag
     foregroundReconciliationQueue.clear();
   }
@@ -264,20 +264,20 @@ export function calculateTrailVisibility(uid) {
       selectedId === uid + "-course");
   const isVisible = calculateVisibility(state.lastData);
   const result = isVisible && isSelected;
-  console.debug(`    calculateTrailVisibility for ${uid}: isVisible=${isVisible}, isSelected=${isSelected}, selectedId=${selectedId}. Result=${result}`);
+  // console.debug(`    calculateTrailVisibility for ${uid}: isVisible=${isVisible}, isSelected=${isSelected}, selectedId=${selectedId}. Result=${result}`);
   return result;
 }
 
 export function applyFilter() {
   if (!viewer) return;
-  console.debug("applyFilter called. viewer.selectedEntity ID:", safeGetId(viewer.selectedEntity));
+  // console.debug("applyFilter called. viewer.selectedEntity ID:", safeGetId(viewer.selectedEntity));
   unitListDirty = true;
   const selectedId = safeGetId(viewer.selectedEntity);
 
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
     if (!state || state._isRemoved) return;
-    console.debug(`  Processing entity ${uid} in applyFilter.`);
+    // console.debug(`  Processing entity ${uid} in applyFilter.`);
 
     const isSelected =
       selectedId &&
@@ -319,7 +319,7 @@ export function applyFilter() {
 
     if (state.trailEntity) {
       const trailShouldShow = calculateTrailVisibility(uid);
-      console.debug(`    Trail visibility for ${uid}: ${trailShouldShow} (current show state: ${state.trailEntity.show})`);
+      // console.debug(`    Trail visibility for ${uid}: ${trailShouldShow} (current show state: ${state.trailEntity.show})`);
       state.trailEntity.show = trailShouldShow;
     }
     if (state.courseEntity) {
@@ -1384,7 +1384,7 @@ function processRemovalQueue() {
 // of UIDs that were removed while the tab was in the background.
 async function processBackgroundRemovalsOnFocus() {
   if (backgroundRemovalQueue.size === 0) return;
-  console.debug(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
+  // console.debug(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
   
   const uidsToProcess = Array.from(backgroundRemovalQueue);
   backgroundRemovalQueue.clear(); // Clear the queue immediately
@@ -1437,7 +1437,8 @@ export function updateEntitySelectionVisibility(selectedEntity) {
     }
     if (currentState.trailEntity && currentState.trailEntity.polyline) {
       currentState.trailEntity.polyline.distanceDisplayCondition = DDC_SELECTED;
-      currentState.trailEntity.show = true;
+      // Removed direct setting of show = true. Visibility will now be entirely determined by applyFilter()
+      // and calculateTrailVisibility() for all entities based on global selection state.
     }
     previouslySelectedEntityId = baseUid;
   } else {
@@ -1458,9 +1459,9 @@ setInterval(() => {
 
     // STALE GRACE PERIOD: 120s
     if (state.staleAt && now > state.staleAt + 120000) {
-      console.debug(
-        `Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`,
-      );
+      // console.debug(
+      //   `Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`,
+      // );
       removeEntity(uid); // removeEntity will handle deferring Cesium cleanup if tab is hidden
     }
   });

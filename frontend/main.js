@@ -190,11 +190,11 @@ async function startApp() {
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      console.debug("Tab backgrounded: pausing rendering loop");
+      // console.debug("Tab backgrounded: pausing rendering loop");
       viewer.useDefaultRenderLoop = false;
       setTabVisibility(false);
     } else {
-      console.debug("Tab focused: resuming rendering loop");
+      // console.debug("Tab focused: resuming rendering loop");
       viewer.useDefaultRenderLoop = true;
       setTabVisibility(true);
     }
