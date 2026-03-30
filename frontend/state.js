@@ -1399,9 +1399,8 @@ export function updateEntitySelectionVisibility(selectedEntity) {
     }
     if (prevState.trailEntity && prevState.trailEntity.polyline) {
       prevState.trailEntity.polyline.distanceDisplayCondition = ddcTactical;
-      prevState.trailEntity.show = calculateTrailVisibility(
-        previouslySelectedEntityId,
-      );
+      // The `applyFilter()` function called immediately after this in the event handler
+      // is responsible for updating visibility for all entities. This line is redundant.
     }
   }
 
