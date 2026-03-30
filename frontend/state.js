@@ -57,20 +57,61 @@ export let isTabVisible = true;
 
 const backgroundRemovalQueue = new Set();
 
-export function setTabVisibility(visible) {
+export async function setTabVisibility(visible) {
   isTabVisible = visible;
   if (visible) {
-    processBackgroundRemovals();
+    console.log("Tab focused: reconciling pending Cesium operations.");
+
+    // Step 1: Process removals that were deferred while in background
+    await processBackgroundRemovalsOnFocus();
+
+    // Step 2: Reconcile all entities that were updated/created while hidden
+    const reconcilePromises = [];
+    for (const uid in entityState) {
+      const state = entityState[uid];
+      // Only reconcile if not removed and needs reconciliation
+      if (state && !state._isRemoved && state._pendingCesiumReconcile) {
+        state._pendingCesiumReconcile = false; // Clear flag before reconciliation
+        reconcilePromises.push(_reconcileCesiumEntity(uid, state.lastData));
+      }
+    }
+    await Promise.all(reconcilePromises); // Wait for all async icon generations/updates to complete
+
+    // Step 3: Apply filter to update visibility and DDC for all entities
+    applyFilter();
+    // Step 4: Refresh UI lists
+    throttledUpdateUnitList();
+    updateStaffCommentsUI();
+
+  } else {
+    console.log("Tab backgrounded: pausing Cesium entity reconciliation.");
   }
 }
 
-function processBackgroundRemovals() {
+// This function was previously named `processBackgroundRemovals` and
+// its logic was inside `setTabVisibility`. It's now explicitly handling
+// the deferred removals when the tab comes into focus.
+async function processBackgroundRemovalsOnFocus() {
   if (backgroundRemovalQueue.size === 0) return;
-  const uids = Array.from(backgroundRemovalQueue);
-  backgroundRemovalQueue.clear();
-  uids.forEach((uid) => {
-    removeEntity(uid);
-  });
+  console.log(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
+  
+  const uidsToProcess = Array.from(backgroundRemovalQueue);
+  backgroundRemovalQueue.clear(); // Clear the queue immediately
+
+  viewer.entities.suspendEvents(); // Suspend events for batch removal
+  try {
+    for (const uid of uidsToProcess) {
+      const state = entityState[uid];
+      if (state && state._isRemoved) { // Ensure it's still marked for removal
+        _doRemoveEntity(uid, state);
+        delete entityState[uid]; // Now delete from entityState as Cesium entities are removed
+      }
+    }
+  } finally {
+    viewer.entities.resumeEvents();
+  }
+  unitListDirty = true;
+  // UI updates will be triggered by setTabVisibility after all reconciliation
 }
 
 export function setCameraTilt(tilted) {
@@ -838,38 +879,58 @@ export async function updateEntity(incomingData) {
         lastIconUrl: "",
         lastPosition: position,
         _isRemoved: false,
+        _pendingCesiumReconcile: false, // Flag to indicate if Cesium entities need reconciliation
       };
 
       entityState[uid] = state;
+      pendingCreation.delete(uid); // Creation of JS state object is done
       unitListDirty = true;
     } catch (error) {
       console.error(`Error creating entity ${uid}:`, error);
-      // Ensure pendingCreation is cleared even on error
       if (pendingCreation.has(uid)) {
         pendingCreation.delete(uid);
       }
-      return; // Stop processing if creation fails
-    } finally {
-      pendingCreation.delete(uid); // Ensure this runs
+      return; // Stop processing if initial state creation fails
     }
   }
 
-  // --- Now proceed with updating the entity (either newly created or existing) ---
-  // Re-fetch state, as it might have just been created in the block above
-  state = entityState[uid]; 
-
-  // Safeguard against state becoming invalid between async operations or if initial creation failed
-  if (!state || state._isRemoved) {
-    return;
-  }
-
-  // Update lastData for existing or newly created entity with incoming data
+  // Always update state.lastData with incoming data, regardless of tab visibility
   data.uid = uid; // Ensure uid is set
   for (const k in data) {
     if (data[k] !== undefined) state.lastData[k] = data[k];
   }
 
-  // Extract properties from the updated lastData
+  // Set staleAt if provided
+  if (data.stale) {
+    state.staleAt = new Date(data.stale).getTime();
+  }
+
+  // If tab is visible, immediately reconcile Cesium entities
+  if (isTabVisible) {
+    await _reconcileCesiumEntity(uid, state.lastData);
+    // After reconciliation, ensure visibility is correct
+    applyFilter(); // Apply filter to set DDC and show/hide properties
+    throttledUpdateUnitList();
+    updateStaffCommentsUI();
+  } else {
+    // If tab is not visible, mark for reconciliation when it becomes visible
+    state._pendingCesiumReconcile = true;
+    unitListDirty = true; // Unit list might need updating even if tab is hidden
+  }
+}
+
+
+// New function to perform the actual Cesium entity creation/update
+async function _reconcileCesiumEntity(uid, data) {
+  if (!viewer || !viewer.entities) return;
+
+  // Ensure we have a valid state object
+  let state = entityState[uid];
+  if (!state || state._isRemoved) {
+    console.warn(`Attempted to reconcile a non-existent or removed entity: ${uid}`);
+    return;
+  }
+
   const {
     callsign: rawCallsign,
     type,
@@ -877,18 +938,18 @@ export async function updateEntity(incomingData) {
     lon,
     alt,
     course,
-    stale,
     color,
     iconsetpath,
     group_name,
     group_role,
     how,
     squawk,
-  } = state.lastData; // Always use state.lastData after initial merge
+    staff_comment, // Include staff_comment from data
+  } = data;
 
   // SAFETY: Filter non-finite coordinates for updates as well
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    console.warn(`Skipping update for entity ${uid} due to non-finite coordinates: lat=${lat}, lon=${lon}`);
+    console.warn(`Skipping reconciliation for entity ${uid} due to non-finite coordinates: lat=${lat}, lon=${lon}`);
     return;
   }
 
@@ -934,33 +995,112 @@ export async function updateEntity(incomingData) {
   }
   const effectiveColor = color ? cesiumColor : getAffiliationColor(type);
   const useTeamCircle = !!group_name && !!group_role;
-  const staff_comment = state.lastData.staff_comment || ""; // Use state.lastData.staff_comment
 
   // Ensure staff_comment is part of the key for milsymbols so they cache correctly
   const stateKey = useTeamCircle
     ? `group-${group_name}-${group_role}-${color}-${how}`
     : iconsetUrl
       ? `icon-${iconsetUrl}-${rgbColor}`
-      : `${sidc}-${color}-${squawk}-${staff_comment}`;
+      : `${sidc}-${color}-${squawk}-${staff_comment || ''}`; // Use empty string for staff_comment if not present
 
-  const description = createDescription({ ...state.lastData, callsign }); // Use state.lastData for description
+  const description = createDescription({ ...data, callsign });
 
-  // Update existing state (this block now handles *all* updates, whether newly created or existing)
+  // --- Entity Creation if it doesn't exist ---
+  if (!state.entity) {
+    state.entity = viewer.entities.add({
+      id: uid,
+      name: callsign,
+      position: position,
+      billboard: {
+        horizontalOrigin: HorizontalOrigin.CENTER,
+        verticalOrigin: VerticalOrigin.CENTER,
+        eyeOffset: new Cartesian3(0, 0, -10),
+        distanceDisplayCondition: ddcAlways,
+        disableDepthTestDistance: HORIZON_LIMIT,
+        heightReference: iconRef,
+      },
+      label: {
+        text: callsign,
+        font: "bold 14px sans-serif",
+        style: LabelStyle.FILL_AND_OUTLINE,
+        fillColor: Color.WHITE,
+        outlineColor: Color.BLACK,
+        outlineWidth: 4,
+        showBackground: true,
+        backgroundColor: new Color(0, 0, 0, 0.4),
+        backgroundPadding: new Cartesian2(7, 5),
+        verticalOrigin: VerticalOrigin.BOTTOM,
+        horizontalOrigin: HorizontalOrigin.CENTER,
+        pixelOffset: new Cartesian2(0, -25),
+        eyeOffset: new Cartesian3(0, 0, -20),
+        distanceDisplayCondition: DDC_UNSELECTED_LABEL,
+        disableDepthTestDistance: DDD_UNSELECTED,
+        heightReference: iconRef,
+        show: true,
+      },
+      description: description,
+    });
+
+    state.history = [anchorPosition, anchorPosition]; // Initialize history for trail
+    state.trailEntity = viewer.entities.add({
+      id: uid + "-trail",
+      polyline: {
+        positions: state.history,
+        width: 3,
+        material: new PolylineOutlineMaterialProperty({
+          color: effectiveColor,
+          outlineWidth: 2,
+          outlineColor: Color.BLACK.withAlpha(0.5),
+        }),
+        distanceDisplayCondition: ddcTactical,
+        disableDepthTestDistance: HORIZON_LIMIT,
+        clampToGround: true,
+      },
+      show: false,
+    });
+
+    state.courseEntity = viewer.entities.add({
+      id: uid + "-course",
+      billboard: {
+        image: renderGoogleIcon("triangle", "white", 24, true, true),
+        width: 16,
+        height: 16,
+        horizontalOrigin: HorizontalOrigin.CENTER,
+        verticalOrigin: VerticalOrigin.CENTER,
+        eyeOffset: new Cartesian3(0, 0, -15),
+        distanceDisplayCondition: ddcAlways,
+        disableDepthTestDistance: HORIZON_LIMIT,
+        heightReference: iconRef,
+      },
+    });
+
+    // Reset state tracking values for a newly created entity
+    state.lastStateKey = "";
+    state.lastIconUrl = "";
+    state.lastPosition = position;
+    state.lastRgbColor = rgbColor;
+  }
+
+
+  // --- Now proceed with updating the entity properties ---
+  // Position Update
   if (!position.equals(state.lastPosition)) {
     state.entity.position = position;
     state.lastPosition = position;
     state.history.push(anchorPosition);
     if (state.history.length > 50) state.history.shift();
-    unitListDirty = true;
+    unitListDirty = true; // Mark dirty for unit list update
   }
-
   state.entity.description = description;
 
+  // Height Reference Update
   if (state.entity.billboard.heightReference !== iconRef) {
     state.entity.billboard.heightReference = iconRef;
-    state.entity.label.heightReference = iconRef;
+    if (state.entity.label) state.entity.label.heightReference = iconRef;
+    if (state.courseEntity && state.courseEntity.billboard) state.courseEntity.billboard.heightReference = iconRef;
   }
 
+  // Label Text Update
   if (
     viewer.clock &&
     state.entity.label &&
@@ -971,7 +1111,7 @@ export async function updateEntity(incomingData) {
     unitListDirty = true;
   }
 
-  // Update trail color if it changed
+  // Trail Color Update
   if (!state.lastRgbColor || state.lastRgbColor !== rgbColor) {
     state.trailEntity.polyline.material = new PolylineOutlineMaterialProperty({
       color: effectiveColor,
@@ -981,9 +1121,8 @@ export async function updateEntity(incomingData) {
     state.lastRgbColor = rgbColor;
   }
 
-
+  // Course Arrow Update
   const hasCourse = course !== undefined && course !== null;
-  // Ensure courseEntity exists and then update it
   if (state.courseEntity) {
     if (hasCourse) {
       state.courseEntity.position = position;
@@ -993,7 +1132,6 @@ export async function updateEntity(incomingData) {
       ) {
         state.courseEntity.billboard.rotation = new CallbackProperty(() => {
           const s = entityState[uid];
-          // Ensure s exists and is not removed before accessing its properties
           if (!s || s._isRemoved || !s.lastData || s.lastData.course === undefined)
             return 0;
           return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
@@ -1003,10 +1141,10 @@ export async function updateEntity(incomingData) {
         !state.courseEntity.billboard.pixelOffset ||
         typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
       ) {
-        state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0); // Resetting to ensure CallbackProperty is set
+        // Resetting to ensure CallbackProperty is set
+        state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0); 
         state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
           const s = entityState[uid];
-          // Ensure s exists and is not removed before accessing its properties
           if (
             !s ||
             s._isRemoved ||
@@ -1022,15 +1160,15 @@ export async function updateEntity(incomingData) {
         }, false);
       }
       state.courseEntity.billboard.heightReference = iconRef;
-      state.courseEntity.show = state.entity.show; // Ensure visibility sync with main entity
+      // Visibility is handled by applyFilter
     } else {
       state.courseEntity.show = false; // Hide if no course data
     }
   }
 
-
+  // Icon Update
   if (state.lastStateKey !== stateKey) {
-    let iconUrl, pixelOffset, width, height, billboardColor;
+    let iconUrl, pixelOffset, width, height, billboardColor_icon;
 
     if (iconCache.has(stateKey)) {
       const cached = iconCache.get(stateKey);
@@ -1038,15 +1176,14 @@ export async function updateEntity(incomingData) {
       width = cached.width;
       height = cached.height;
       pixelOffset = cached.pixelOffset || new Cartesian2(0, 0);
-      billboardColor = cached.color || Color.WHITE;
-      // We don't register here because we register when assigning to state.lastIconUrl below
+      billboardColor_icon = cached.color || Color.WHITE;
     } else if (pendingIcons.has(stateKey)) {
       const result = await pendingIcons.get(stateKey);
       iconUrl = result.blobUrl;
       width = result.width;
       height = result.height;
       pixelOffset = result.pixelOffset;
-      billboardColor = result.color;
+      billboardColor_icon = result.color;
     } else {
       const generateIcon = async () => {
         let iUrl,
@@ -1070,7 +1207,7 @@ export async function updateEntity(incomingData) {
             infoColor: "black",
             infoBackground: "rgba(255,255,255,0.5)",
           };
-          if (staff_comment) symbolOptions.staffComments = staff_comment;
+          if (staff_comment) symbolOptions.staffComments = staff_comment; // Use data.staff_comment here
           const symbol = new ms.Symbol(sidc, symbolOptions);
           const canvas = symbol.asCanvas();
           const iconAnchor = symbol.getAnchor();
@@ -1103,12 +1240,8 @@ export async function updateEntity(incomingData) {
       pixelOffset = result.pixelOffset;
       width = result.width;
       height = result.height;
-      billboardColor = result.color;
+      billboardColor_icon = result.color;
     }
-
-    // Re-verify state exists after async await, and is not removed
-    state = entityState[uid];
-    if (!state || state._isRemoved) return;
 
     if (state.lastIconUrl !== iconUrl) {
       const oldIcon = state.lastIconUrl;
@@ -1121,42 +1254,153 @@ export async function updateEntity(incomingData) {
     state.entity.billboard.width = width;
     state.entity.billboard.height = height;
     state.entity.billboard.pixelOffset = pixelOffset;
-    state.entity.billboard.color = billboardColor;
+    state.entity.billboard.color = billboardColor_icon;
     state.lastStateKey = stateKey;
     state.lastRgbColor = rgbColor; // Update rgbColor on state
     unitListDirty = true;
   }
 
-  if (stale) {
-    state.staleAt = new Date(stale).getTime();
-  }
+  // Update staff comment matching. This needs to be called after data update
+  updateStaffCommentMatching(uid, data, state);
+}
 
-  // Final visibility sync (covers selection changes and filter updates)
-  const isVisible = calculateVisibility(state.lastData);
+
+// New function to perform the actual Cesium entity removal
+function _doRemoveEntity(uid, state) {
+  if (!viewer || !viewer.entities || !state) return;
+
+  const subEntities = [
+    state.entity,
+    state.trailEntity,
+    state.courseEntity,
+  ].filter((ent) => ent !== null && ent !== undefined);
+
   const selectedId = safeGetId(viewer.selectedEntity);
-  const isSelected =
+  if (
     selectedId &&
     (selectedId === uid ||
       selectedId === uid + "-trail" ||
-      selectedId === uid + "-course");
-
-  state.entity.show = isVisible || isSelected;
-
-  const trailVisible = isVisible && isSelected;
-  state.trailEntity.show = trailVisible;
-  if (trailVisible) {
-    state.trailEntity.polyline.positions = [...state.history];
+      selectedId === uid + "-course")
+  ) {
+    viewer.selectedEntity = undefined;
+  }
+  const trackedId = safeGetId(viewer.trackedEntity);
+  if (
+    trackedId &&
+    (trackedId === uid ||
+      trackedId === uid + "-trail" ||
+      trackedId === uid + "-course")
+  ) {
+    viewer.trackedEntity = undefined;
   }
 
-  if (state.courseEntity) {
-    state.courseEntity.show = state.entity.show && (state.lastData.course !== undefined);
+  if (state.lastIconUrl) {
+    unregisterBlobUsage(state.lastIconUrl);
   }
 
-  throttledUpdateUnitList();
-  updateStaffCommentMatching(uid, state.lastData, state);
+  subEntities.forEach((ent) => {
+    if (!ent || !viewer.entities.contains(ent)) return;
+
+    // Specifically handle courseEntity's dynamic properties
+    if (ent === state.courseEntity) {
+      if (ent.billboard) {
+        ent.billboard.rotation = undefined; // Detach CallbackProperty early
+        ent.billboard.pixelOffset = undefined; // Detach CallbackProperty early
+      }
+    }
+
+    // Explicitly nullify all relevant properties to ensure Cesium fully detaches them
+    if (ent.billboard) {
+      ent.billboard.show = false;
+      ent.billboard.image = undefined;
+      ent.billboard.color = undefined;
+      ent.billboard.rotation = undefined;
+      ent.billboard.pixelOffset = undefined;
+      ent.billboard.distanceDisplayCondition = undefined;
+      ent.billboard.disableDepthTestDistance = undefined;
+      ent.billboard.heightReference = undefined;
+    }
+    if (ent.label) {
+      ent.label.show = false;
+      ent.label.text = undefined;
+      ent.label.fillColor = undefined;
+      ent.label.outlineColor = undefined;
+      ent.label.backgroundColor = undefined;
+      ent.label.distanceDisplayCondition = undefined;
+      ent.label.disableDepthTestDistance = undefined;
+      ent.label.heightReference = undefined;
+    }
+    if (ent.point) {
+      ent.point.show = false;
+      ent.point.color = undefined;
+      ent.point.outlineColor = undefined;
+      ent.point.pixelSize = undefined;
+      ent.point.distanceDisplayCondition = undefined;
+      ent.point.disableDepthTestDistance = undefined;
+      ent.point.heightReference = undefined;
+    }
+    if (ent.polyline) {
+      ent.polyline.show = false;
+      ent.polyline.positions = undefined;
+      ent.polyline.width = undefined;
+      ent.polyline.material = undefined;
+      ent.polyline.clampToGround = undefined;
+      ent.polyline.distanceDisplayCondition = undefined;
+      ent.polyline.disableDepthTestDistance = undefined;
+    }
+    if (ent.polygon) {
+      ent.polygon.show = false;
+      ent.polygon.hierarchy = undefined;
+      ent.polygon.material = undefined;
+      ent.polygon.outline = undefined;
+      ent.polygon.classificationType = undefined;
+      ent.polygon.distanceDisplayCondition = undefined;
+    }
+
+    ent.show = false; // Ensure top-level show is false
+    viewer.entities.remove(ent);
+  });
+
+  // Nullify entity references in the state object
+  state.entity = null;
+  state.trailEntity = null;
+  state.courseEntity = null;
+  state._pendingCesiumReconcile = false; // No longer needs reconciliation, it's gone
+}
+
+// Existing removeEntity function, modified to use _doRemoveEntity
+export function removeEntity(uid) {
+  const state = entityState[uid];
+  if (!state || state._isRemoved) return;
+
+  // Mark for logical removal
+  state._isRemoved = true;
+
+  // Clean up staff comment matches
+  if (state.matchedStaffComments) {
+    state.matchedStaffComments.forEach(search => {
+      const set = staffCommentMap.get(search);
+      if (set) set.delete(uid);
+    });
+  }
+
+  // Defer actual Cesium removal if tab is not visible
+  if (!isTabVisible) {
+    backgroundRemovalQueue.add(uid); // Add UID to the queue for processing when visible
+    // Do NOT delete from entityState here; keep the state object for reconciliation later
+  } else {
+    // If tab is visible, immediately delete from entityState and add to pendingRemovals for batch processing
+    delete entityState[uid];
+    pendingRemovals.set(uid, state);
+    if (!removalProcessActive) processRemovalQueue();
+  }
+
+  unitListDirty = true;
+  throttledUpdateUnitList(); // Update unit list immediately if tab is visible
   updateStaffCommentsUI();
 }
 
+// Modified processRemovalQueue to use _doRemoveEntity
 function processRemovalQueue() {
   if (pendingRemovals.size === 0) {
     removalProcessActive = false;
@@ -1180,113 +1424,11 @@ function processRemovalQueue() {
       batch.forEach(([uid, state]) => {
         pendingRemovals.delete(uid);
 
-        if (state) {
-          // If a new entity with the same UID has been created and is active in entityState,
-          // we should still remove the *old* Cesium entities associated with this 'state'
-          // object, as the new entity will have its own Cesium entities.
-          // The rescue logic in updateEntity() should have removed 'state' from pendingRemovals
-          // if it was to be kept active. So, any 'state' remaining here must be removed.
-
-          const subEntities = [
-            state.entity,
-            state.trailEntity,
-            state.courseEntity,
-          ].filter((ent) => ent !== null && ent !== undefined);
-
-          const selectedId = safeGetId(viewer.selectedEntity);
-          if (
-            selectedId &&
-            (selectedId === uid ||
-              selectedId === uid + "-trail" ||
-              selectedId === uid + "-course")
-          ) {
-            viewer.selectedEntity = undefined;
-          }
-          const trackedId = safeGetId(viewer.trackedEntity);
-          if (
-            trackedId &&
-            (trackedId === uid ||
-              trackedId === uid + "-trail" ||
-              trackedId === uid + "-course")
-          ) {
-            viewer.trackedEntity = undefined;
-          }
-
-          if (state.lastIconUrl) {
-            unregisterBlobUsage(state.lastIconUrl);
-          }
-
-          subEntities.forEach((ent) => {
-            if (!ent || !viewer.entities.contains(ent)) return;
-
-            // Specifically handle courseEntity's dynamic properties
-            if (ent === state.courseEntity) {
-              if (ent.billboard) {
-                ent.billboard.rotation = undefined; // Detach CallbackProperty early
-                ent.billboard.pixelOffset = undefined; // Detach CallbackProperty early
-              }
-            }
-
-            if (ent === state.entity) state.entity = null;
-            if (ent === state.trailEntity) state.trailEntity = null;
-            if (ent === state.courseEntity) state.courseEntity = null;
-
-            // Explicitly nullify all relevant properties to ensure Cesium fully detaches them
-            if (ent.billboard) {
-              ent.billboard.show = false;
-              ent.billboard.image = undefined;
-              ent.billboard.color = undefined;
-              ent.billboard.rotation = undefined; // Redundant for courseEntity but harmless
-              ent.billboard.pixelOffset = undefined; // Redundant for courseEntity but harmless
-              ent.billboard.distanceDisplayCondition = undefined;
-              ent.billboard.disableDepthTestDistance = undefined;
-              ent.billboard.heightReference = undefined;
-            }
-            if (ent.label) {
-              ent.label.show = false;
-              ent.label.text = undefined;
-              ent.label.fillColor = undefined;
-              ent.label.outlineColor = undefined;
-              ent.label.backgroundColor = undefined;
-              ent.label.distanceDisplayCondition = undefined;
-              ent.label.disableDepthTestDistance = undefined;
-              ent.label.heightReference = undefined;
-            }
-            if (ent.point) {
-              ent.point.show = false;
-              ent.point.color = undefined;
-              ent.point.outlineColor = undefined;
-              ent.point.pixelSize = undefined;
-              ent.point.distanceDisplayCondition = undefined;
-              ent.point.disableDepthTestDistance = undefined;
-              ent.point.heightReference = undefined;
-            }
-            if (ent.polyline) {
-              ent.polyline.show = false;
-              ent.polyline.positions = undefined;
-              ent.polyline.width = undefined;
-              ent.polyline.material = undefined;
-              ent.polyline.clampToGround = undefined;
-              ent.polyline.distanceDisplayCondition = undefined;
-              ent.polyline.disableDepthTestDistance = undefined;
-            }
-            if (ent.polygon) {
-              ent.polygon.show = false;
-              ent.polygon.hierarchy = undefined;
-              ent.polygon.material = undefined;
-              ent.polygon.outline = undefined;
-              ent.polygon.classificationType = undefined;
-              ent.polygon.distanceDisplayCondition = undefined;
-            }
-
-            ent.show = false; // Ensure top-level show is false
-            viewer.entities.remove(ent);
-          });
+        if (state && state._isRemoved) {
+          _doRemoveEntity(uid, state);
         }
       });
-
-      unitListDirty = true;
-      throttledUpdateUnitList();
+      unitListDirty = true; // Mark dirty for UI update after batch removal
     } finally {
       viewer.entities.resumeEvents();
 
@@ -1296,36 +1438,36 @@ function processRemovalQueue() {
         removalProcessActive = false;
       }
     }
+    throttledUpdateUnitList(); // Trigger UI update after batch, potentially multiple times
   };
 
   requestAnimationFrame(processBatch);
 }
 
-export function removeEntity(uid) {
-  if (!isTabVisible) {
-    backgroundRemovalQueue.add(uid);
-    return;
+// Original processBackgroundRemovals function (renamed and repurposed)
+// This function will now be called by setTabVisibility to clear the queue
+// of UIDs that were removed while the tab was in the background.
+async function processBackgroundRemovalsOnFocus() {
+  if (backgroundRemovalQueue.size === 0) return;
+  console.log(`Processing ${backgroundRemovalQueue.size} deferred background removals.`);
+  
+  const uidsToProcess = Array.from(backgroundRemovalQueue);
+  backgroundRemovalQueue.clear(); // Clear the queue immediately
+
+  viewer.entities.suspendEvents(); // Suspend events for batch removal
+  try {
+    for (const uid of uidsToProcess) {
+      const state = entityState[uid];
+      if (state && state._isRemoved) { // Ensure it's still marked for removal
+        _doRemoveEntity(uid, state);
+        delete entityState[uid]; // Now delete from entityState as Cesium entities are removed
+      }
+    }
+  } finally {
+    viewer.entities.resumeEvents();
   }
-  const state = entityState[uid];
-  if (!state) return;
-
-  delete entityState[uid];
-  state._isRemoved = true;
-
-  // Clean up staff comment matches
-  if (state.matchedStaffComments) {
-    state.matchedStaffComments.forEach(search => {
-      const set = staffCommentMap.get(search);
-      if (set) set.delete(uid);
-    });
-  }
-
-  if (state.entity) state.entity.show = false;
-  if (state.trailEntity) state.trailEntity.show = false;
-  if (state.courseEntity) state.courseEntity.show = false;
-
-  pendingRemovals.set(uid, state);
-  if (!removalProcessActive) processRemovalQueue();
+  unitListDirty = true;
+  // UI updates will be triggered by setTabVisibility after all reconciliation
 }
 
 export function updateEntitySelectionVisibility(selectedEntity) {
@@ -1370,19 +1512,20 @@ export function updateEntitySelectionVisibility(selectedEntity) {
 
 setInterval(() => {
   if (!isTabVisible) {
-    return;
+    return; // Only perform stale check if tab is visible
   }
   const now = Date.now();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state || state._isRemoved || pendingRemovals.has(uid) || backgroundRemovalQueue.has(uid)) return;
+    // Don't process if already logically removed, or pending Cesium removal/reconciliation
+    if (!state || state._isRemoved || pendingRemovals.has(uid) || backgroundRemovalQueue.has(uid) || state._pendingCesiumReconcile) return;
 
     // STALE GRACE PERIOD: 120s
     if (state.staleAt && now > state.staleAt + 120000) {
       console.log(
         `Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`,
       );
-      removeEntity(uid);
+      removeEntity(uid); // removeEntity will handle deferring Cesium cleanup if tab is hidden
     }
   });
 }, 30000);
