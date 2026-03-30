@@ -1402,10 +1402,11 @@ export function updateEntitySelectionVisibility(selectedEntity) {
       prevState.entity.label.distanceDisplayCondition = DDC_UNSELECTED_LABEL;
       prevState.entity.label.disableDepthTestDistance = DDD_UNSELECTED;
     }
-    if (prevState.trailEntity && prevState.trailEntity.polyline) {
-      prevState.trailEntity.polyline.distanceDisplayCondition = ddcTactical;
-      // The `applyFilter()` function called immediately after this in the event handler
-      // is responsible for updating visibility for all entities. This line is redundant.
+    if (prevState.trailEntity) {
+      prevState.trailEntity.show = false;
+      if (prevState.trailEntity.polyline) {
+        prevState.trailEntity.polyline.distanceDisplayCondition = ddcTactical;
+      }
     }
   }
 
