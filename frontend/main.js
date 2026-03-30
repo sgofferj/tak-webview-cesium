@@ -34,6 +34,7 @@ import {
   setCameraTilt,
   setTabVisibility,
   updateStaffCommentsUI, // Import updateStaffCommentsUI
+  initStateManager,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -158,6 +159,7 @@ async function startApp() {
   await loadConfig();
   await loadTranslations();
   await initViewer();
+  initStateManager();
   setupEvents();
   // Ensure no entity is selected initially to prevent trails from showing
   viewer.selectedEntity = undefined; 
