@@ -268,12 +268,14 @@ export function calculateTrailVisibility(uid) {
 
 export function applyFilter() {
   if (!viewer) return;
+  console.debug("applyFilter called. viewer.selectedEntity ID:", safeGetId(viewer.selectedEntity));
   unitListDirty = true;
   const selectedId = safeGetId(viewer.selectedEntity);
 
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
     if (!state || state._isRemoved) return;
+    console.debug(`  Processing entity ${uid} in applyFilter.`);
 
     const isSelected =
       selectedId &&
@@ -314,7 +316,9 @@ export function applyFilter() {
     }
 
     if (state.trailEntity) {
-      state.trailEntity.show = calculateTrailVisibility(uid);
+      const trailShouldShow = calculateTrailVisibility(uid);
+      console.debug(`    Trail visibility for ${uid}: ${trailShouldShow} (current show state: ${state.trailEntity.show})`);
+      state.trailEntity.show = trailShouldShow;
     }
     if (state.courseEntity) {
       state.courseEntity.show = state.entity.show && state.lastData.course !== undefined;

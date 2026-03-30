@@ -177,6 +177,11 @@ async function startApp() {
   applyFilter();
 
   startWebSocket();
+  // After websocket starts and entities begin flowing in, we need to ensure their visibility is set
+  // This helps catch any entities that might have been processed by throttledReconcileForegroundEntities
+  // before the first general applyFilter from setTabVisibility.
+  applyFilter(); 
+  
   // Initialize staff comments UI after config and translations are loaded
   updateStaffCommentsUI(); 
 
