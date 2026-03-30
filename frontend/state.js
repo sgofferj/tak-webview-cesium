@@ -1358,6 +1358,11 @@ export function removeEntity(uid) {
     return; // Already removed or in queue
   }
 
+  // Immediately hide the entity to prevent rendering race conditions.
+  if (state.entity) state.entity.show = false;
+  if (state.trailEntity) state.trailEntity.show = false;
+  if (state.courseEntity) state.courseEntity.show = false;
+
   // 1. Mark for logical removal. This is the new gatekeeper for all other functions.
   state._isRemoved = true;
 
@@ -1421,23 +1426,30 @@ export function updateEntitySelectionVisibility(selectedEntity) {
   }
 }
 
-setInterval(() => {
-  if (!isTabVisible) {
-    return; // Only perform stale check if tab is visible
-  }
-  const now = Date.now();
-  Object.keys(entityState).forEach((uid) => {
-    const state = entityState[uid];
-    // Don't process if already logically removed, queued for removal, pending reconciliation,
-    // or in the foreground reconciliation queue.
-    if (!state || state._isRemoved || entityRemovalQueue.has(uid) || state._pendingCesiumReconcile || foregroundReconciliationQueue.has(uid)) return;
-
-    // STALE GRACE PERIOD: 120s
-    if (state.staleAt && now > state.staleAt + 120000) {
-      // console.debug(
-      //   `Removing stale entity ${uid}: callsign=${state.lastData.callsign}, staleAt=${new Date(state.staleAt).toISOString()}, now=${new Date(now).toISOString()}`,
-      // );
-      removeEntity(uid); // removeEntity will handle deferring Cesium cleanup if tab is hidden
+export function initStateManager() {
+  let lastStaleCheckTime = 0;
+  viewer.clock.onTick.addEventListener(() => {
+    const now = Date.now();
+    // Check roughly every 30 seconds
+    if (now - lastStaleCheckTime < 30000) {
+      return;
     }
+    lastStaleCheckTime = now;
+
+    if (!isTabVisible) {
+      return; // Only perform stale check if tab is visible
+    }
+
+    Object.keys(entityState).forEach((uid) => {
+      const state = entityState[uid];
+      // Don't process if already logically removed, queued for removal, pending reconciliation,
+      // or in the foreground reconciliation queue.
+      if (!state || state._isRemoved || entityRemovalQueue.has(uid) || state._pendingCesiumReconcile || foregroundReconciliationQueue.has(uid)) return;
+
+      // STALE GRACE PERIOD: 120s
+      if (state.staleAt && now > state.staleAt + 120000) {
+        removeEntity(uid);
+      }
+    });
   });
-}, 30000);
+}
