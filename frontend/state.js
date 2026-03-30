@@ -1308,29 +1308,47 @@ function processRemovalQueue() {
   if (!isTabVisible || entityRemovalQueue.size === 0) {
     return;
   }
-
   if (!viewer || !viewer.entities) return;
+
+  const uidsToProcess = Array.from(entityRemovalQueue);
+  entityRemovalQueue.clear();
+  const uidsActuallyRemoved = [];
 
   viewer.entities.suspendEvents();
   try {
-    const uidsToProcess = Array.from(entityRemovalQueue);
-    entityRemovalQueue.clear();
-
     for (const uid of uidsToProcess) {
       const state = entityState[uid];
-      // Check if the entity still exists and is still marked for removal.
-      // It's possible it was "resurrected" by a new update before being processed.
+      // Check if it exists and is still marked for removal (wasn't resurrected)
       if (state && state._isRemoved) {
         _doRemoveEntity(uid, state);
-        // CRITICAL: Delete from state map only AFTER Cesium objects are removed.
-        delete entityState[uid];
+        uidsActuallyRemoved.push(uid);
       }
     }
-    unitListDirty = true;
+    if (uidsActuallyRemoved.length > 0) {
+      unitListDirty = true;
+    }
   } finally {
     viewer.entities.resumeEvents();
-    // Trigger a UI update after the batch removal is complete.
-    throttledUpdateUnitList();
+    if (uidsActuallyRemoved.length > 0) {
+      throttledUpdateUnitList();
+    }
+  }
+
+  // DEFER DELETION: Schedule the actual deletion of the JS state object
+  // for the *next* animation frame. This gives Cesium's current render pass
+  // time to complete without tripping over a missing state object for an
+  // entity that was just removed.
+  if (uidsActuallyRemoved.length > 0) {
+    requestAnimationFrame(() => {
+      for (const uid of uidsActuallyRemoved) {
+        const state = entityState[uid];
+        // Final check: only delete if it's still in the removed state
+        // and wasn't resurrected in the small window between frames.
+        if (state && state._isRemoved) {
+          delete entityState[uid];
+        }
+      }
+    });
   }
 }
 
