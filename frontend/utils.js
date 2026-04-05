@@ -33,7 +33,7 @@ export function cotToSidc(type) {
   let sidc = "S" + affil + dim + "P";
 
   if (isSOF) {
-    sidc += "UCS---"; // Unit, Combat, Special Forces
+    sidc += "UCF---"; // Unit, Combat, Special Forces
   } else {
     // Position 5-10: Function Code (Mapping from et[3..8])
     for (let i = 3; i <= 8; i++) {
