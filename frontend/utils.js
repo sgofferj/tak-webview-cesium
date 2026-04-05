@@ -17,14 +17,9 @@ export function cotToSidc(type) {
   if (affil.includes(".")) affil = "N";
 
   let dim = (et[2] || "G").toUpperCase();
-  let isSOF = false;
-  if (dim === "F") {
-    isSOF = true;
-    dim = "G"; // Map SOF to Ground dimension
-  }
 
   // Standardize Dimension
-  if (!["P", "A", "G", "S", "U"].includes(dim)) dim = "G";
+  if (!["P", "A", "G", "S", "U", "F"].includes(dim)) dim = "G";
 
   // Position 1: Scheme (S = Warfighting)
   // Position 2: Identity
@@ -32,14 +27,10 @@ export function cotToSidc(type) {
   // Position 4: Status (P = Present)
   let sidc = "S" + affil + dim + "P";
 
-  if (isSOF) {
-    sidc += "UCF---"; // Unit, Combat, Special Forces
-  } else {
-    // Position 5-10: Function Code (Mapping from et[3..8])
-    for (let i = 3; i <= 8; i++) {
-      const part = et[i] || "-";
-      sidc += part.toUpperCase().substring(0, 1);
-    }
+  // Position 5-10: Function Code (Mapping from et[3..8])
+  for (let i = 3; i <= 8; i++) {
+    const part = et[i] || "-";
+    sidc += part.toUpperCase().substring(0, 1);
   }
 
   // Pad to 15 chars
