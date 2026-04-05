@@ -528,6 +528,7 @@ function updateDomainFilterUI() {
     g: "Ground",
     s: "Surface",
     u: "Subsurface",
+    p: "Space",
     x: "Other"
   };
 
