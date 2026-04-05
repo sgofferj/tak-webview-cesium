@@ -18,7 +18,7 @@ export function cotToSidc(type) {
 
   let dim = (et[2] || "G").toUpperCase();
   // Standardize Dimension
-  if (!["P", "A", "G", "S", "U"].includes(dim)) dim = "G";
+  if (!["P", "A", "G", "S", "U", "F"].includes(dim)) dim = "G";
 
   // Position 1: Scheme (S = Warfighting)
   // Position 2: Identity
