@@ -929,6 +929,8 @@ async function _reconcileCesiumEntity(uid, data) {
     staff_comment, // Include staff_comment from data
     __milsym,
     __milicon,
+    milsym,
+    milicon,
   } = data;
 
   // SAFETY: Filter non-finite coordinates for updates as well
@@ -952,9 +954,21 @@ async function _reconcileCesiumEntity(uid, data) {
   const typeUpper = (type || "").toUpperCase();
   let sidc = cotToSidc(typeUpper);
 
-  const msym = __milsym || __milicon;
+  const msym = __milsym || __milicon || milsym || milicon;
   if (msym) {
-    let explicitSidc = typeof msym === "string" ? msym : (msym.id || (msym.$ && msym.$.id));
+    const extractId = (val) => {
+      if (typeof val === "string") return val;
+      if (val && typeof val === "object") {
+        return val.id || (val.$ && val.$.id) || (val._attributes && val._attributes.id) || val.value;
+      }
+      return null;
+    };
+
+    let explicitSidc = extractId(msym);
+    if (!explicitSidc && Array.isArray(msym) && msym.length > 0) {
+      explicitSidc = extractId(msym[0]);
+    }
+
     if (explicitSidc) {
       sidc = cleanSIDC2525C(explicitSidc);
     }
