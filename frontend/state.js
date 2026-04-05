@@ -334,7 +334,7 @@ export function applyFilter() {
   });
 }
 
-export function createDescription(data) {
+export function createDescription(data, sidc) {
   const {
     callsign,
     type,
@@ -353,7 +353,11 @@ export function createDescription(data) {
   } = data;
   let html = `<div style="font-family: sans-serif; padding: 5px;">`;
   html += `<b style="font-size: 1.2em; color: #4af;">${callsign || uid}</b><br/>`;
-  html += `<small style="color: #888;">${type}</small><br/><br/>`;
+  html += `<small style="color: #888;">${type}</small><br/>`;
+  if (sidc) {
+    html += `<small style="color: #888;">${sidc}</small><br/>`;
+  }
+  html += `<br/>`;
 
   if (lat !== undefined && lon !== undefined) {
     html += `<b>Pos:</b> ${lat.toFixed(5)}, ${lon.toFixed(5)}<br/>`;
@@ -944,9 +948,11 @@ async function _reconcileCesiumEntity(uid, data) {
   const position = Cartesian3.fromDegrees(lon, lat, iconHeight);
   const anchorPosition = Cartesian3.fromDegrees(lon, lat, 0);
 
-  let sidc = cotToSidc((type || "").toUpperCase());
+  const typeUpper = (type || "").toUpperCase();
+  let sidc = cotToSidc(typeUpper);
+  const isSOF = typeUpper.split("-")[2] === "F";
 
-  if (iconsetpath && iconsetpath.includes("COT_MAPPING_2525C")) {
+  if (!isSOF && iconsetpath && iconsetpath.includes("COT_MAPPING_2525C")) {
     const msym = __milsym || __milicon;
     let explicitSidc = null;
     if (msym) {
@@ -999,7 +1005,7 @@ async function _reconcileCesiumEntity(uid, data) {
       ? `icon-${iconsetUrl}-${rgbColor}`
       : `${sidc}-${color}-${squawk}-${staff_comment || ''}`; // Use empty string for staff_comment if not present
 
-  const description = createDescription({ ...data, callsign });
+  const description = createDescription({ ...data, callsign }, sidc);
 
   // --- Entity Creation if it doesn't exist ---
   if (!state.entity) { // Create Cesium entities if they don't exist
