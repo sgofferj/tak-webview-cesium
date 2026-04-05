@@ -254,12 +254,13 @@ export function calculateTrailVisibility(uid) {
   if (!state || !state.trailEntity) return false;
 
   const selectedId = safeGetId(viewer.selectedEntity);
-  const isSelected =
+  const isSelected = Boolean(
     selectedId &&
     (selectedId === uid ||
       selectedId === uid + "-trail" ||
-      selectedId === uid + "-course");
-  const isVisible = calculateVisibility(state.lastData);
+      selectedId === uid + "-course")
+  );
+  const isVisible = Boolean(calculateVisibility(state.lastData));
   const result = isVisible && isSelected;
   // console.debug(`    calculateTrailVisibility for ${uid}: isVisible=${isVisible}, isSelected=${isSelected}, selectedId=${selectedId}. Result=${result}`);
   return result;
@@ -276,12 +277,13 @@ export function applyFilter() {
     if (!state || state._isRemoved) return;
     // console.debug(`  Processing entity ${uid} in applyFilter.`);
 
-    const isSelected =
+    const isSelected = Boolean(
       selectedId &&
       (selectedId === uid ||
         selectedId === uid + "-trail" ||
-        selectedId === uid + "-course");
-    const isVisible = calculateVisibility(state.lastData);
+        selectedId === uid + "-course")
+    );
+    const isVisible = Boolean(calculateVisibility(state.lastData));
 
     // Determine Target DDC based on Selection and Tilt
     const iconDDC = isSelected
