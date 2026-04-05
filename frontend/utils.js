@@ -26,10 +26,14 @@ export function cotToSidc(type) {
   // Position 4: Status (P = Present)
   let sidc = "S" + affil + dim + "P";
 
-  // Position 5-10: Function Code (Mapping from et[3..8])
-  for (let i = 3; i <= 8; i++) {
-    const part = et[i] || "-";
-    sidc += part.toUpperCase().substring(0, 1);
+  if (dim === "F") {
+    sidc += "G"; // Force SOF Ground
+  } else {
+    // Position 5-10: Function Code (Mapping from et[3..8])
+    for (let i = 3; i <= 8; i++) {
+      const part = et[i] || "-";
+      sidc += part.toUpperCase().substring(0, 1);
+    }
   }
 
   // Pad to 15 chars
