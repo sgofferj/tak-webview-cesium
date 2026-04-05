@@ -926,8 +926,6 @@ async function _reconcileCesiumEntity(uid, data) {
     how,
     squawk,
     staff_comment, // Include staff_comment from data
-    __milsym,
-    __milicon,
   } = data;
 
   // SAFETY: Filter non-finite coordinates for updates as well
@@ -950,24 +948,6 @@ async function _reconcileCesiumEntity(uid, data) {
 
   const typeUpper = (type || "").toUpperCase();
   let sidc = cotToSidc(typeUpper);
-  const isSOF = typeUpper.split("-")[2] === "F";
-
-  if (!isSOF && iconsetpath && iconsetpath.includes("COT_MAPPING_2525C")) {
-    const msym = __milsym || __milicon;
-    let explicitSidc = null;
-    if (msym) {
-      explicitSidc = typeof msym === "string" ? msym : (msym.id || (msym.$ && msym.$.id));
-    }
-    if (explicitSidc) {
-      explicitSidc = explicitSidc.replace(/\*/g, "-");
-      try {
-        const testSymbol = new ms.Symbol(explicitSidc);
-        if (typeof testSymbol.isValid === "function" ? testSymbol.isValid() : true) {
-          sidc = explicitSidc;
-        }
-      } catch (e) {}
-    }
-  }
 
   let iconsetUrl = null;
   if (iconsetpath && !iconsetpath.includes("COT_MAPPING_2525C")) {
