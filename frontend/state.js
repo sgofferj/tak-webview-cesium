@@ -135,6 +135,7 @@ export function setCameraTilt(tilted) {
 export const entityState = {};
 export let currentFilter = "";
 export let currentAffiliationFilter = "all";
+export let currentDomainFilter = "all";
 export let unitListDirty = true;
 export const expandedStates = new Set();
 
@@ -205,13 +206,15 @@ function unregisterBlobUsage(url) {
   }
 }
 
-export function setFilters(filter, affiliation) {
+export function setFilters(filter, affiliation, domain) {
   if (typeof filter === "object" && filter !== null) {
     if (filter.text !== undefined) currentFilter = filter.text.toLowerCase();
     if (filter.affiliation !== undefined) currentAffiliationFilter = filter.affiliation;
+    if (filter.domain !== undefined) currentDomainFilter = filter.domain;
   } else {
     if (filter !== undefined) currentFilter = filter.toLowerCase();
     if (affiliation !== undefined) currentAffiliationFilter = affiliation;
+    if (domain !== undefined) currentDomainFilter = domain;
   }
   applyFilter();
 }
@@ -220,6 +223,7 @@ export function getFilters() {
   return {
     text: currentFilter,
     affiliation: currentAffiliationFilter,
+    domain: currentDomainFilter,
   };
 }
 
@@ -227,12 +231,20 @@ export function calculateVisibility(data) {
   if (!data || !data.type) return false;
   const filter = currentFilter.trim();
   const affil = currentAffiliationFilter;
+  const domain = currentDomainFilter;
 
   // Affiliation Filter
   if (affil !== "all") {
     const et = data.type.split("-");
     const itemAffil = et[1] ? et[1].toLowerCase() : "u";
     if (itemAffil !== affil) return false;
+  }
+
+  // Domain Filter
+  if (domain !== "all") {
+    const et = data.type.split("-");
+    const itemDomain = et[2] ? et[2].toLowerCase() : "g";
+    if (itemDomain !== domain) return false;
   }
 
   // Text Filter
@@ -492,6 +504,47 @@ function updateStaffCommentMatching(uid, data, state) {
   _doUpdateStaffCommentMatching(uid, data, state);
 }
 
+let knownDomains = new Set();
+function updateDomainFilterUI() {
+  const domainSelect = document.getElementById("domainFilter");
+  if (!domainSelect) return;
+
+  const currentDomains = new Set();
+  Object.keys(entityState).forEach((uid) => {
+    const state = entityState[uid];
+    if (!state || state._isRemoved || !state.lastData || !state.lastData.type) return;
+    const et = state.lastData.type.split("-");
+    const domain = et[2] ? et[2].toLowerCase() : "g";
+    currentDomains.add(domain);
+  });
+
+  if (currentDomains.size === knownDomains.size && [...currentDomains].every(d => knownDomains.has(d))) {
+    return;
+  }
+  knownDomains = currentDomains;
+
+  const domainLabels = {
+    a: "Air",
+    g: "Ground",
+    s: "Surface",
+    u: "Subsurface",
+    x: "Other"
+  };
+
+  let html = `<option value="all">All Domains</option>`;
+  Array.from(knownDomains).sort().forEach(d => {
+    const label = domainLabels[d] || d.toUpperCase();
+    html += `<option value="${d}">${label}</option>`;
+  });
+
+  domainSelect.innerHTML = html;
+  if (knownDomains.has(currentDomainFilter) || currentDomainFilter === "all") {
+    domainSelect.value = currentDomainFilter;
+  } else {
+    setFilters(undefined, undefined, "all");
+  }
+}
+
 export function updateUnitListUI() {
   if (!unitListDirty) return;
   const content = document.getElementById("unitListContent");
@@ -581,6 +634,7 @@ export function updateUnitListUI() {
     html ||
     `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
   
+  updateDomainFilterUI();
   updateStaffCommentsUI();
   unitListDirty = false;
 }

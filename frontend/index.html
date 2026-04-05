@@ -101,15 +101,19 @@
         border-radius: 4px;
         margin-bottom: 10px;
       }
-      #affiliationFilter {
+      .filter-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .filter-row select {
         background: #111;
         color: white;
         border: 1px solid #555;
         padding: 8px;
-        width: 100%;
+        width: 50%;
         border-radius: 4px;
         cursor: pointer;
-        margin-bottom: 10px;
       }
       .btn {
         background: #444;
@@ -332,14 +336,19 @@
         <div class="sidebar-section">
           <h3 id="sidebarHeaderFilter">Filter</h3>
           <input type="text" id="filterInput" placeholder="Filter..." />
-          <select id="affiliationFilter">
-            <option value="all">All</option>
-            <option value="f">Friendly</option>
-            <option value="h">Hostile</option>
-            <option value="s">Suspect</option>
-            <option value="n">Neutral</option>
-            <option value="u">Unknown</option>
-          </select>
+          <div class="filter-row">
+            <select id="affiliationFilter">
+              <option value="all">All</option>
+              <option value="f">Friendly</option>
+              <option value="h">Hostile</option>
+              <option value="s">Suspect</option>
+              <option value="n">Neutral</option>
+              <option value="u">Unknown</option>
+            </select>
+            <select id="domainFilter">
+              <option value="all">All Domains</option>
+            </select>
+          </div>
           <button id="clearFilter" class="btn" style="width: 100%;">Clear Filter</button>
         </div>
 
