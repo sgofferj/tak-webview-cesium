@@ -290,6 +290,14 @@ class TAKClient:
                 if usericon is not None:
                     data["iconsetpath"] = usericon.get("iconsetpath")
 
+                milsym = detail.find("__milsym")
+                if milsym is not None:
+                    data["milsym"] = milsym.get("id")
+
+                milicon = detail.find("__milicon")
+                if milicon is not None:
+                    data["milicon"] = milicon.get("id")
+
                 emergency = detail.find("emergency")
                 if emergency is not None:
                     if emergency.get("cancel") == "true":
