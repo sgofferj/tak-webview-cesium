@@ -70,18 +70,13 @@ async function processForegroundReconciliationQueue() {
 
   if (!viewer || !viewer.entities) return;
 
-  viewer.entities.suspendEvents();
-  try {
-    for (const uid of uidsToProcess) {
-      const state = entityState[uid];
-      // Only reconcile if the entity still exists and isn't marked for removal
-      if (state && !state._isRemoved) {
-        state._pendingCesiumReconcile = false; // Clear flag before reconciliation
-        await _reconcileCesiumEntity(uid, state.lastData);
-      }
+  for (const uid of uidsToProcess) {
+    const state = entityState[uid];
+    // Only reconcile if the entity still exists and isn't marked for removal
+    if (state && !state._isRemoved) {
+      state._pendingCesiumReconcile = false; // Clear flag before reconciliation
+      await _reconcileCesiumEntity(uid, state.lastData);
     }
-  } finally {
-    viewer.entities.resumeEvents();
   }
 
   // After processing a batch, apply filter and update UI
