@@ -31,6 +31,7 @@ import {
   throttle,
   renderGoogleIcon,
   getMGRS,
+  cleanSIDC2525C,
 } from "./utils.js";
 
 const MAX_DISTANCE = 100000000.0;
@@ -926,6 +927,8 @@ async function _reconcileCesiumEntity(uid, data) {
     how,
     squawk,
     staff_comment, // Include staff_comment from data
+    __milsym,
+    __milicon,
   } = data;
 
   // SAFETY: Filter non-finite coordinates for updates as well
@@ -948,6 +951,23 @@ async function _reconcileCesiumEntity(uid, data) {
 
   const typeUpper = (type || "").toUpperCase();
   let sidc = cotToSidc(typeUpper);
+
+  if (iconsetpath && iconsetpath.includes("COT_MAPPING_2525C")) {
+    const msym = __milsym || __milicon;
+    let explicitSidc = null;
+    if (msym) {
+      explicitSidc = typeof msym === "string" ? msym : (msym.id || (msym.$ && msym.$.id));
+    }
+    if (explicitSidc) {
+      explicitSidc = cleanSIDC2525C(explicitSidc);
+      try {
+        const testSymbol = new ms.Symbol(explicitSidc);
+        if (typeof testSymbol.isValid === "function" ? testSymbol.isValid() : true) {
+          sidc = explicitSidc;
+        }
+      } catch (e) {}
+    }
+  }
 
   let iconsetUrl = null;
   if (iconsetpath && !iconsetpath.includes("COT_MAPPING_2525C")) {
