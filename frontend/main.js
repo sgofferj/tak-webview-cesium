@@ -72,10 +72,10 @@ async function loadAppState() {
       setFilters(state.filters);
       const filterInput = document.getElementById("filterInput");
       const affFilter = document.getElementById("affiliationFilter");
-      const domFilter = document.getElementById("domainFilter");
+      const dimFilter = document.getElementById("dimensionFilter");
       if (filterInput) filterInput.value = state.filters.text || "";
       if (affFilter) affFilter.value = state.filters.affiliation || "all";
-      if (domFilter && state.filters.domain) domFilter.value = state.filters.domain;
+      if (dimFilter && state.filters.dimension) dimFilter.value = state.filters.dimension;
     }
 
     // Restore Layers
@@ -793,7 +793,7 @@ function setupEvents() {
       saveAppState();
     });
   document
-    .getElementById("domainFilter")
+    .getElementById("dimensionFilter")
     .addEventListener("change", (e) => {
       setFilters(undefined, undefined, e.target.value);
       saveAppState();
@@ -801,8 +801,8 @@ function setupEvents() {
   document.getElementById("clearFilter").addEventListener("click", () => {
     document.getElementById("filterInput").value = "";
     document.getElementById("affiliationFilter").value = "all";
-    const domFilter = document.getElementById("domainFilter");
-    if (domFilter) domFilter.value = "all";
+    const dimFilter = document.getElementById("dimensionFilter");
+    if (dimFilter) dimFilter.value = "all";
     setFilters("", "all", "all");
     saveAppState();
   });
