@@ -716,15 +716,15 @@ function drawGroupIcon(name, role, how) {
   }
 
   if (abbr) {
-    ctx.font = "bold 65px sans-serif"; // Proportional to 80 on 192
+    ctx.font = "bold 55px sans-serif"; // Adjusted for smaller circle
     const textMetrics = ctx.measureText(abbr);
     ctx.fillStyle = fillColor;
     // Box behind text for legibility
     ctx.fillRect(
-      cx - textMetrics.width / 2 - 8,
-      cy - 40,
-      textMetrics.width + 16,
-      80,
+      cx - textMetrics.width / 2 - 6,
+      cy - 30,
+      textMetrics.width + 12,
+      60,
     );
     ctx.fillStyle = "black";
     ctx.textAlign = "center";
