@@ -945,7 +945,7 @@ async function _reconcileCesiumEntity(uid, data) {
   const sidc = cotToSidc((type || "").toUpperCase());
 
   let iconsetUrl = null;
-  if (iconsetpath) {
+  if (iconsetpath && !iconsetpath.includes("COT_MAPPING_2525C")) {
     const parts = iconsetpath.split("/").filter((p) => p.length > 0);
     const setUid = parts.shift();
     const iconFile = parts.join("/");
