@@ -135,7 +135,7 @@ export function setCameraTilt(tilted) {
 export const entityState = {};
 export let currentFilter = "";
 export let currentAffiliationFilter = "all";
-export let currentDomainFilter = "all";
+export let currentDimensionFilter = "all";
 export let unitListDirty = true;
 export const expandedStates = new Set();
 
@@ -206,15 +206,15 @@ function unregisterBlobUsage(url) {
   }
 }
 
-export function setFilters(filter, affiliation, domain) {
+export function setFilters(filter, affiliation, dimension) {
   if (typeof filter === "object" && filter !== null) {
     if (filter.text !== undefined) currentFilter = filter.text.toLowerCase();
     if (filter.affiliation !== undefined) currentAffiliationFilter = filter.affiliation;
-    if (filter.domain !== undefined) currentDomainFilter = filter.domain;
+    if (filter.dimension !== undefined) currentDimensionFilter = filter.dimension;
   } else {
     if (filter !== undefined) currentFilter = filter.toLowerCase();
     if (affiliation !== undefined) currentAffiliationFilter = affiliation;
-    if (domain !== undefined) currentDomainFilter = domain;
+    if (dimension !== undefined) currentDimensionFilter = dimension;
   }
   applyFilter();
 }
@@ -223,7 +223,7 @@ export function getFilters() {
   return {
     text: currentFilter,
     affiliation: currentAffiliationFilter,
-    domain: currentDomainFilter,
+    dimension: currentDimensionFilter,
   };
 }
 
@@ -231,7 +231,7 @@ export function calculateVisibility(data) {
   if (!data || !data.type) return false;
   const filter = currentFilter.trim();
   const affil = currentAffiliationFilter;
-  const domain = currentDomainFilter;
+  const dimension = currentDimensionFilter;
 
   // Affiliation Filter
   if (affil !== "all") {
@@ -240,11 +240,11 @@ export function calculateVisibility(data) {
     if (itemAffil !== affil) return false;
   }
 
-  // Domain Filter
-  if (domain !== "all") {
+  // Dimension Filter
+  if (dimension !== "all") {
     const et = data.type.split("-");
-    const itemDomain = et[2] ? et[2].toLowerCase() : "g";
-    if (itemDomain !== domain) return false;
+    const itemDimension = et[2] ? et[2].toLowerCase() : "g";
+    if (itemDimension !== dimension) return false;
   }
 
   // Text Filter
@@ -504,43 +504,44 @@ function updateStaffCommentMatching(uid, data, state) {
   _doUpdateStaffCommentMatching(uid, data, state);
 }
 
-let knownDomains = new Set();
-function updateDomainFilterUI() {
-  const domainSelect = document.getElementById("domainFilter");
-  if (!domainSelect) return;
+let knownDimensions = new Set();
+function updateDimensionFilterUI() {
+  const dimensionSelect = document.getElementById("dimensionFilter");
+  if (!dimensionSelect) return;
 
-  const currentDomains = new Set();
+  const currentDimensions = new Set();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
     if (!state || state._isRemoved || !state.lastData || !state.lastData.type) return;
     const et = state.lastData.type.split("-");
-    const domain = et[2] ? et[2].toLowerCase() : "g";
-    currentDomains.add(domain);
+    const dimension = et[2] ? et[2].toLowerCase() : "g";
+    currentDimensions.add(dimension);
   });
 
-  if (currentDomains.size === knownDomains.size && [...currentDomains].every(d => knownDomains.has(d))) {
+  if (currentDimensions.size === knownDimensions.size && [...currentDimensions].every(d => knownDimensions.has(d))) {
     return;
   }
-  knownDomains = currentDomains;
+  knownDimensions = currentDimensions;
 
-  const domainLabels = {
+  const dimensionLabels = {
     a: "Air",
     g: "Ground",
     s: "Surface",
     u: "Subsurface",
     p: "Space",
+    f: "Special Forces",
     x: "Other"
   };
 
-  let html = `<option value="all">All Domains</option>`;
-  Array.from(knownDomains).sort().forEach(d => {
-    const label = domainLabels[d] || d.toUpperCase();
+  let html = `<option value="all">All Dimensions</option>`;
+  Array.from(knownDimensions).sort().forEach(d => {
+    const label = dimensionLabels[d] || d.toUpperCase();
     html += `<option value="${d}">${label}</option>`;
   });
 
-  domainSelect.innerHTML = html;
-  if (knownDomains.has(currentDomainFilter) || currentDomainFilter === "all") {
-    domainSelect.value = currentDomainFilter;
+  dimensionSelect.innerHTML = html;
+  if (knownDimensions.has(currentDimensionFilter) || currentDimensionFilter === "all") {
+    dimensionSelect.value = currentDimensionFilter;
   } else {
     setFilters(undefined, undefined, "all");
   }
@@ -635,7 +636,7 @@ export function updateUnitListUI() {
     html ||
     `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
   
-  updateDomainFilterUI();
+  updateDimensionFilterUI();
   updateStaffCommentsUI();
   unitListDirty = false;
 }
