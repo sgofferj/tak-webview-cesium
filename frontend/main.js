@@ -22,6 +22,8 @@ import {
   getCameraState,
   setCameraState,
   getLayerState,
+  generateRandomColor,
+  activeOverlays, // Import activeOverlays
 } from "./viewer.js";
 import {
   entityState,
@@ -30,6 +32,9 @@ import {
   getFilters,
   updateEntitySelectionVisibility,
   setCameraTilt,
+  setTabVisibility,
+  updateStaffCommentsUI, // Import updateStaffCommentsUI
+  initStateManager,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
@@ -67,8 +72,10 @@ async function loadAppState() {
       setFilters(state.filters);
       const filterInput = document.getElementById("filterInput");
       const affFilter = document.getElementById("affiliationFilter");
+      const dimFilter = document.getElementById("dimensionFilter");
       if (filterInput) filterInput.value = state.filters.text || "";
       if (affFilter) affFilter.value = state.filters.affiliation || "all";
+      if (dimFilter && state.filters.dimension) dimFilter.value = state.filters.dimension;
     }
 
     // Restore Layers
@@ -126,7 +133,7 @@ function updateLayerPickerUI() {
   };
 
   panel.querySelectorAll(".layer-item").forEach((item) => {
-    const name = item.querySelector(".layer-label")?.innerText?.trim();
+    const name = item.getAttribute("data-layer-name"); // Use data-layer-name for consistency
     const input = item.querySelector("input");
 
     if (item.classList.contains("baseLayer")) {
@@ -154,7 +161,10 @@ async function startApp() {
   await loadConfig();
   await loadTranslations();
   await initViewer();
+  initStateManager();
   setupEvents();
+  // Ensure no entity is selected initially to prevent trails from showing
+  viewer.selectedEntity = undefined; 
   populateLayerPicker();
 
   // Try to load state
@@ -167,19 +177,35 @@ async function startApp() {
     await setTerrain(false);
     updateLayerPickerUI();
   }
+  // Ensure filters are applied after loading app state (or defaults) to correctly set visibility
+  applyFilter();
 
   startWebSocket();
+  // After websocket starts and entities begin flowing in, we need to ensure their visibility is set
+  // This helps catch any entities that might have been processed by throttledReconcileForegroundEntities
+  // before the first general applyFilter from setTabVisibility.
+  applyFilter(); 
+  
+  // Initialize staff comments UI after config and translations are loaded
+  updateStaffCommentsUI(); 
+
+  // FINAL SANITY CHECK: Ensure no entity is selected after initialization is complete.
+  // This robustly prevents trails from showing on load due to any race conditions
+  // with entity creation or state loading.
+  viewer.selectedEntity = undefined;
 
   // Start auto-save
   viewer.camera.moveEnd.addEventListener(saveAppState);
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      console.log("Tab backgrounded: pausing rendering loop");
+      // console.debug("Tab backgrounded: pausing rendering loop");
       viewer.useDefaultRenderLoop = false;
+      setTabVisibility(false);
     } else {
-      console.log("Tab focused: resuming rendering loop");
+      // console.debug("Tab focused: resuming rendering loop");
       viewer.useDefaultRenderLoop = true;
+      setTabVisibility(true);
     }
   });
 }
@@ -347,6 +373,7 @@ function setupAuthEvents() {
 function createLayerItem(l, isRadio, nameGroup, isActive) {
   const item = document.createElement("div");
   item.className = `layer-item ${nameGroup} ${isActive ? "active" : ""}`;
+  item.setAttribute("data-layer-name", l.name); // Store original name for identification
 
   let iconUrl = l.icon;
   if (!iconUrl) {
@@ -367,7 +394,7 @@ function createLayerItem(l, isRadio, nameGroup, isActive) {
   item.innerHTML = `
         <div class="layer-thumb" style="background-image: url('${iconUrl}')"></div>
         <div class="layer-label">${l.name}</div>
-        <input type="${isRadio ? "radio" : "checkbox"}" name="${nameGroup}" ${
+        <input type="${isRadio ? "radio" : "checkbox"}" id="${nameGroup === 'overlayLayer' ? `overlay-${CSS.escape(l.name)}` : ''}" name="${nameGroup}" ${
           isActive ? "checked" : ""
         }>
     `;
@@ -458,6 +485,15 @@ function populateLayerPicker() {
   if (appConfig.overlay_layers && appConfig.overlay_layers.length > 0) {
     appConfig.overlay_layers.forEach((l) => {
       const item = createLayerItem(l, false, "overlayLayer", false);
+
+      // Handle internal name preference for label
+      if (l.displayName) {
+        const label = item.querySelector(".layer-label");
+        if (label) label.innerText = l.displayName;
+      }
+
+      // Re-enabling left click response for file overlays as the previous change was based on a misunderstanding.
+      // The InfoBox for map clicks on overlays is already handled by viewer.selectedEntityChanged.
       item.addEventListener("click", async (e) => {
         const input = item.querySelector("input");
         if (e.target !== input) {
@@ -471,8 +507,22 @@ function populateLayerPicker() {
         await toggleOverlayLayer(l, input.checked);
         saveAppState();
       });
+
+      // Right-click styling modal
+      if (l.type === "file") {
+        item.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          showOverlayStyleModal(l);
+        });
+      }
+
       overlayGrid.appendChild(item);
     });
+  } else {
+    const noOverlaysMessage = document.createElement("div");
+    noOverlaysMessage.style.cssText = "grid-column: 1 / -1; text-align: center; color: #888; font-size: 0.8em; padding: 10px;";
+    noOverlaysMessage.innerText = i18n.noOverlaysMessage || "No overlay files found.";
+    overlayGrid.appendChild(noOverlaysMessage);
   }
 
   // Analysis Section
@@ -538,10 +588,117 @@ function populateLayerPicker() {
     setContourSpacing(currentDensity);
     saveAppState();
   });
+
+  // Attach event listener for click outside modals
+  document.addEventListener("click", (e) => {
+    const overlayStyleModal = document.getElementById("overlayStyleModal");
+    if (
+      overlayStyleModal &&
+      !overlayStyleModal.classList.contains("modal-hidden") &&
+      !overlayStyleModal.contains(e.target) &&
+      e.target.id !== "saveOverlayStyle" &&
+      e.target.id !== "closeOverlayStyle"
+    ) {
+      overlayStyleModal.classList.add("modal-hidden");
+    }
+  }, true); // Use capture phase to ensure it runs before other click handlers
+
+}
+
+function showOverlayStyleModal(layer) {
+  const modal = document.getElementById("overlayStyleModal");
+  if (!modal) return;
+
+  const colorInput = document.getElementById("overlayColor");
+  const borderNoneCheckbox = document.getElementById("overlayBorderNone"); // New checkbox
+  const fillColorInput = document.getElementById("overlayFillColor");
+  const fillNoneCheckbox = document.getElementById("overlayFillNone");
+  const transparencyInput = document.getElementById("overlayTransparency");
+  const widthInput = document.getElementById("overlayWidth");
+  const saveBtn = document.getElementById("saveOverlayStyle");
+
+  const saved = localStorage.getItem(`overlay_style_${layer.name}`);
+  let currentStyle;
+  if (saved) {
+    currentStyle = JSON.parse(saved);
+    // Ensure all properties exist from older saves
+    currentStyle.color = currentStyle.color || "#00ffff";
+    currentStyle.borderNone = currentStyle.borderNone || false; // New property
+    currentStyle.fillColor = currentStyle.fillColor || "#00ffff";
+    currentStyle.width = currentStyle.width !== undefined ? currentStyle.width : 2;
+    currentStyle.fillNone = currentStyle.fillNone || false;
+    currentStyle.transparency = currentStyle.transparency !== undefined ? currentStyle.transparency : 0.5; // Default transparency for fill
+  } else {
+    // Generate random color if no saved style
+    const randomColor = generateRandomColor();
+    currentStyle = { color: randomColor, borderNone: false, fillColor: randomColor, width: 2, fillNone: false, transparency: 0.5 };
+  }
+
+  colorInput.value = currentStyle.color;
+  borderNoneCheckbox.checked = currentStyle.borderNone; // Set state of new checkbox
+  fillColorInput.value = currentStyle.fillColor;
+  fillNoneCheckbox.checked = currentStyle.fillNone;
+  transparencyInput.value = currentStyle.transparency * 100; // Convert to percentage
+  widthInput.value = currentStyle.width;
+
+  // Event listener for borderNoneCheckbox
+  borderNoneCheckbox.onchange = () => {
+    colorInput.disabled = borderNoneCheckbox.checked;
+    widthInput.disabled = borderNoneCheckbox.checked;
+  };
+  // Initialize disabled state for border controls
+  colorInput.disabled = borderNoneCheckbox.checked;
+  widthInput.disabled = borderNoneCheckbox.checked;
+
+  // Add event listener for fillNoneCheckbox (existing)
+  fillNoneCheckbox.onchange = () => {
+    fillColorInput.disabled = fillNoneCheckbox.checked;
+    transparencyInput.disabled = fillNoneCheckbox.checked;
+  };
+  // Initialize disabled state (existing)
+  fillColorInput.disabled = fillNoneCheckbox.checked;
+  transparencyInput.disabled = fillNoneCheckbox.checked;
+
+  saveBtn.onclick = async () => {
+    const style = {
+      color: colorInput.value,
+      borderNone: borderNoneCheckbox.checked, // Save new borderNone state
+      fillColor: fillColorInput.value,
+      width: widthInput.value,
+      fillNone: fillNoneCheckbox.checked,
+      transparency: transparencyInput.value / 100, // Store as 0-1 float
+    };
+    localStorage.setItem(`overlay_style_${layer.name}`, JSON.stringify(style));
+    modal.classList.add("modal-hidden");
+    // Reload layer if it's active. The input's ID is specifically for overlay layers.
+    const input = document.getElementById(`overlay-${CSS.escape(layer.name)}`);
+    if (input && input.checked) {
+      await toggleOverlayLayer(layer, false); // Deactivate
+      await toggleOverlayLayer(layer, true);  // Reactivate to apply new style
+    }
+  };
+
+  document.getElementById("closeOverlayStyle").onclick = () => modal.classList.add("modal-hidden");
+  modal.classList.remove("modal-hidden");
 }
 
 function setupEvents() {
   viewer.selectedEntityChanged.addEventListener((entity) => {
+    // Prevent infoBox for file overlay entities
+    if (entity && entity.dataSource) {
+      for (const [overlayName, dataSource] of activeOverlays.entries()) {
+        // Check if the current overlay is a DataSource (file overlay) and matches the entity's dataSource
+        if (dataSource.entities && dataSource === entity.dataSource) {
+          // Find the corresponding layer configuration to confirm it's a 'file' type
+          const layerConfig = appConfig.overlay_layers.find(l => l.name === overlayName && l.type === 'file');
+          if (layerConfig) {
+            viewer.selectedEntity = undefined; // Deselect to prevent infoBox
+            return; // Stop further processing for this selection
+          }
+        }
+      }
+    }
+
     // REDIRECT SELECTION: If we clicked on a course arrow or trail, select the main entity instead
     if (
       entity &&
@@ -614,12 +771,6 @@ function setupEvents() {
   });
 
   const updateZoom = () => {
-    const height = viewer.camera.positionCartographic.height;
-    const zoom = Math.floor(Math.log2(35200000 / height));
-    const zoomEl = document.getElementById("statusZoom");
-    if (zoomEl) zoomEl.innerText = `Z${Math.max(0, zoom)}`;
-
-    // Update camera tilt state (limit visual range if not looking straight down)
     const pitch = viewer.camera.pitch;
     // -PI/2 is straight down. If pitch is greater than -PI/2 + epsilon, we are tilted.
     const isTilted = pitch > -Math.PI / 2 + 0.1;
@@ -638,13 +789,21 @@ function setupEvents() {
   document
     .getElementById("affiliationFilter")
     .addEventListener("change", (e) => {
-      setFilters(undefined, e.target.value);
+      setFilters(undefined, e.target.value, undefined);
+      saveAppState();
+    });
+  document
+    .getElementById("dimensionFilter")
+    .addEventListener("change", (e) => {
+      setFilters(undefined, undefined, e.target.value);
       saveAppState();
     });
   document.getElementById("clearFilter").addEventListener("click", () => {
     document.getElementById("filterInput").value = "";
     document.getElementById("affiliationFilter").value = "all";
-    setFilters("", "all");
+    const dimFilter = document.getElementById("dimensionFilter");
+    if (dimFilter) dimFilter.value = "all";
+    setFilters("", "all", "all");
     saveAppState();
   });
   document.getElementById("resetView").addEventListener("click", () => {

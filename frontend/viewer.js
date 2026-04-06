@@ -23,11 +23,27 @@ import {
   GeoJsonDataSource,
   KmlDataSource,
   CzmlDataSource,
+  HeightReference,
+  ClassificationType,
+  JulianDate,
+  CallbackProperty, // Import CallbackProperty
+  ScreenSpaceEventHandler, // Import ScreenSpaceEventHandler
+  ScreenSpaceEventType, // Import ScreenSpaceEventType for click events
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
 
+// Utility to generate a random hex color
+export function generateRandomColor() {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
+
 export let viewer;
-const activeOverlays = new Map();
+export const activeOverlays = new Map(); // Export activeOverlays
 let currentBaseLayer = null;
 let currentBaseLayerConfig = null;
 let isDarkMode = false;
@@ -207,6 +223,112 @@ function checkAnalysisAvailability() {
   }
 }
 
+function applyOverlayStyling(dataSource, layerName) {
+  const saved = localStorage.getItem(`overlay_style_${layerName}`);
+  if (!saved) return;
+  try {
+    const style = JSON.parse(saved);
+    dataSource.entities.values.forEach((entity) => {
+      if (entity.polyline) {
+        if (style.color) entity.polyline.material = Color.fromCssColorString(style.color);
+        if (style.width) entity.polyline.width = parseFloat(style.width);
+      }
+      if (entity.polygon) {
+        // Apply fill style
+        if (style.fillNone) {
+          entity.polygon.material = Color.TRANSPARENT;
+        } else if (style.fillColor) {
+          const alpha = style.transparency !== undefined ? parseFloat(style.transparency) : 0.5;
+          entity.polygon.material = Color.fromCssColorString(style.fillColor).withAlpha(alpha);
+        }
+
+        // Disable Cesium's native polygon outline (it won't render on terrain anyway)
+        entity.polygon.outline = false;
+
+        // Manage a separate polyline for the outline
+        const outlineId = `${entity.id}-outline`;
+        let outlinePolyline = dataSource.entities.getById(outlineId);
+
+        if (style.borderNone) {
+          if (outlinePolyline) {
+            dataSource.entities.remove(outlinePolyline);
+            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline removed (borderNone).`);
+          }
+        } else {
+          // Get positions from the polygon hierarchy
+          const hierarchy = entity.polygon.hierarchy.getValue(JulianDate.now());
+          // Use hierarchy.positions for GeoJSON-like data, which contains the exterior ring directly
+          if (hierarchy && hierarchy.positions && hierarchy.positions.length > 0) {
+            const positions = hierarchy.positions;
+
+            if (!outlinePolyline) {
+              // Create new polyline
+              outlinePolyline = dataSource.entities.add({
+                id: outlineId,
+                parent: entity, // Associate with the main entity
+                pickable: false, // Disable picking for the outline entity itself
+                polyline: {
+                  positions: positions,
+                  width: parseFloat(style.width),
+                  material: Color.fromCssColorString(style.color),
+                  clampToGround: true,
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY, // Ensure polyline is always visible on top
+                  pickable: false, // Make the outline polyline graphic non-pickable
+                },
+                show: new CallbackProperty(() => {
+                  // Safely check if the parent entity still exists and is shown
+                  const parentEntity = dataSource.entities.getById(entity.id);
+                  return parentEntity && parentEntity.show;
+                }, false),
+              });
+              // Removed verbose log for polyline outline creation
+            } else {
+              // Update existing polyline
+              outlinePolyline.polyline.positions = positions;
+              outlinePolyline.polyline.width = parseFloat(style.width);
+              outlinePolyline.polyline.material = Color.fromCssColorString(style.color);
+              outlinePolyline.polyline.disableDepthTestDistance = Number.POSITIVE_INFINITY; // Ensure this is also set on update
+              outlinePolyline.polyline.pickable = false; // Ensure it remains non-pickable on update
+              // Ensure show property also uses CallbackProperty for dynamic updates
+              outlinePolyline.show = new CallbackProperty(() => {
+                const parentEntity = dataSource.entities.getById(entity.id);
+                return parentEntity && parentEntity.show;
+              }, false);
+              // Removed verbose log for polyline outline update
+            }
+          } else {
+            // Further enhanced logging to pinpoint the exact reason for skipping
+            let reason = "unknown";
+            if (!hierarchy) {
+              reason = "hierarchy is null/undefined";
+            } else if (!hierarchy.positions) {
+              reason = "hierarchy.positions is null/undefined";
+            } else if (!Array.isArray(hierarchy.positions)) {
+              reason = `hierarchy.positions is not an array (type: ${typeof hierarchy.positions})`;
+            } else if (hierarchy.positions.length === 0) {
+              reason = "hierarchy.positions is an empty array";
+            }
+            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline skipped because: ${reason}. Full hierarchy object:`, hierarchy);
+
+            if (outlinePolyline) {
+              dataSource.entities.remove(outlinePolyline); // Ensure old polyline is removed if polygon becomes degenerate
+            }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    console.error("Failed to apply overlay styling", e);
+  }
+}
+
+// List of all graphic property names on a Cesium Entity that can be pickable
+const allGraphicPropertyNames = [
+  "billboard", "box", "corridor", "cylinder", "ellipse", "ellipsoid",
+  "label", "model", "path", "point", "polygon", "polyline",
+  "polylineVolume", "rectangle", "wall"
+];
+
 export async function toggleOverlayLayer(layerConfig, active) {
   if (active) {
     if (!activeOverlays.has(layerConfig.name)) {
@@ -214,16 +336,63 @@ export async function toggleOverlayLayer(layerConfig, active) {
         let dataSource;
         try {
           if (layerConfig.file_type === "geojson") {
-            dataSource = await GeoJsonDataSource.load(layerConfig.url);
+            dataSource = await GeoJsonDataSource.load(layerConfig.url, {
+              clampToGround: true, // Reinstated to true for proper filling on terrain
+              enablePickFeatures: false, // Disable picking for GeoJSON features
+            });
           } else if (layerConfig.file_type === "kml") {
             dataSource = await KmlDataSource.load(layerConfig.url, {
               canvas: viewer.canvas,
               camera: viewer.camera,
+              clampToGround: true, // Reinstated to true for proper filling on terrain
+              enablePickFeatures: false, // Disable picking for KML features
             });
           } else if (layerConfig.file_type === "czml") {
             dataSource = await CzmlDataSource.load(layerConfig.url);
           }
           if (dataSource) {
+            // Prefer internal name if available for UI consistency
+            if (dataSource.name && dataSource.name !== "file") {
+              layerConfig.displayName = dataSource.name;
+            }
+
+            applyOverlayStyling(dataSource, layerConfig.name);
+
+            // Post-process entities for better visibility on terrain and disable picking
+            dataSource.entities.values.forEach((entity) => {
+              entity.pickable = false; // Disable infobox for the entity itself
+
+              // Explicitly disable picking for all defined graphic properties
+              allGraphicPropertyNames.forEach(propName => {
+                if (entity[propName]) {
+                  entity[propName].pickable = false;
+                }
+              });
+
+              // Apply height reference and depth test distance for common clamped types
+              // (These were previously duplicated, consolidating the picking here)
+              if (entity.billboard) {
+                entity.billboard.heightReference = HeightReference.CLAMP_TO_GROUND;
+                entity.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+              }
+              if (entity.label) {
+                entity.label.heightReference = HeightReference.CLAMP_TO_GROUND;
+                entity.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+              }
+              if (entity.point) {
+                entity.point.heightReference = HeightReference.CLAMP_TO_GROUND;
+                entity.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+              }
+              if (entity.polyline) {
+                entity.polyline.clampToGround = true;
+              }
+              if (entity.polygon) {
+                entity.polygon.classificationType = ClassificationType.BOTH;
+                // Native Cesium polygon outlines are incompatible with terrain clamping.
+                // We handle outlines via a separate Polyline entity.
+                entity.polygon.outline = false; // Explicitly disable native outline
+              }
+            });
             await viewer.dataSources.add(dataSource);
             activeOverlays.set(layerConfig.name, dataSource);
           }
@@ -263,7 +432,7 @@ export function clearOverlayLayers() {
 }
 
 export async function initViewer() {
-  console.log("Initializing Viewer. Current appConfig:", appConfig);
+  // console.log("Initializing Viewer. Current appConfig:", appConfig); // Removed verbose log
 
   const ionToken = appConfig.cesium_ion_token;
   if (ionToken) {
@@ -290,8 +459,56 @@ export async function initViewer() {
     terrainExaggerationRelativeHeight: 0.0,
   });
 
+  // Add a listener to immediately deselect any entity that belongs to an active overlay
+  // Intercept LEFT_CLICK events to prevent infobox for overlay entities
+  const handler = new ScreenSpaceEventHandler(viewer.canvas);
+  handler.setInputAction((click) => {
+    const pickedObject = viewer.scene.pick(click.position);
+    if (pickedObject && pickedObject.id) {
+      // Check if the picked object (entity) belongs to an active file overlay
+      for (const [layerName, overlay] of activeOverlays) {
+        // Only consider DataSources, as they hold file-based entities
+        if (overlay && overlay.entities && overlay.entities.contains(pickedObject.id)) {
+          viewer.selectedEntity = undefined; // Clear any potential selection
+          // Stop processing this click, effectively "hijacking" it
+          // This prevents Cesium's default picking behavior and thus the infobox.
+          return;
+        }
+      }
+    }
+  }, ScreenSpaceEventType.LEFT_CLICK);
+
+  // Existing listener to immediately deselect any entity that belongs to an active overlay.
+  // This listener will now act as a secondary failsafe, as the ScreenSpaceEventHandler
+  // should prevent selection of overlay entities in the first place.
+  viewer.selectedEntityChanged.addEventListener(() => {
+    const selectedEntity = viewer.selectedEntity;
+    if (selectedEntity) {
+      for (const [layerName, overlay] of activeOverlays) {
+        // Check if the overlay is a DataSource (for file types) and contains the selected entity
+        if (overlay && overlay.entities && overlay.entities.contains(selectedEntity)) {
+          viewer.selectedEntity = undefined; // Deselect it immediately
+          break; // Stop checking further overlays
+        }
+      }
+    }
+  });
+
   viewer.scene.globe.depthTestAgainstTerrain = true;
   viewer.camera.percentageChanged = 0.01;
+
+  // Zulu Clock
+  const zuluClock = document.getElementById("zuluClock");
+  if (zuluClock) {
+    setInterval(() => {
+      const now = new Date();
+      const h = String(now.getUTCHours()).padStart(2, "0");
+      const m = String(now.getUTCMinutes()).padStart(2, "0");
+      const s = String(now.getUTCSeconds()).padStart(2, "0");
+      zuluClock.innerText = `${h}:${m}:${s}Z`;
+    }, 1000);
+  }
+
   currentBaseLayer = viewer.imageryLayers.get(0);
   currentBaseLayerConfig = defaultBase;
 

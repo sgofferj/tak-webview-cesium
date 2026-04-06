@@ -11,14 +11,15 @@ import mgrs from "mgrs";
 
 // CoT Type to MIL-STD-2525 SIDC mapping
 export function cotToSidc(type) {
-  if (!type) return "SUGP------------";
+  if (!type) return "SUGP-----------";
   const et = type.split("-");
   let affil = (et[1] || "U").toUpperCase();
   if (affil.includes(".")) affil = "N";
 
   let dim = (et[2] || "G").toUpperCase();
+
   // Standardize Dimension
-  if (!["P", "A", "G", "S", "U"].includes(dim)) dim = "G";
+  if (!["P", "A", "G", "S", "U", "F"].includes(dim)) dim = "G";
 
   // Position 1: Scheme (S = Warfighting)
   // Position 2: Identity
@@ -36,6 +37,43 @@ export function cotToSidc(type) {
   while (sidc.length < 15) sidc += "-";
 
   return sidc.substring(0, 15);
+}
+
+/**
+ * Cleans ATAK-style SIDC strings for milsymbol.js
+ * Handles wildcards (*), the SOF dimension (F), and ensures 15 chars.
+ */
+export function cleanSIDC2525C(sidc) {
+  if (!sidc) return "SUGP------*****"; // Fallback to Unknown
+
+  // 1. Force uppercase and convert to array for manipulation
+  let cleaned = sidc.toUpperCase().split('');
+
+  // 2. Ensure we are exactly 15 characters (pad with dashes if too short)
+  while (cleaned.length < 15) cleaned.push('-');
+  if (cleaned.length > 15) cleaned = cleaned.slice(0, 15);
+
+  // 3. Handle specific positions
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '*') {
+      switch(i) {
+        case 0:  cleaned[i] = 'S'; break; // Scheme: Warfighting
+        case 1:  cleaned[i] = 'U'; break; // Affiliation: Unknown
+        case 2:  cleaned[i] = 'G'; break; // Dimension: Default to Ground
+        case 3:  cleaned[i] = 'P'; break; // Status: Present (Crucial for rendering)
+        default: cleaned[i] = '-'; break; // Modifiers/Country: Null
+      }
+    }
+  }
+
+  // 4. SOF Logic Check: 
+  // If Position 3 is 'F' (SOF), ensure Position 1 and 2 aren't wildcards.
+  // Milsymbol handles 'F' in pos 3 as long as the status (pos 4) is valid.
+  if (cleaned[2] === 'F' && cleaned[3] === '-') {
+    cleaned[3] = 'P'; 
+  }
+
+  return cleaned.join('');
 }
 
 export function getMGRS(lon, lat) {

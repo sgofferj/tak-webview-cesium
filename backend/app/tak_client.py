@@ -74,7 +74,8 @@ class TAKClient:
             maxsize=1000, ttl=60
         )
 
-        # Parse staff comments: "#shadowfleet=SF,#LEO=LEO" -> {"#shadowfleet": "SF", "#LEO": "LEO"}
+        # Parse staff comments:
+        # "#shadowfleet=SF,#LEO=LEO" -> {"#shadowfleet": "SF", "#LEO": "LEO"}
         self.staff_comments: dict[str, str] = {}
         if self.config.tak_staff_comments:
             # Strip quotes that might be passed from shell/docker
@@ -144,6 +145,7 @@ class TAKClient:
                     now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
                     stale_str = stale.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+                    # 1. SA heartbeat (a-f-G-U-C)
                     cot = etree.Element("event")
                     cot.set("version", "2.0")
                     cot.set("uid", self.config.tak_uid_final)
@@ -162,12 +164,32 @@ class TAKClient:
                     group.set("name", "Cyan")
                     group.set("role", "Team Member")
 
-                    xml_str = etree.tostring(cot)
-                    self._writer.write(xml_str)
+                    self._writer.write(etree.tostring(cot))
+
+                    # 2. takPing (t-x-c-t)
+                    ping = etree.Element("event")
+                    ping.set("version", "2.0")
+                    ping.set("uid", f"{self.config.tak_callsign}-ping")
+                    ping.set("type", "t-x-c-t")
+                    ping.set("how", "m-g")
+                    ping.set("time", now_str)
+                    ping.set("start", now_str)
+                    ping.set("stale", stale_str)
+                    etree.SubElement(
+                        ping,
+                        "point",
+                        lat="0.0",
+                        lon="0.0",
+                        hae="0.0",
+                        ce="9999999",
+                        le="9999999",
+                    )
+
+                    self._writer.write(etree.tostring(ping))
                     await self._writer.drain()
                 except (OSError, RuntimeError) as e:
                     logger.error(f"Failed to send heartbeat: {e}")
-            await asyncio.sleep(60)
+            await asyncio.sleep(30)
 
     def parse_cot(self, xml_data: bytes) -> dict[str, Any] | None:
         try:
@@ -178,6 +200,17 @@ class TAKClient:
             uid = root.get("uid")
             ctype = root.get("type")
             if not uid or not ctype:
+                return None
+
+            # Discard specific CoT types or those containing "ping" / "pong"
+            # as these are internal server messages and not actual entities.
+            if ctype == "t-x-c-t":
+                return None
+            
+            # Check for ping/pong in uid or callsign (case-insensitive)
+            # Some servers send pings with different CoT types but specific uids/callsigns
+            uid_lower = uid.lower()
+            if "ping" in uid_lower or "pong" in uid_lower or "takping" in uid_lower or "takpong" in uid_lower:
                 return None
 
             point = root.find("point")
@@ -256,6 +289,14 @@ class TAKClient:
                 usericon = detail.find("usericon")
                 if usericon is not None:
                     data["iconsetpath"] = usericon.get("iconsetpath")
+
+                milsym = detail.find("__milsym")
+                if milsym is not None:
+                    data["milsym"] = milsym.get("id")
+
+                milicon = detail.find("__milicon")
+                if milicon is not None:
+                    data["milicon"] = milicon.get("id")
 
                 emergency = detail.find("emergency")
                 if emergency is not None:

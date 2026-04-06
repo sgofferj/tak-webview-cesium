@@ -28,20 +28,70 @@ file_overlays_cache: list[dict[str, Any]] = []
 
 async def scan_file_overlays() -> list[dict[str, Any]]:
     """Scans the overlays directory for GeoJSON, KML, and CZML files."""
-    overlays = []
-    directory = settings._overlays_dir
-    if not os.path.exists(directory):
+    overlays: list[dict[str, Any]] = []
+    directory_path = Path(settings.overlays_dir)
+    if not await directory_path.exists():
         return overlays
 
-    for filename in os.listdir(directory):
+    async for file_path in directory_path.iterdir():
+        filename = file_path.name
         ext = filename.lower().split(".")[-1]
+        file_type = ext if ext != "json" else "geojson"
+        layer_name = filename
+        display_name = filename
+
+        if file_type == "geojson":
+            try:
+                async with await file_path.open(encoding="utf-8") as f:
+                    geojson_data = json.loads(await f.read())
+                    if "name" in geojson_data and geojson_data["name"]:
+                        display_name = geojson_data["name"]
+                    elif (
+                        geojson_data.get("features")
+                        and geojson_data["features"][0].get("properties")
+                    ):
+                        first_feature = geojson_data["features"][0]
+                        first_feature_props = first_feature.get("properties")
+                        if (
+                            first_feature_props
+                            and "name" in first_feature_props
+                            and first_feature_props["name"]
+                        ):
+                            display_name = first_feature_props["name"]
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(
+                    "Error parsing GeoJSON file %s for name: %s",
+                    filename,
+                    e,
+                )
+        elif file_type == "kml":
+            try:
+                # KML parsing remains synchronous as lxml does not support
+                # async file ops directly.
+                tree = etree.parse(
+                    str(file_path), parser=etree.XMLParser(recover=True)
+                )
+                root = tree.getroot()
+                # KML namespace can vary.
+                # Try to find name tag directly or with common namespaces.
+                name_el = root.find(".//{*}name")
+                if name_el is not None and name_el.text:
+                    display_name = name_el.text
+            except (etree.LxmlError, OSError) as e:
+                logger.warning(
+                    "Error parsing KML file %s for name: %s",
+                    filename,
+                    e,
+                )
+
         if ext in ["geojson", "json", "kml", "czml"]:
             overlays.append(
                 {
-                    "name": filename,
+                    "name": layer_name,
+                    "displayName": display_name,
                     "type": "file",
                     "url": f"/api/overlays/{filename}",
-                    "file_type": ext if ext != "json" else "geojson",
+                    "file_type": file_type,
                     "category": "Local Files",
                     "overlay": True,
                 }
@@ -114,9 +164,9 @@ async def fetch_wms_extent(url: str, layer_name: str) -> list[float] | None:
 async def load_layers() -> None:
     """Loads customlayers.json and discovers missing extents."""
     global layers_cache, overlay_layers_cache, file_overlays_cache
-    
+
     file_overlays_cache = await scan_file_overlays()
-    
+
     config_filename = settings.layers_config_file
 
     # Search logic
