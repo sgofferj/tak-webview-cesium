@@ -125,3 +125,19 @@ Here are some tips for using the frontend that might not be immediately obvious:
 -   **"Zoom to All" Logic:** This button intelligently zooms to fit all *filtered* entities. It also automatically excludes extreme outliers to prevent zooming out to a global view unnecessarily.
 -   **"Reset View" Button:** This button does two things: it resets the camera to a top-down, North-up orientation, and its icon changes to indicate whether the current view is tilted or top-down.
 -   **Session Persistence:** The application automatically saves your view (camera position, filters, selected layers) to your browser's local storage. When you reload the page, your session will be restored exactly where you left off.
+
+## Examples
+
+![Normal view](images/OSM_gulf_of_finland.png)
+
+![Filter (Air dimension)](images/filter_air_dimension.png)
+
+![Polygon overlay (Finnish borders)](images/GeoJSON_overlay.png)
+
+![Polyline overlays (Baltic Sea infrastructure](images/GeoJSON_infra.png)
+
+![Staff comments (TAK_STAFF_COMMENTS="#shadowfleet=ShFl")](images/staff_comments_filter.png)
+
+
+
+
