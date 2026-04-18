@@ -27,6 +27,7 @@
     "cesium": "^1.114.0",
     "globals": "^17.4.0",
     "mgrs": "^1.0.0",
-    "milsymbol": "^2.0.0"
+    "milsymbol": "^2.0.0",
+    "virtual-select-plugin": "^1.1.0"
   }
 }

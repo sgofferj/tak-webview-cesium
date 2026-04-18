@@ -14,7 +14,16 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from anyio import Path
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -36,7 +45,7 @@ logger = logging.getLogger("tak-webview.main")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     await load_layers()
 
@@ -124,6 +133,33 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     return {"status": "success"}
 
 
+@app.post("/api/auth/upload-p12")
+async def auth_upload_p12(
+    request: Request,
+    file: UploadFile = File(...),
+    password: str = Form(...),
+    new_password: str | None = Form(None),
+    server: str = Form("imported"),
+) -> dict[str, Any]:
+    # pylint: disable=too-many-arguments
+    p12_data = await file.read()
+    username = auth_manager.upload_p12(p12_data, password, new_password, server)
+    if not username:
+        # If decryption fails, we can't extract the username yet.
+        # Failures can be due to wrong password or insecure password requirements.
+        raise HTTPException(
+            status_code=401, detail="P12 import failed. Check password and file."
+        )
+
+    # Automatically authenticate after upload
+    request.session["authenticated"] = True
+    auth_manager.failed_attempts = 0
+    # Start TAK client
+    await tak_client.start()
+
+    return {"status": "success", "username": username}
+
+
 @app.post("/api/auth/login")
 async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
     if not auth_manager.is_enrolled():
@@ -146,9 +182,8 @@ async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
     if auth_manager.failed_attempts >= 3:
         auth_manager.wipe_ephemeral()
         request.session.clear()
-        raise HTTPException(
-            status_code=401, detail="Max attempts reached. Ephemeral storage wiped."
-        )
+        detail = "Max attempts reached. Ephemeral storage wiped."
+        raise HTTPException(status_code=401, detail=detail)
 
     raise HTTPException(status_code=401, detail="Invalid credentials")
 

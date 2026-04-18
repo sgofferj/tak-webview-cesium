@@ -55,6 +55,26 @@ const blobUsageRegistry = new Map();
 // Global tilt state (set by viewer.js)
 export let isCameraTilted = false;
 export let isTabVisible = true;
+export let showCallsigns = true;
+
+export function setShowCallsigns(show) {
+  showCallsigns = show;
+  const selectedId = safeGetId(viewer.selectedEntity);
+  let baseUid = selectedId;
+  if (selectedId) {
+    if (selectedId.endsWith("-trail"))
+      baseUid = selectedId.replace("-trail", "");
+    else if (selectedId.endsWith("-course"))
+      baseUid = selectedId.replace("-course", "");
+  }
+
+  Object.keys(entityState).forEach((uid) => {
+    const state = entityState[uid];
+    if (state.entity && state.entity.label) {
+      state.entity.label.show = showCallsigns || uid === baseUid;
+    }
+  });
+}
 
 const entityRemovalQueue = new Set(); // Unified queue for all entities pending removal
 const foregroundReconciliationQueue = new Set(); // For UIDs needing Cesium updates/creations while tab is in foreground
@@ -87,8 +107,10 @@ async function processForegroundReconciliationQueue() {
 }
 
 // Throttled version to avoid overwhelming Cesium with rapid updates
-const throttledReconcileForegroundEntities = throttle(processForegroundReconciliationQueue, 50);
-
+const throttledReconcileForegroundEntities = throttle(
+  processForegroundReconciliationQueue,
+  50,
+);
 
 export async function setTabVisibility(visible) {
   isTabVisible = visible;
@@ -112,13 +134,12 @@ export async function setTabVisibility(visible) {
 
     // Step 3: Now, any new incoming updates will use the foreground queue
     // Trigger initial processing of any entities that might have been added to the foreground queue during this transition
-    throttledReconcileForegroundEntities(); 
+    throttledReconcileForegroundEntities();
 
     // Apply filter and refresh UI lists after all reconciliation is done
     applyFilter();
     throttledUpdateUnitList();
     updateStaffCommentsUI();
-
   } else {
     // console.debug("Tab backgrounded: pausing Cesium entity reconciliation.");
     // Clear any pending foreground reconciliations, they will be handled by the _pendingCesiumReconcile flag
@@ -135,8 +156,8 @@ export function setCameraTilt(tilted) {
 
 export const entityState = {};
 export let currentFilter = "";
-export let currentAffiliationFilter = "all";
-export let currentDimensionFilter = "all";
+export let currentAffiliationFilter = [];
+export let currentDimensionFilter = [];
 export let unitListDirty = true;
 export const expandedStates = new Set();
 
@@ -178,7 +199,6 @@ const pendingCreation = new Set();
 // Track pending icon generations to prevent race conditions
 const pendingIcons = new Map();
 
-
 function safeGetId(entity) {
   return entity && entity.id ? entity.id : null;
 }
@@ -208,15 +228,33 @@ function unregisterBlobUsage(url) {
 }
 
 export function setFilters(filter, affiliation, dimension) {
+  const parseVal = (val) => {
+    if (Array.isArray(val)) return val;
+    if (typeof val === "string") {
+      if (val.includes(",")) return val.split(",").filter((v) => v.trim());
+      return val ? [val] : [];
+    }
+    return [];
+  };
+
   if (typeof filter === "object" && filter !== null) {
     if (filter.text !== undefined) currentFilter = filter.text.toLowerCase();
-    if (filter.affiliation !== undefined) currentAffiliationFilter = filter.affiliation;
-    if (filter.dimension !== undefined) currentDimensionFilter = filter.dimension;
+    if (filter.affiliation !== undefined) {
+      currentAffiliationFilter = parseVal(filter.affiliation);
+    }
+    if (filter.dimension !== undefined) {
+      currentDimensionFilter = parseVal(filter.dimension);
+    }
   } else {
     if (filter !== undefined) currentFilter = filter.toLowerCase();
-    if (affiliation !== undefined) currentAffiliationFilter = affiliation;
-    if (dimension !== undefined) currentDimensionFilter = dimension;
+    if (affiliation !== undefined) {
+      currentAffiliationFilter = parseVal(affiliation);
+    }
+    if (dimension !== undefined) {
+      currentDimensionFilter = parseVal(dimension);
+    }
   }
+
   applyFilter();
 }
 
@@ -231,26 +269,32 @@ export function getFilters() {
 export function calculateVisibility(data) {
   if (!data || !data.type) return false;
   const filter = currentFilter.trim();
-  const affil = currentAffiliationFilter;
-  const dimension = currentDimensionFilter;
+  const affils = currentAffiliationFilter;
+  const dimensions = currentDimensionFilter;
 
-  // Affiliation Filter
-  if (affil !== "all") {
+  // Affiliation Filter (Empty array means show all)
+  if (affils.length > 0) {
     const et = data.type.split("-");
-    const itemAffil = et[1] ? et[1].toLowerCase() : "u";
-    if (itemAffil !== affil) return false;
+    let itemAffil = et[1] ? et[1].toLowerCase() : "u";
+    // Normalize CoT characters to the basic categories in our filter
+    if (itemAffil === "a") itemAffil = "f"; // Assumed Friendly -> Friendly
+    if (itemAffil === "j" || itemAffil === "k") itemAffil = "h"; // Joker/Faker -> Hostile
+    if (itemAffil === "p" || itemAffil === "o") itemAffil = "u"; // Pending/Other -> Unknown
+
+    if (!affils.includes(itemAffil)) return false;
   }
 
-  // Dimension Filter
-  if (dimension !== "all") {
+  // Dimension Filter (Empty array means show all)
+  if (dimensions.length > 0) {
     const et = data.type.split("-");
     const itemDimension = et[2] ? et[2].toLowerCase() : "g";
-    if (itemDimension !== dimension) return false;
+    if (!dimensions.includes(itemDimension)) return false;
   }
 
   // Text Filter
   if (filter) {
-    const searchStr = `${data.callsign || ""} ${data.uid || ""} ${data.remarks || ""}`.toLowerCase();
+    const searchStr =
+      `${data.callsign || ""} ${data.uid || ""} ${data.remarks || ""}`.toLowerCase();
     if (!searchStr.includes(filter)) return false;
   }
 
@@ -266,7 +310,7 @@ export function calculateTrailVisibility(uid) {
     selectedId &&
     (selectedId === uid ||
       selectedId === uid + "-trail" ||
-      selectedId === uid + "-course")
+      selectedId === uid + "-course"),
   );
   const isVisible = Boolean(calculateVisibility(state.lastData));
   const result = isVisible && isSelected;
@@ -289,7 +333,7 @@ export function applyFilter() {
       selectedId &&
       (selectedId === uid ||
         selectedId === uid + "-trail" ||
-        selectedId === uid + "-course")
+        selectedId === uid + "-course"),
     );
     const isVisible = Boolean(calculateVisibility(state.lastData));
 
@@ -330,7 +374,8 @@ export function applyFilter() {
       state.trailEntity.show = trailShouldShow;
     }
     if (state.courseEntity) {
-      state.courseEntity.show = state.entity.show && state.lastData.course !== undefined;
+      state.courseEntity.show =
+        state.entity.show && state.lastData.course !== undefined;
     }
   });
 }
@@ -435,8 +480,9 @@ export function createDescription(data, sidc) {
 }
 
 function refreshStaffCommentDefinitions() {
-  if (lastStaffCommentConfig === appConfig.tak_staff_comments) return staffCommentDefinitions;
-  
+  if (lastStaffCommentConfig === appConfig.tak_staff_comments)
+    return staffCommentDefinitions;
+
   lastStaffCommentConfig = appConfig.tak_staff_comments;
   staffCommentDefinitions = (appConfig.tak_staff_comments || "")
     .split(",")
@@ -444,18 +490,18 @@ function refreshStaffCommentDefinitions() {
     .filter((s) => s.length > 0)
     .map((def) => {
       const [rawSearch, rawLabel] = def.split("=");
-      const search = rawSearch.trim().replace(/^['"]|['"]$/g, ''); // Strip outer quotes
-      const label = (rawLabel || rawSearch).trim().replace(/^['"]|['"]$/g, ''); // Strip outer quotes
+      const search = rawSearch.trim().replace(/^['"]|['"]$/g, ""); // Strip outer quotes
+      const label = (rawLabel || rawSearch).trim().replace(/^['"]|['"]$/g, ""); // Strip outer quotes
       return { search, label };
     });
-  
+
   // Config changed, rebuild the map for all current entities
   staffCommentMap.clear();
-  staffCommentDefinitions.forEach(def => {
+  staffCommentDefinitions.forEach((def) => {
     staffCommentMap.set(def.search, new Set());
   });
 
-  Object.keys(entityState).forEach(uid => {
+  Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
     if (state && !state._isRemoved) {
       _doUpdateStaffCommentMatching(uid, state.lastData, state);
@@ -481,7 +527,7 @@ function checkStaffCommentMatch(data, search, label) {
 
 function _doUpdateStaffCommentMatching(uid, data, state) {
   const currentMatches = new Set();
-  
+
   staffCommentDefinitions.forEach(({ search, label }) => {
     if (checkStaffCommentMatch(data, search, label)) {
       currentMatches.add(search);
@@ -494,7 +540,7 @@ function _doUpdateStaffCommentMatching(uid, data, state) {
 
   // Remove from old matches that are no longer matches
   if (state.matchedStaffComments) {
-    state.matchedStaffComments.forEach(oldSearch => {
+    state.matchedStaffComments.forEach((oldSearch) => {
       if (!currentMatches.has(oldSearch)) {
         const set = staffCommentMap.get(oldSearch);
         if (set) set.delete(uid);
@@ -517,38 +563,50 @@ function updateDimensionFilterUI() {
   const currentDimensions = new Set();
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state || state._isRemoved || !state.lastData || !state.lastData.type) return;
+    if (!state || state._isRemoved || !state.lastData || !state.lastData.type)
+      return;
     const et = state.lastData.type.split("-");
     const dimension = et[2] ? et[2].toLowerCase() : "g";
     currentDimensions.add(dimension);
   });
 
-  if (currentDimensions.size === knownDimensions.size && [...currentDimensions].every(d => knownDimensions.has(d))) {
+  if (
+    currentDimensions.size === knownDimensions.size &&
+    [...currentDimensions].every((d) => knownDimensions.has(d))
+  ) {
     return;
   }
   knownDimensions = currentDimensions;
 
   const dimensionLabels = {
-    a: "Air",
-    g: "Ground",
-    s: "Surface",
-    u: "Subsurface",
-    p: "Space",
-    f: "Special Forces",
-    x: "Other"
+    a: i18n.dimensionAir || "Air",
+    g: i18n.dimensionGround || "Ground",
+    s: i18n.dimensionSurface || "Surface",
+    u: i18n.dimensionSubsurface || "Subsurface",
+    p: i18n.dimensionSpace || "Space",
+    f: i18n.dimensionSpecialForces || "Special Forces",
+    x: i18n.dimensionOther || "Other",
   };
 
-  let html = `<option value="all">All Dimensions</option>`;
-  Array.from(knownDimensions).sort().forEach(d => {
-    const label = dimensionLabels[d] || d.toUpperCase();
-    html += `<option value="${d}">${label}</option>`;
-  });
+  const options = [];
+  Array.from(knownDimensions)
+    .sort()
+    .forEach((d) => {
+      const label = dimensionLabels[d] || d.toUpperCase();
+      options.push({ label: label, value: d });
+    });
 
-  dimensionSelect.innerHTML = html;
-  if (knownDimensions.has(currentDimensionFilter) || currentDimensionFilter === "all") {
-    dimensionSelect.value = currentDimensionFilter;
+  if (dimensionSelect.setOptions) {
+    dimensionSelect.setOptions(options);
+    // Restore selection
+    dimensionSelect.setValue(currentDimensionFilter);
   } else {
-    setFilters(undefined, undefined, "all");
+    // Fallback if VirtualSelect not yet initialized
+    let html = "";
+    options.forEach((opt) => {
+      html += `<option value="${opt.value}">${opt.label}</option>`;
+    });
+    dimensionSelect.innerHTML = html;
   }
 }
 
@@ -567,7 +625,8 @@ export function updateUnitListUI() {
 
   Object.keys(entityState).forEach((uid) => {
     const state = entityState[uid];
-    if (!state || state._isRemoved || !state.entity || !state.entity.show) return;
+    if (!state || state._isRemoved || !state.entity || !state.entity.show)
+      return;
     const data = state.lastData;
     const uidLower = uid.toLowerCase();
     let cat = "other";
@@ -584,7 +643,12 @@ export function updateUnitListUI() {
       cat = "vessels";
 
     const et = (data.type || "u-u-g").split("-");
-    const affilCode = et[1] ? et[1].toLowerCase() : "u";
+    let affilCode = et[1] ? et[1].toLowerCase() : "u";
+    // Normalize for consistent grouping in the track list
+    if (affilCode === "a") affilCode = "f";
+    if (affilCode === "j" || affilCode === "k") affilCode = "h";
+    if (affilCode === "p" || affilCode === "o") affilCode = "u";
+
     const affilLabel = currentAffilMap[affilCode] || i18n.affiliationUnknown;
 
     if (!categories[cat].groups[affilLabel])
@@ -640,7 +704,7 @@ export function updateUnitListUI() {
   content.innerHTML =
     html ||
     `<div style="text-align:center; padding:20px; color:#888;">${i18n.noActiveUnits}</div>`;
-  
+
   updateDimensionFilterUI();
   updateStaffCommentsUI();
   unitListDirty = false;
@@ -658,13 +722,14 @@ export function updateStaffCommentsUI() {
   }
 
   let html = "";
-  commentDefs.forEach(({ search, label }) => {
+  commentDefs.forEach(({ search }) => {
     const uids = staffCommentMap.get(search) || new Set(); // Ensure uids is a Set, even if empty
     const matchingUnits = [];
 
-    uids.forEach(uid => {
+    uids.forEach((uid) => {
       const state = entityState[uid];
-      if (state && !state._isRemoved) { // Only show active, non-removed entities
+      if (state && !state._isRemoved) {
+        // Only show active, non-removed entities
         matchingUnits.push({
           uid: uid,
           callsign: state.lastData.callsign,
@@ -695,7 +760,9 @@ export function updateStaffCommentsUI() {
     html += `</div></div>`;
   });
 
-  content.innerHTML = html || `<div style="text-align:center; padding:20px; color:#888;">${i18n.noStaffCommentDefs || "No staff comment definitions configured."}</div>`;
+  content.innerHTML =
+    html ||
+    `<div style="text-align:center; padding:20px; color:#888;">${i18n.noStaffCommentDefs || "No staff comment definitions configured."}</div>`;
 }
 
 export const throttledUpdateUnitList = throttle(updateUnitListUI, 1000);
@@ -753,7 +820,8 @@ function drawGroupIcon(name, role, how) {
   };
 
   const fillColor = groupColorMap[name] || "#ffffff";
-  const rawAbbr = roleAbbrMap[role] || (role ? role.substring(0, 3).toUpperCase() : "");
+  const rawAbbr =
+    roleAbbrMap[role] || (role ? role.substring(0, 3).toUpperCase() : "");
   const abbr = rawAbbr === "none" ? "" : rawAbbr;
 
   ctx.beginPath();
@@ -801,7 +869,8 @@ async function canvasToBlobUrl(canvas) {
   });
 }
 
-export function updateEntity(incomingData) { // Made non-async
+export function updateEntity(incomingData) {
+  // Made non-async
   if (!viewer || !viewer.entities) return;
 
   const data = {};
@@ -835,20 +904,36 @@ export function updateEntity(incomingData) { // Made non-async
     pendingCreation.add(uid); // Mark as pending creation to prevent duplicates
     try {
       const initialFullData = { ...data, uid };
-      const callsign = initialFullData.callsign || initialFullData.uid || "Unknown";
 
-      if (!Number.isFinite(initialFullData.lat) || !Number.isFinite(initialFullData.lon)) {
-        console.warn(`Attempted to create entity ${uid} with non-finite coordinates: lat=${initialFullData.lat}, lon=${initialFullData.lon}`);
+      if (
+        !Number.isFinite(initialFullData.lat) ||
+        !Number.isFinite(initialFullData.lon)
+      ) {
+        console.warn(
+          `Attempted to create entity ${uid} with non-finite coordinates: lat=${initialFullData.lat}, lon=${initialFullData.lon}`,
+        );
         return;
       }
 
       const typeParts = (initialFullData.type || "").toLowerCase().split("-");
       const isAir = typeParts[0] === "a" && typeParts[2] === "a";
       const iconHeight =
-        isAir && initialFullData.alt !== undefined && initialFullData.alt < 9000000 ? initialFullData.alt : GROUND_OFFSET;
-      
-      const position = Cartesian3.fromDegrees(initialFullData.lon, initialFullData.lat, iconHeight);
-      const anchorPosition = Cartesian3.fromDegrees(initialFullData.lon, initialFullData.lat, 0);
+        isAir &&
+        initialFullData.alt !== undefined &&
+        initialFullData.alt < 9000000
+          ? initialFullData.alt
+          : GROUND_OFFSET;
+
+      const position = Cartesian3.fromDegrees(
+        initialFullData.lon,
+        initialFullData.lat,
+        iconHeight,
+      );
+      const anchorPosition = Cartesian3.fromDegrees(
+        initialFullData.lon,
+        initialFullData.lat,
+        0,
+      );
 
       // Cesium entities are NOT created here. Only the JS state object.
       state = {
@@ -901,7 +986,6 @@ export function updateEntity(incomingData) { // Made non-async
   updateStaffCommentMatching(uid, data, state);
 }
 
-
 // New function to perform the actual Cesium entity creation/update
 async function _reconcileCesiumEntity(uid, data) {
   if (!viewer || !viewer.entities) return;
@@ -909,7 +993,9 @@ async function _reconcileCesiumEntity(uid, data) {
   // Ensure we have a valid state object
   let state = entityState[uid];
   if (!state || state._isRemoved) {
-    console.warn(`Attempted to reconcile a non-existent or removed entity: ${uid}`);
+    console.warn(
+      `Attempted to reconcile a non-existent or removed entity: ${uid}`,
+    );
     return;
   }
 
@@ -935,7 +1021,9 @@ async function _reconcileCesiumEntity(uid, data) {
 
   // SAFETY: Filter non-finite coordinates for updates as well
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    console.warn(`Skipping reconciliation for entity ${uid} due to non-finite coordinates: lat=${lat}, lon=${lon}`);
+    console.warn(
+      `Skipping reconciliation for entity ${uid} due to non-finite coordinates: lat=${lat}, lon=${lon}`,
+    );
     return;
   }
 
@@ -959,7 +1047,12 @@ async function _reconcileCesiumEntity(uid, data) {
     const extractId = (val) => {
       if (typeof val === "string") return val;
       if (val && typeof val === "object") {
-        return val.id || (val.$ && val.$.id) || (val._attributes && val._attributes.id) || val.value;
+        return (
+          val.id ||
+          (val.$ && val.$.id) ||
+          (val._attributes && val._attributes.id) ||
+          val.value
+        );
       }
       return null;
     };
@@ -1008,12 +1101,13 @@ async function _reconcileCesiumEntity(uid, data) {
     ? `group-${group_name}-${group_role}-${color}-${how}`
     : iconsetUrl
       ? `icon-${iconsetUrl}-${rgbColor}`
-      : `${sidc}-${color}-${squawk}-${staff_comment || ''}`; // Use empty string for staff_comment if not present
+      : `${sidc}-${color}-${squawk}-${staff_comment || ""}`; // Use empty string for staff_comment if not present
 
   const description = createDescription({ ...data, callsign }, sidc);
 
   // --- Entity Creation if it doesn't exist ---
-  if (!state.entity) { // Create Cesium entities if they don't exist
+  if (!state.entity) {
+    // Create Cesium entities if they don't exist
     state.entity = viewer.entities.add({
       id: uid,
       name: callsign,
@@ -1028,13 +1122,13 @@ async function _reconcileCesiumEntity(uid, data) {
       },
       label: {
         text: callsign,
-        font: "bold 14px sans-serif",
-        style: LabelStyle.FILL_AND_OUTLINE,
-        fillColor: Color.WHITE,
+        font: "bold 12px sans-serif",
+        style: LabelStyle.FILL,
+        fillColor: Color.BLACK,
         outlineColor: Color.BLACK,
-        outlineWidth: 4,
+        outlineWidth: 0,
         showBackground: true,
-        backgroundColor: new Color(0, 0, 0, 0.4),
+        backgroundColor: new Color(1, 1, 1, 0.4),
         backgroundPadding: new Cartesian2(7, 5),
         verticalOrigin: VerticalOrigin.BOTTOM,
         horizontalOrigin: HorizontalOrigin.CENTER,
@@ -1043,7 +1137,7 @@ async function _reconcileCesiumEntity(uid, data) {
         distanceDisplayCondition: DDC_UNSELECTED_LABEL,
         disableDepthTestDistance: DDD_UNSELECTED,
         heightReference: iconRef,
-        show: true,
+        show: showCallsigns || uid === safeGetId(viewer.selectedEntity),
       },
       description: description,
     });
@@ -1088,7 +1182,6 @@ async function _reconcileCesiumEntity(uid, data) {
     state.lastRgbColor = rgbColor;
   }
 
-
   // --- Now proceed with updating the entity properties ---
   // Position Update
   if (!position.equals(state.lastPosition)) {
@@ -1104,7 +1197,8 @@ async function _reconcileCesiumEntity(uid, data) {
   if (state.entity.billboard.heightReference !== iconRef) {
     state.entity.billboard.heightReference = iconRef;
     if (state.entity.label) state.entity.label.heightReference = iconRef;
-    if (state.courseEntity && state.courseEntity.billboard) state.courseEntity.billboard.heightReference = iconRef;
+    if (state.courseEntity && state.courseEntity.billboard)
+      state.courseEntity.billboard.heightReference = iconRef;
   }
 
   // Label Text Update
@@ -1139,9 +1233,16 @@ async function _reconcileCesiumEntity(uid, data) {
       ) {
         state.courseEntity.billboard.rotation = new CallbackProperty(() => {
           const s = entityState[uid];
-          if (!s || s._isRemoved || !s.lastData || s.lastData.course === undefined)
+          if (
+            !s ||
+            s._isRemoved ||
+            !s.lastData ||
+            s.lastData.course === undefined
+          )
             return 0;
-          return -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading;
+          return (
+            -CesiumMath.toRadians(s.lastData.course) + viewer.camera.heading
+          );
         }, false);
       }
       if (
@@ -1149,7 +1250,7 @@ async function _reconcileCesiumEntity(uid, data) {
         typeof state.courseEntity.billboard.pixelOffset.getValue !== "function"
       ) {
         // Resetting to ensure CallbackProperty is set
-        state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0); 
+        state.courseEntity.billboard.pixelOffset = new Cartesian2(0, 0);
         state.courseEntity.billboard.pixelOffset = new CallbackProperty(() => {
           const s = entityState[uid];
           if (
@@ -1163,7 +1264,10 @@ async function _reconcileCesiumEntity(uid, data) {
           const angle =
             CesiumMath.toRadians(s.lastData.course) - viewer.camera.heading;
           const dist = 22;
-          return new Cartesian2(Math.sin(angle) * dist, -Math.cos(angle) * dist);
+          return new Cartesian2(
+            Math.sin(angle) * dist,
+            -Math.cos(angle) * dist,
+          );
         }, false);
       }
       state.courseEntity.billboard.heightReference = iconRef;
@@ -1280,9 +1384,6 @@ async function _reconcileCesiumEntity(uid, data) {
   updateStaffCommentMatching(uid, data, state);
 }
 
-
-
-
 // New function to perform the actual Cesium entity removal
 function _doRemoveEntity(uid, state) {
   if (!viewer || !viewer.entities || !state) return;
@@ -1293,6 +1394,7 @@ function _doRemoveEntity(uid, state) {
     state.courseEntity,
   ].filter((ent) => ent !== null && ent !== undefined);
 
+  // Individual deselection as a fallback, although processRemovalQueue now handles this in batch
   const selectedId = safeGetId(viewer.selectedEntity);
   if (
     selectedId &&
@@ -1319,17 +1421,30 @@ function _doRemoveEntity(uid, state) {
   subEntities.forEach((ent) => {
     if (!ent || !viewer.entities.contains(ent)) return;
 
-    // Specifically handle courseEntity's dynamic properties
-    if (ent === state.courseEntity) {
-      if (ent.billboard) {
-        ent.billboard.rotation = undefined; // Detach CallbackProperty early
-        ent.billboard.pixelOffset = undefined; // Detach CallbackProperty early
+    try {
+      // Specifically handle courseEntity's dynamic properties
+      if (ent === state.courseEntity) {
+        if (ent.billboard) {
+          ent.billboard.rotation = undefined; // Detach CallbackProperty early
+          ent.billboard.pixelOffset = undefined; // Detach CallbackProperty early
+        }
       }
+
+      // Detach any other potential dynamic properties to prevent access during/after removal
+      if (ent.label) {
+        ent.label.text = undefined;
+        ent.label.distanceDisplayCondition = undefined;
+      }
+      if (ent.billboard) {
+        ent.billboard.image = undefined;
+        ent.billboard.distanceDisplayCondition = undefined;
+      }
+
+      ent.show = false; // Ensure top-level show is false
+      viewer.entities.remove(ent);
+    } catch (e) {
+      console.warn(`Error removing sub-entity ${ent.id} for UID ${uid}:`, e);
     }
-
-
-    ent.show = false; // Ensure top-level show is false
-    viewer.entities.remove(ent);
   });
 
   // Nullify entity references in the state object
@@ -1348,6 +1463,34 @@ function processRemovalQueue() {
 
   const uidsToProcess = Array.from(entityRemovalQueue);
   entityRemovalQueue.clear();
+
+  // BATCH DESELECTION: Clear selection/tracking BEFORE starting removal to prevent
+  // redundant events and potential Cesium crashes when removing selected entities.
+  const currentSelectedId = safeGetId(viewer.selectedEntity);
+  const currentTrackedId = safeGetId(viewer.trackedEntity);
+
+  const shouldDeselect = uidsToProcess.some(
+    (uid) =>
+      currentSelectedId &&
+      (currentSelectedId === uid ||
+        currentSelectedId === uid + "-trail" ||
+        currentSelectedId === uid + "-course"),
+  );
+  if (shouldDeselect) {
+    viewer.selectedEntity = undefined;
+  }
+
+  const shouldStopTracking = uidsToProcess.some(
+    (uid) =>
+      currentTrackedId &&
+      (currentTrackedId === uid ||
+        currentTrackedId === uid + "-trail" ||
+        currentTrackedId === uid + "-course"),
+  );
+  if (shouldStopTracking) {
+    viewer.trackedEntity = undefined;
+  }
+
   const uidsActuallyRemoved = [];
 
   viewer.entities.suspendEvents();
@@ -1423,6 +1566,7 @@ export function removeEntity(uid) {
 }
 
 export function updateEntitySelectionVisibility(selectedEntity) {
+  if (!viewer || !viewer.entities) return;
   const selectedId = safeGetId(selectedEntity);
   let baseUid = selectedId;
   if (selectedId) {
@@ -1434,11 +1578,18 @@ export function updateEntitySelectionVisibility(selectedEntity) {
 
   if (previouslySelectedEntityId && entityState[previouslySelectedEntityId]) {
     const prevState = entityState[previouslySelectedEntityId];
-    if (prevState.entity && prevState.entity.label) {
-      prevState.entity.label.distanceDisplayCondition = DDC_UNSELECTED_LABEL;
-      prevState.entity.label.disableDepthTestDistance = DDD_UNSELECTED;
+    // Extra safety: only update if the entity still belongs to the viewer
+    if (prevState.entity && viewer.entities.contains(prevState.entity)) {
+      if (prevState.entity.label) {
+        prevState.entity.label.distanceDisplayCondition = DDC_UNSELECTED_LABEL;
+        prevState.entity.label.disableDepthTestDistance = DDD_UNSELECTED;
+        prevState.entity.label.show = showCallsigns;
+      }
     }
-    if (prevState.trailEntity) {
+    if (
+      prevState.trailEntity &&
+      viewer.entities.contains(prevState.trailEntity)
+    ) {
       prevState.trailEntity.show = false;
       if (prevState.trailEntity.polyline) {
         prevState.trailEntity.polyline.distanceDisplayCondition = ddcTactical;
@@ -1448,14 +1599,21 @@ export function updateEntitySelectionVisibility(selectedEntity) {
 
   if (baseUid && entityState[baseUid]) {
     const currentState = entityState[baseUid];
-    if (currentState.entity && currentState.entity.label) {
-      currentState.entity.label.distanceDisplayCondition = DDC_SELECTED;
-      currentState.entity.label.disableDepthTestDistance = DDD_SELECTED;
+    if (currentState.entity && viewer.entities.contains(currentState.entity)) {
+      if (currentState.entity.label) {
+        currentState.entity.label.distanceDisplayCondition = DDC_SELECTED;
+        currentState.entity.label.disableDepthTestDistance = DDD_SELECTED;
+        currentState.entity.label.show = true;
+      }
     }
-    if (currentState.trailEntity && currentState.trailEntity.polyline) {
-      currentState.trailEntity.polyline.distanceDisplayCondition = DDC_SELECTED;
-      // Removed direct setting of show = true. Visibility will now be entirely determined by applyFilter()
-      // and calculateTrailVisibility() for all entities based on global selection state.
+    if (
+      currentState.trailEntity &&
+      viewer.entities.contains(currentState.trailEntity)
+    ) {
+      if (currentState.trailEntity.polyline) {
+        currentState.trailEntity.polyline.distanceDisplayCondition =
+          DDC_SELECTED;
+      }
     }
     previouslySelectedEntityId = baseUid;
   } else {
@@ -1481,7 +1639,14 @@ export function initStateManager() {
       const state = entityState[uid];
       // Don't process if already logically removed, queued for removal, pending reconciliation,
       // or in the foreground reconciliation queue.
-      if (!state || state._isRemoved || entityRemovalQueue.has(uid) || state._pendingCesiumReconcile || foregroundReconciliationQueue.has(uid)) return;
+      if (
+        !state ||
+        state._isRemoved ||
+        entityRemovalQueue.has(uid) ||
+        state._pendingCesiumReconcile ||
+        foregroundReconciliationQueue.has(uid)
+      )
+        return;
 
       // STALE GRACE PERIOD: 120s
       if (state.staleAt && now > state.staleAt + 120000) {

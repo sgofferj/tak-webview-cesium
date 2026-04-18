@@ -196,11 +196,29 @@
         padding: 5px;
         border-radius: 4px;
       }
-      .layer-item:hover { background: rgba(255, 255, 255, 0.1); }
-      .layer-item.active { background: rgba(0, 138, 255, 0.2); box-shadow: inset 0 0 5px #0af; }
-      .layer-thumb { width: 80px; height: 80px; border-radius: 4px; margin-bottom: 5px; border: 1px solid #555; background-size: cover; background-position: center; }
-      .layer-label { font-size: 0.7em; color: #fff; }
-      .layer-item input { display: none; }
+      .layer-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .layer-item.active {
+        background: rgba(0, 138, 255, 0.2);
+        box-shadow: inset 0 0 5px #0af;
+      }
+      .layer-thumb {
+        width: 80px;
+        height: 80px;
+        border-radius: 4px;
+        margin-bottom: 5px;
+        border: 1px solid #555;
+        background-size: cover;
+        background-position: center;
+      }
+      .layer-label {
+        font-size: 0.7em;
+        color: #fff;
+      }
+      .layer-item input {
+        display: none;
+      }
       .layer-category-title {
         grid-column: 1 / -1;
         font-size: 0.8em;
@@ -213,47 +231,166 @@
       }
 
       /* Info Modal */
-      #infoModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; justify-content: center; align-items: center; transition: opacity 0.3s ease; }
-      .modal-hidden { opacity: 0; pointer-events: none; }
-      .hidden { display: none !important; }
-      #infoModalContent { background: #222; padding: 30px; border-radius: 8px; border: 1px solid #444; width: 500px; max-width: 90%; max-height: 80%; overflow-y: auto; position: relative; }
-      #closeInfo { position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: #888; font-size: 24px; cursor: pointer; }
+      #infoModal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 2000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: opacity 0.3s ease;
+      }
+      .modal-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .hidden {
+        display: none !important;
+      }
+      #infoModalContent {
+        background: #222;
+        padding: 30px;
+        border-radius: 8px;
+        border: 1px solid #444;
+        width: 500px;
+        max-width: 90%;
+        max-height: 80%;
+        overflow-y: auto;
+        position: relative;
+      }
+      #closeInfo {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: transparent;
+        border: none;
+        color: #888;
+        font-size: 24px;
+        cursor: pointer;
+      }
 
       /* Unit List */
-      #unitListContent { flex: 1; overflow-y: auto; }
-      .unit-group { margin-bottom: 15px; }
-      .unit-group-header, .affiliation-header { font-size: 0.9em; text-transform: uppercase; color: #aaa; margin-bottom: 5px; border-bottom: 1px solid #333; padding: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(0, 0, 0, 0.2); }
-      .unit-group-header::after, .affiliation-header::after { content: "▼"; font-size: 0.8em; }
-      .unit-group.collapsed .unit-group-content, .affiliation-group.collapsed .affiliation-content { display: none; }
-      .unit-group.collapsed .unit-group-header::after, .affiliation-group.collapsed .affiliation-header::after { content: "▶"; }
-      .affiliation-group { margin-left: 10px; margin-bottom: 5px; }
-      .affiliation-header { font-size: 0.75em; color: #888; background: transparent; border-bottom: 1px solid #222; }
-      .unit-item { display: flex; align-items: center; padding: 4px 5px; cursor: pointer; border-radius: 3px; }
-      .unit-item:hover { background: #555; }
-      .unit-icon { width: 24px; height: 24px; margin-right: 10px; object-fit: contain; }
-      .unit-name { font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .unit-emergency { color: #ff4444; font-weight: bold; margin-left: auto; font-size: 0.8em; }
+      #unitListContent {
+        flex: 1;
+        overflow-y: auto;
+      }
+      .unit-group {
+        margin-bottom: 15px;
+      }
+      .unit-group-header,
+      .affiliation-header {
+        font-size: 0.9em;
+        text-transform: uppercase;
+        color: #aaa;
+        margin-bottom: 5px;
+        border-bottom: 1px solid #333;
+        padding: 5px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .unit-group-header::after,
+      .affiliation-header::after {
+        content: "▼";
+        font-size: 0.8em;
+      }
+      .unit-group.collapsed .unit-group-content,
+      .affiliation-group.collapsed .affiliation-content {
+        display: none;
+      }
+      .unit-group.collapsed .unit-group-header::after,
+      .affiliation-group.collapsed .affiliation-header::after {
+        content: "▶";
+      }
+      .affiliation-group {
+        margin-left: 10px;
+        margin-bottom: 5px;
+      }
+      .affiliation-header {
+        font-size: 0.75em;
+        color: #888;
+        background: transparent;
+        border-bottom: 1px solid #222;
+      }
+      .unit-item {
+        display: flex;
+        align-items: center;
+        padding: 4px 5px;
+        cursor: pointer;
+        border-radius: 3px;
+      }
+      .unit-item:hover {
+        background: #555;
+      }
+      .unit-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 10px;
+        object-fit: contain;
+      }
+      .unit-name {
+        font-size: 0.95em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .unit-emergency {
+        color: #ff4444;
+        font-weight: bold;
+        margin-left: auto;
+        font-size: 0.8em;
+      }
 
       /* Cesium Overrides */
-      .cesium-infoBox { bottom: 30px !important; right: 10px !important; left: auto !important; width: 350px !important; height: 33vh !important; }
-      .cesium-infoBox-iframe { height: calc(100% - 35px) !important; width: 100% !important; border: none !important; }
-      .emergency-active { animation: emergency-blink 0.8s infinite !important; }
-      @keyframes emergency-blink { 0% { border: 5px solid red; } 50% { border: 5px solid transparent; } 100% { border: 5px solid red; } }
-      
-      .cesium-viewer-bottom { 
-        background: none !important; 
+      .cesium-infoBox {
+        bottom: 30px !important;
+        right: 10px !important;
+        left: auto !important;
+        width: 350px !important;
+        height: 33vh !important;
+      }
+      .cesium-infoBox-iframe {
+        height: calc(100% - 35px) !important;
+        width: 100% !important;
+        border: none !important;
+      }
+      .emergency-active {
+        animation: emergency-blink 0.8s infinite !important;
+      }
+      @keyframes emergency-blink {
+        0% {
+          border: 5px solid red;
+        }
+        50% {
+          border: 5px solid transparent;
+        }
+        100% {
+          border: 5px solid red;
+        }
+      }
+
+      .cesium-viewer-bottom {
+        background: none !important;
         left: 0 !important;
         right: auto !important;
         bottom: 0 !important;
         padding: 0 !important;
         width: auto !important;
       }
-      .cesium-credit-logoContainer { display: none !important; }
+      .cesium-credit-logoContainer {
+        display: none !important;
+      }
       .cesium-widget-credits {
-        background: rgba(0, 0, 0, 0.7) !important; 
-        color: #aaa !important; 
-        font-size: 10px !important; 
-        padding: 2px 10px !important; 
+        background: rgba(0, 0, 0, 0.7) !important;
+        color: #aaa !important;
+        font-size: 10px !important;
+        padding: 2px 10px !important;
         border-top-right-radius: 4px;
         border: 1px solid #222;
         border-left: none !important;
@@ -261,48 +398,240 @@
         display: inline-block !important;
         margin: 0 !important;
       }
-      .cesium-widget-credits a { color: #4af !important; text-decoration: none; }
-      .cesium-widget-credits a:hover { text-decoration: underline; }
-      
-      .cesium-viewer-fullscreenContainer { top: 10px !important; right: 10px !important; bottom: auto !important; }
-      .cesium-viewer-toolbar { top: 10px !important; right: 50px !important; }
+      .cesium-widget-credits a {
+        color: #4af !important;
+        text-decoration: none;
+      }
+      .cesium-widget-credits a:hover {
+        text-decoration: underline;
+      }
+
+      .cesium-viewer-fullscreenContainer {
+        top: 10px !important;
+        right: 10px !important;
+        bottom: auto !important;
+      }
+      .cesium-viewer-toolbar {
+        top: 10px !important;
+        right: 50px !important;
+      }
 
       /* Branding */
-      #brandingLogo { position: absolute; z-index: 999; max-width: 200px; max-height: 100px; pointer-events: none; }
-      .logo-top_left { top: 20px; left: 20px; }
-      .logo-top_center { top: 20px; left: 50%; transform: translateX(-50%); }
-      .logo-top_right { top: 20px; right: 20px; }
-      .logo-bottom_left { bottom: 30px; left: 20px; }
-      .logo-bottom_center { bottom: 30px; left: 50%; transform: translateX(-50%); }
-      .logo-bottom_right { bottom: 30px; right: 20px; }
+      #brandingLogo {
+        position: absolute;
+        z-index: 999;
+        max-width: 200px;
+        max-height: 100px;
+        pointer-events: none;
+      }
+      .logo-top_left {
+        top: 20px;
+        left: 20px;
+      }
+      .logo-top_center {
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .logo-top_right {
+        top: 20px;
+        right: 20px;
+      }
+      .logo-bottom_left {
+        bottom: 30px;
+        left: 20px;
+      }
+      .logo-bottom_center {
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .logo-bottom_right {
+        bottom: 30px;
+        right: 20px;
+      }
 
       /* Auth Overlay */
-      #authOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 5000; display: flex; justify-content: center; align-items: center; color: white; }
-      #authContent { background: #111; padding: 40px; border-radius: 8px; border: 1px solid #333; width: 350px; text-align: center; }
-      #authContent input { display: block; width: 100%; box-sizing: border-box; margin-bottom: 15px; padding: 10px; background: #000; border: 1px solid #444; color: white; border-radius: 4px; }
-      #authContent button { width: 100%; padding: 10px; background: #0078a8; border: none; color: white; font-weight: bold; cursor: pointer; border-radius: 4px; }
-      #authMessage { margin-top: 15px; color: #ff4444; }
+      #authOverlay {
+       position: fixed;
+       top: 0;
+       left: 0;
+       width: 100%;
+       height: 100%;
+       background: #000;
+       z-index: 5000;
+       display: flex;
+       flex-direction: column;
+       justify-content: center;
+       align-items: center;
+       color: white;
+      }
+      #authLogo {
+       max-width: 200px;
+       max-height: 100px;
+       margin-bottom: 30px;
+       object-fit: contain;
+      }
+      #authContent {        background: #111;
+        padding: 40px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        width: 350px;
+        text-align: center;
+      }
+      #authContent input {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 15px;
+        padding: 10px;
+        background: #000;
+        border: 1px solid #444;
+        color: white;
+        border-radius: 4px;
+      }
+      #authContent button {
+        width: 100%;
+        padding: 10px;
+        background: #0078a8;
+        border: none;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      #authMessage {
+        margin-top: 15px;
+        color: #ff4444;
+      }
+      .auth-choice-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+      }
+      .auth-choice-btn {
+        flex: 1;
+        padding: 15px 10px;
+        background: #333;
+        border: 1px solid #444;
+        color: white;
+        cursor: pointer;
+        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9em;
+      }
+      .auth-choice-btn:hover {
+        background: #444;
+        border-color: #0078a8;
+      }
+      .auth-choice-btn svg {
+        width: 24px;
+        height: 24px;
+        fill: #aaa;
+      }
+      .back-btn {
+        background: transparent;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        font-size: 0.8em;
+        margin-bottom: 10px;
+        display: block;
+        width: fit-content;
+      }
+      .back-btn:hover {
+        color: white;
+        text-decoration: underline;
+      }
 
       /* Overlay Style Modal */
-      #overlayStyleModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 2000; display: flex; justify-content: center; align-items: center; transition: opacity 0.3s ease; }
-      #overlayStyleModalContent { background: #222; padding: 30px; border-radius: 8px; border: 1px solid #444; width: 350px; max-width: 90%; position: relative; color: white; text-align: left; }
-      #closeOverlayStyle { position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: #888; font-size: 24px; cursor: pointer; }
-      #overlayStyleModalContent h3 { margin-top: 0; margin-bottom: 10px; color: #edffff; }
-      #overlayStyleModalContent p { font-size: 0.8em; color: #aaa; margin-bottom: 20px; }
+      #overlayStyleModal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 2000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: opacity 0.3s ease;
+      }
+      #overlayStyleModalContent {
+        background: #222;
+        padding: 30px;
+        border-radius: 8px;
+        border: 1px solid #444;
+        width: 350px;
+        max-width: 90%;
+        position: relative;
+        color: white;
+        text-align: left;
+      }
+      #closeOverlayStyle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: transparent;
+        border: none;
+        color: #888;
+        font-size: 24px;
+        cursor: pointer;
+      }
+      #overlayStyleModalContent h3 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: #edffff;
+      }
+      #overlayStyleModalContent p {
+        font-size: 0.8em;
+        color: #aaa;
+        margin-bottom: 20px;
+      }
 
       /* Status Bar */
-      #statusBar { position: absolute; bottom: 0; right: 0; z-index: 1000; background: rgba(0, 0, 0, 0.7); color: #aaa; font-size: 11px; padding: 2px 10px; display: flex; gap: 20px; border-top-left-radius: 4px; border: 1px solid #222; }
-      #statusCert { color: #fff; font-weight: bold; }
-      #statusCert span.status-green { color: #4caf50 !important; }
-      #statusCert span.status-orange { color: #ff9800 !important; }
-      #statusCert span.status-red { color: #f44336 !important; }
-      #statusConnection { font-weight: bold; }
-      .conn-online { color: #4caf50 !important; }
-      #statusPulse { 
-        width: 8px; 
-        height: 8px; 
-        background: #444; 
-        border-radius: 50%; 
+      #statusBar {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.7);
+        color: #aaa;
+        font-size: 11px;
+        padding: 2px 10px;
+        display: flex;
+        gap: 20px;
+        border-top-left-radius: 4px;
+        border: 1px solid #222;
+      }
+      #statusCert {
+        color: #fff;
+        font-weight: bold;
+      }
+      #statusCert span.status-green {
+        color: #4caf50 !important;
+      }
+      #statusCert span.status-orange {
+        color: #ff9800 !important;
+      }
+      #statusCert span.status-red {
+        color: #f44336 !important;
+      }
+      #statusConnection {
+        font-weight: bold;
+      }
+      .conn-online {
+        color: #4caf50 !important;
+      }
+      #statusPulse {
+        width: 8px;
+        height: 8px;
+        background: #444;
+        border-radius: 50%;
         align-self: center;
         transition: background 0.1s;
       }
@@ -314,12 +643,46 @@
         font-weight: bold;
         color: #edffff;
       }
-      #statusActions button { background: #333; border: 1px solid #444; color: #ccc; font-size: 10px; padding: 1px 5px; cursor: pointer; border-radius: 2px; }
-      #statusActions button:hover { background: #444; }
-      #authForget { color: #ff9800 !important; opacity: 0.8; }
-      #authForget:hover { opacity: 1; }
-      #contourSettings { padding: 5px 10px; background: rgba(0,0,0,0.3); border-top: 1px solid #444; display: flex; align-items: center; justify-content: space-between; margin-top: 5px; }
-      #contourSettings button { background: #444; color: white; border: 1px solid #555; width: 24px; height: 24px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; }
+      #statusActions button {
+        background: #333;
+        border: 1px solid #444;
+        color: #ccc;
+        font-size: 10px;
+        padding: 1px 5px;
+        cursor: pointer;
+        border-radius: 2px;
+      }
+      #statusActions button:hover {
+        background: #444;
+      }
+      #authForget {
+        color: #ff9800 !important;
+        opacity: 0.8;
+      }
+      #authForget:hover {
+        opacity: 1;
+      }
+      #contourSettings {
+        padding: 5px 10px;
+        background: rgba(0, 0, 0, 0.3);
+        border-top: 1px solid #444;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 5px;
+      }
+      #contourSettings button {
+        background: #444;
+        color: white;
+        border: 1px solid #555;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
     </style>
   </head>
   <body>
@@ -327,29 +690,77 @@
       <div id="sidebarContent">
         <div class="sidebar-section">
           <h3 id="sidebarHeaderView">View</h3>
+          <div
+            id="gotoButtonContainer"
+            style="margin-bottom: 10px; display: none"
+          ></div>
+          <div
+            style="
+              margin-bottom: 10px;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            "
+          >
+            <input
+              type="checkbox"
+              id="showCallsigns"
+              checked
+              style="width: 18px; height: 18px; cursor: pointer"
+            />
+            <label
+              for="showCallsigns"
+              id="labelShowCallsigns"
+              style="font-size: 0.9em; cursor: pointer"
+              >Show callsigns</label
+            >
+          </div>
           <div class="sidebar-button-row">
             <button id="resetView" class="btn">Reset View</button>
-            <button id="showInfo" class="btn" title="Information">ⓘ Info</button>
+            <button id="showInfo" class="btn" title="Information">
+              ⓘ Info
+            </button>
           </div>
         </div>
 
         <div class="sidebar-section">
           <h3 id="sidebarHeaderFilter">Filter</h3>
           <input type="text" id="filterInput" placeholder="Filter..." />
-          <div class="filter-row">
-            <select id="affiliationFilter">
-              <option value="all">All</option>
-              <option value="f">Friendly</option>
-              <option value="h">Hostile</option>
-              <option value="s">Suspect</option>
-              <option value="n">Neutral</option>
-              <option value="u">Unknown</option>
-            </select>
-            <select id="dimensionFilter">
-              <option value="all">All Dimensions</option>
-            </select>
+          <div
+            class="filter-row"
+            style="display: flex; gap: 10px; margin-bottom: 10px"
+          >
+            <div style="flex: 1; min-width: 0">
+              <select
+                id="affiliationFilter"
+                multiple
+                name="affiliation"
+                data-search="false"
+              >
+                <option value="f">Friendly</option>
+                <option value="h">Hostile</option>
+                <option value="s">Suspect</option>
+                <option value="n">Neutral</option>
+                <option value="u">Unknown</option>
+              </select>
+            </div>
+            <div style="flex: 1; min-width: 0">
+              <select
+                id="dimensionFilter"
+                multiple
+                name="dimension"
+                data-search="false"
+              ></select>
+            </div>
           </div>
-          <button id="clearFilter" class="btn" style="width: 100%;">Clear Filter</button>
+          <div class="sidebar-button-row" style="display: flex; gap: 5px">
+            <button id="zoomToAll" class="btn" style="flex: 1">
+              Zoom to All
+            </button>
+            <button id="clearFilter" class="btn" style="flex: 1">
+              Clear Filter
+            </button>
+          </div>
         </div>
 
         <div class="sidebar-section">
@@ -370,7 +781,9 @@
       <!-- Custom Layer Picker Button -->
       <button id="toggleLayerPicker" title="Layers">
         <svg viewBox="0 0 32 32">
-          <path d="M16 5.3125 L3.4375 11.59375 L16 17.875 L28.5625 11.59375 Z M3.4375 15.1875 L16 21.46875 L28.5625 15.1875 L28.5625 17.6875 L16 23.96875 L3.4375 17.6875 Z M3.4375 19.1875 L16 25.46875 L28.5625 19.1875 L28.5625 21.6875 L16 27.96875 L3.4375 21.6875 Z" />
+          <path
+            d="M16 5.3125 L3.4375 11.59375 L16 17.875 L28.5625 11.59375 Z M3.4375 15.1875 L16 21.46875 L28.5625 15.1875 L28.5625 17.6875 L16 23.96875 L3.4375 17.6875 Z M3.4375 19.1875 L16 25.46875 L28.5625 19.1875 L28.5625 21.6875 L16 27.96875 L3.4375 21.6875 Z"
+          />
         </svg>
       </button>
 
@@ -388,12 +801,21 @@
           <div class="layer-section-header">Analysis</div>
           <div id="analysisGrid" class="layer-grid"></div>
           <div id="contourSettings" class="hidden">
-             <span style="font-size: 0.8em; color: #ccc;">Density</span>
-             <div style="display: flex; align-items: center; gap: 5px;">
-                <button id="contourDec">-</button>
-                <span id="contourValue" style="font-size: 0.9em; color: cyan; width: 45px; text-align: center;">100m</span>
-                <button id="contourInc">+</button>
-             </div>
+            <span style="font-size: 0.8em; color: #ccc">Density</span>
+            <div style="display: flex; align-items: center; gap: 5px">
+              <button id="contourDec">-</button>
+              <span
+                id="contourValue"
+                style="
+                  font-size: 0.9em;
+                  color: cyan;
+                  width: 45px;
+                  text-align: center;
+                "
+                >100m</span
+              >
+              <button id="contourInc">+</button>
+            </div>
           </div>
         </div>
       </div>
@@ -426,45 +848,229 @@
         <button id="closeOverlayStyle">×</button>
         <h3>Overlay Styling</h3>
         <p>Set visual styles for file overlays.</p>
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Outline Color</label>
-          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-            <input type="color" id="overlayColor" value="#00ffff" style="flex-grow: 1; height: 35px; border: none; padding: 0;">
-            <label for="overlayBorderNone" style="font-size: 0.9em; white-space: nowrap;">None</label>
-            <input type="checkbox" id="overlayBorderNone" style="width: 18px; height: 18px; cursor: pointer;">
+        <div style="margin-bottom: 15px">
+          <label style="display: block; margin-bottom: 5px; font-size: 0.9em"
+            >Outline Color</label
+          >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 10px;
+            "
+          >
+            <input
+              type="color"
+              id="overlayColor"
+              value="#00ffff"
+              style="flex-grow: 1; height: 35px; border: none; padding: 0"
+            />
+            <label
+              for="overlayBorderNone"
+              style="font-size: 0.9em; white-space: nowrap"
+              >None</label
+            >
+            <input
+              type="checkbox"
+              id="overlayBorderNone"
+              style="width: 18px; height: 18px; cursor: pointer"
+            />
           </div>
         </div>
-        <div style="margin-bottom: 15px;">
-          <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Fill Color</label>
-          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-            <input type="color" id="overlayFillColor" value="#00ffff" style="flex-grow: 1; height: 35px; border: none; padding: 0;">
-            <label for="overlayFillNone" style="font-size: 0.9em; white-space: nowrap;">None</label>
-            <input type="checkbox" id="overlayFillNone" style="width: 18px; height: 18px; cursor: pointer;">
+        <div style="margin-bottom: 15px">
+          <label style="display: block; margin-bottom: 5px; font-size: 0.9em"
+            >Fill Color</label
+          >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 10px;
+            "
+          >
+            <input
+              type="color"
+              id="overlayFillColor"
+              value="#00ffff"
+              style="flex-grow: 1; height: 35px; border: none; padding: 0"
+            />
+            <label
+              for="overlayFillNone"
+              style="font-size: 0.9em; white-space: nowrap"
+              >None</label
+            >
+            <input
+              type="checkbox"
+              id="overlayFillNone"
+              style="width: 18px; height: 18px; cursor: pointer"
+            />
           </div>
-          <label for="overlayTransparency" style="display: block; margin-bottom: 5px; font-size: 0.9em;">Fill Transparency (%)</label>
-          <input type="range" id="overlayTransparency" min="0" max="100" value="50" step="1" style="width: 100%; -webkit-appearance: none; appearance: none; height: 8px; background: #555; border-radius: 5px; outline: none; transition: opacity .2s;">
+          <label
+            for="overlayTransparency"
+            style="display: block; margin-bottom: 5px; font-size: 0.9em"
+            >Fill Transparency (%)</label
+          >
+          <input
+            type="range"
+            id="overlayTransparency"
+            min="0"
+            max="100"
+            value="50"
+            step="1"
+            style="
+              width: 100%;
+              -webkit-appearance: none;
+              appearance: none;
+              height: 8px;
+              background: #555;
+              border-radius: 5px;
+              outline: none;
+              transition: opacity 0.2s;
+            "
+          />
         </div>
-        <div style="margin-bottom: 20px;">
-          <label for="overlayWidth" style="display: block; margin-bottom: 5px; font-size: 0.9em;">Outline Width</label>
-          <input type="number" id="overlayWidth" value="2" min="0" max="10" step="1" style="width: 100%; padding: 8px; background: #333; border: 1px solid #555; color: white; border-radius: 4px;">
+        <div style="margin-bottom: 20px">
+          <label
+            for="overlayWidth"
+            style="display: block; margin-bottom: 5px; font-size: 0.9em"
+            >Outline Width</label
+          >
+          <input
+            type="number"
+            id="overlayWidth"
+            value="2"
+            min="0"
+            max="10"
+            step="1"
+            style="
+              width: 100%;
+              padding: 8px;
+              background: #333;
+              border: 1px solid #555;
+              color: white;
+              border-radius: 4px;
+              box-sizing: border-box;
+            "
+          />
         </div>
-        <button id="saveOverlayStyle" class="btn" style="width: 100%;">Save Styles</button>
+        <div style="margin-bottom: 20px">
+          <label
+            for="overlayStyle"
+            style="display: block; margin-bottom: 5px; font-size: 0.9em"
+            >Outline Style</label
+          >
+          <select
+            id="overlayStyle"
+            style="
+              width: 100%;
+              padding: 8px;
+              background: #333;
+              border: 1px solid #555;
+              color: white;
+              border-radius: 4px;
+              cursor: pointer;
+            "
+          >
+            <option value="solid">Solid</option>
+            <option value="dashed">Dashed</option>
+            <option value="dotted">Dotted</option>
+          </select>
+        </div>
+        <button id="saveOverlayStyle" class="btn" style="width: 100%">
+          Save Styles
+        </button>
       </div>
     </div>
 
     <!-- Auth Overlay -->
     <div id="authOverlay">
+      <img id="authLogo" src="/logo" alt="Logo" onerror="this.style.display='none'" />
       <div id="authContent">
         <h2 id="authTitle">TAK Login</h2>
+
+        <!-- Choice Screen -->
+        <div id="authChoiceForm" class="hidden">
+          <p id="labelAuthChoice">
+            Please choose how to connect to the TAK network.
+          </p>
+          <div class="auth-choice-row">
+            <button class="auth-choice-btn" id="choiceEnroll">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12,4A4,4 0 0,1 16,8A4,4 0 0,1 12,12A4,4 0 0,1 8,8A4,4 0 0,1 12,4M12,14C16.42,14 20,15.79 20,18V20H4V18C4,15.79 7.58,14 12,14Z"
+                />
+              </svg>
+              <span id="labelEnroll">Enrollment</span>
+            </button>
+            <button class="auth-choice-btn" id="choiceUpload">
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13.5,16V19H10.5V16H8L12,12L16,16H13.5M13,9V3.5L18.5,9H13Z"
+                />
+              </svg>
+              <span id="labelUploadCert">Certificate Upload</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Enrollment Form -->
         <div id="enrollmentForm" class="hidden">
-          <p>Please enroll to access the TAK network.</p>
+          <button class="back-btn" id="backToChoice1">← Back</button>
+          <p id="labelEnrollDesc">Please enroll to access the TAK network.</p>
           <input type="text" id="enrollServer" placeholder="TAK Server" />
           <input type="text" id="enrollUser" placeholder="Username" />
           <input type="password" id="enrollPass" placeholder="Password" />
           <button id="enrollButton">Enroll</button>
         </div>
+
+        <!-- Upload Form -->
+        <div id="uploadForm" class="hidden">
+          <button class="back-btn" id="backToChoice2">← Back</button>
+          <p id="labelUploadDesc">Upload your .p12 certificate file.</p>
+          <input type="text" id="uploadServer" placeholder="TAK Server" />
+          <div style="margin-bottom: 15px; text-align: left">
+            <label for="p12File" style="font-size: 0.8em; color: #888"
+              >Select .p12 file</label
+            >
+            <input
+              type="file"
+              id="p12File"
+              accept=".p12"
+              style="margin-top: 5px"
+            />
+          </div>
+          <input
+            type="password"
+            id="uploadPass"
+            placeholder="Certificate Password"
+          />
+          <div
+            id="newPassContainer"
+            class="hidden"
+            style="
+              margin-top: 10px;
+              border-top: 1px solid #333;
+              padding-top: 10px;
+            "
+          >
+            <p style="font-size: 0.8em; color: #ff9800" id="labelInsecurePass">
+              Your certificate password is insecure. Please set a new strong
+              password (min 8 chars).
+            </p>
+            <input
+              type="password"
+              id="uploadNewPass"
+              placeholder="New Strong Password"
+            />
+          </div>
+          <button id="uploadButton">Upload & Connect</button>
+        </div>
+
+        <!-- Login Form -->
         <div id="loginForm" class="hidden">
-          <p>Authenticated access required.</p>
+          <p id="labelLoginDesc">Authenticated access required.</p>
           <input type="text" id="loginUser" placeholder="Username" />
           <input type="password" id="loginPass" placeholder="Password" />
           <button id="loginButton">Login</button>

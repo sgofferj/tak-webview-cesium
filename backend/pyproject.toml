@@ -17,6 +17,7 @@ pydantic-settings = "^2.1.0"
 msgpack = "^1.1.0"
 httpx = "^0.26.0"
 cryptography = "^42.0.0"
+python-multipart = "^0.0.9"
 itsdangerous = "^2.1.2"
 cachetools = "^7.0.5"
 

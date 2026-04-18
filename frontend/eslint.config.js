@@ -16,6 +16,7 @@ export default [
       globals: {
         ...globals.browser,
         Cesium: "readonly",
+        VirtualSelect: "readonly",
       },
     },
     rules: {

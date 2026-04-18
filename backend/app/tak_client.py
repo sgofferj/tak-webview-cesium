@@ -202,15 +202,20 @@ class TAKClient:
             if not uid or not ctype:
                 return None
 
-            # Discard specific CoT types or those containing "ping" / "pong"
-            # as these are internal server messages and not actual entities.
-            if ctype == "t-x-c-t":
+            # Discard every CoT type that doesn't start with "a-" (Atoms).
+            # This project focuses on 3D visualization of tactical entities (atoms).
+            # Internal server messages, pings, chat, drawings (lines/polygons), etc.,
+            # which use different prefixes (e.g., "t-", "b-", "u-"), are discarded here.
+            # NOTE: If future features like chat or shared drawings are added,
+            # this filter will need to be updated to allow those specific types.
+            if not ctype.startswith("a-") and b"<emergency" not in xml_data:
                 return None
-            
+
             # Check for ping/pong in uid or callsign (case-insensitive)
-            # Some servers send pings with different CoT types but specific uids/callsigns
+            # Some servers send pings with different CoT types but specific
+            # uids/callsigns
             uid_lower = uid.lower()
-            if "ping" in uid_lower or "pong" in uid_lower or "takping" in uid_lower or "takpong" in uid_lower:
+            if any(p in uid_lower for p in ["ping", "pong", "takping", "takpong"]):
                 return None
 
             point = root.find("point")

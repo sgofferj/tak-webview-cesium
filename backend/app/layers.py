@@ -46,10 +46,9 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
                     geojson_data = json.loads(await f.read())
                     if "name" in geojson_data and geojson_data["name"]:
                         display_name = geojson_data["name"]
-                    elif (
-                        geojson_data.get("features")
-                        and geojson_data["features"][0].get("properties")
-                    ):
+                    elif geojson_data.get("features") and geojson_data["features"][
+                        0
+                    ].get("properties"):
                         first_feature = geojson_data["features"][0]
                         first_feature_props = first_feature.get("properties")
                         if (
@@ -68,9 +67,7 @@ async def scan_file_overlays() -> list[dict[str, Any]]:
             try:
                 # KML parsing remains synchronous as lxml does not support
                 # async file ops directly.
-                tree = etree.parse(
-                    str(file_path), parser=etree.XMLParser(recover=True)
-                )
+                tree = etree.parse(str(file_path), parser=etree.XMLParser(recover=True))
                 root = tree.getroot()
                 # KML namespace can vary.
                 # Try to find name tag directly or with common namespaces.
@@ -259,4 +256,5 @@ async def get_app_config() -> dict[str, Any]:
         "logo": settings.logo,
         "logo_position": settings.logo_position,
         "tak_staff_comments": settings.tak_staff_comments,
+        "goto_buttons": settings.goto_buttons,
     }
