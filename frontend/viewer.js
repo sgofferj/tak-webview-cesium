@@ -27,15 +27,18 @@ import {
   ClassificationType,
   JulianDate,
   CallbackProperty, // Import CallbackProperty
-  ScreenSpaceEventHandler, // Import ScreenSpaceEventHandler
-  ScreenSpaceEventType, // Import ScreenSpaceEventType for click events
+  PolylineDashMaterialProperty, // Import for dashed/dotted lines
+  NearFarScalar,
+  DistanceDisplayCondition,
+  HorizontalOrigin,
+  VerticalOrigin,
 } from "cesium";
 import { appConfig, i18n } from "./config.js";
 
 // Utility to generate a random hex color
 export function generateRandomColor() {
-  const letters = '0123456789ABCDEF';
-  let color = '#';
+  const letters = "0123456789ABCDEF";
+  let color = "#";
   for (let i = 0; i < 6; i++) {
     color += letters[Math.floor(Math.random() * 16)];
   }
@@ -198,7 +201,9 @@ export function setElevationContours(active) {
 
   if (contoursEnabled !== oldState) {
     window.dispatchEvent(
-      new CustomEvent("contoursChanged", { detail: { active: contoursEnabled } }),
+      new CustomEvent("contoursChanged", {
+        detail: { active: contoursEnabled },
+      }),
     );
   }
   return contoursEnabled;
@@ -223,6 +228,22 @@ function checkAnalysisAvailability() {
   }
 }
 
+function getPolylineMaterial(colorStr, styleName) {
+  const color = Color.fromCssColorString(colorStr || "#00ffff");
+  if (styleName === "dashed") {
+    return new PolylineDashMaterialProperty({
+      color: color,
+      dashPattern: 3855, // 0000111100001111
+    });
+  } else if (styleName === "dotted") {
+    return new PolylineDashMaterialProperty({
+      color: color,
+      dashPattern: 21845, // 0101010101010101
+    });
+  }
+  return color;
+}
+
 function applyOverlayStyling(dataSource, layerName) {
   const saved = localStorage.getItem(`overlay_style_${layerName}`);
   if (!saved) return;
@@ -230,7 +251,12 @@ function applyOverlayStyling(dataSource, layerName) {
     const style = JSON.parse(saved);
     dataSource.entities.values.forEach((entity) => {
       if (entity.polyline) {
-        if (style.color) entity.polyline.material = Color.fromCssColorString(style.color);
+        if (style.color) {
+          entity.polyline.material = getPolylineMaterial(
+            style.color,
+            style.style,
+          );
+        }
         if (style.width) entity.polyline.width = parseFloat(style.width);
       }
       if (entity.polygon) {
@@ -238,8 +264,13 @@ function applyOverlayStyling(dataSource, layerName) {
         if (style.fillNone) {
           entity.polygon.material = Color.TRANSPARENT;
         } else if (style.fillColor) {
-          const alpha = style.transparency !== undefined ? parseFloat(style.transparency) : 0.5;
-          entity.polygon.material = Color.fromCssColorString(style.fillColor).withAlpha(alpha);
+          const alpha =
+            style.transparency !== undefined
+              ? parseFloat(style.transparency)
+              : 0.5;
+          entity.polygon.material = Color.fromCssColorString(
+            style.fillColor,
+          ).withAlpha(alpha);
         }
 
         // Disable Cesium's native polygon outline (it won't render on terrain anyway)
@@ -252,28 +283,34 @@ function applyOverlayStyling(dataSource, layerName) {
         if (style.borderNone) {
           if (outlinePolyline) {
             dataSource.entities.remove(outlinePolyline);
-            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline removed (borderNone).`);
+            console.warn(
+              `Overlay ${layerName}, Entity ${entity.id}: Polyline outline removed (borderNone).`,
+            );
           }
         } else {
           // Get positions from the polygon hierarchy
           const hierarchy = entity.polygon.hierarchy.getValue(JulianDate.now());
           // Use hierarchy.positions for GeoJSON-like data, which contains the exterior ring directly
-          if (hierarchy && hierarchy.positions && hierarchy.positions.length > 0) {
+          if (
+            hierarchy &&
+            hierarchy.positions &&
+            hierarchy.positions.length > 0
+          ) {
             const positions = hierarchy.positions;
 
             if (!outlinePolyline) {
               // Create new polyline
-              outlinePolyline = dataSource.entities.add({
+              dataSource.entities.add({
                 id: outlineId,
                 parent: entity, // Associate with the main entity
-                pickable: false, // Disable picking for the outline entity itself
+                pickable: true, // Enable picking for redirection
                 polyline: {
                   positions: positions,
                   width: parseFloat(style.width),
-                  material: Color.fromCssColorString(style.color),
+                  material: getPolylineMaterial(style.color, style.style),
                   clampToGround: true,
                   disableDepthTestDistance: Number.POSITIVE_INFINITY, // Ensure polyline is always visible on top
-                  pickable: false, // Make the outline polyline graphic non-pickable
+                  pickable: true,
                 },
                 show: new CallbackProperty(() => {
                   // Safely check if the parent entity still exists and is shown
@@ -286,9 +323,14 @@ function applyOverlayStyling(dataSource, layerName) {
               // Update existing polyline
               outlinePolyline.polyline.positions = positions;
               outlinePolyline.polyline.width = parseFloat(style.width);
-              outlinePolyline.polyline.material = Color.fromCssColorString(style.color);
-              outlinePolyline.polyline.disableDepthTestDistance = Number.POSITIVE_INFINITY; // Ensure this is also set on update
-              outlinePolyline.polyline.pickable = false; // Ensure it remains non-pickable on update
+              outlinePolyline.polyline.material = getPolylineMaterial(
+                style.color,
+                style.style,
+              );
+              outlinePolyline.polyline.disableDepthTestDistance =
+                Number.POSITIVE_INFINITY; // Ensure this is also set on update
+              outlinePolyline.pickable = true;
+              outlinePolyline.polyline.pickable = true;
               // Ensure show property also uses CallbackProperty for dynamic updates
               outlinePolyline.show = new CallbackProperty(() => {
                 const parentEntity = dataSource.entities.getById(entity.id);
@@ -308,10 +350,91 @@ function applyOverlayStyling(dataSource, layerName) {
             } else if (hierarchy.positions.length === 0) {
               reason = "hierarchy.positions is an empty array";
             }
-            console.warn(`Overlay ${layerName}, Entity ${entity.id}: Polyline outline skipped because: ${reason}. Full hierarchy object:`, hierarchy);
+            console.warn(
+              `Overlay ${layerName}, Entity ${entity.id}: Polyline outline skipped because: ${reason}. Full hierarchy object:`,
+              hierarchy,
+            );
 
             if (outlinePolyline) {
               dataSource.entities.remove(outlinePolyline); // Ensure old polyline is removed if polygon becomes degenerate
+            }
+          }
+        }
+
+        // Add label if name attribute exists (case-insensitive search)
+        let name = entity.name;
+        if (!name && entity.properties) {
+          const names = entity.properties.propertyNames;
+          // Check for 'name' first, then common fallbacks
+          const nameKey = names.find((k) => {
+            const lk = k.toLowerCase();
+            return (
+              lk === "name" ||
+              lk === "title" ||
+              lk === "label" ||
+              lk === "namefin" ||
+              lk === "nameswe"
+            );
+          });
+          if (nameKey) {
+            name = entity.properties[nameKey].getValue();
+          }
+        }
+
+        if (name) {
+          const hierarchy = entity.polygon.hierarchy.getValue(JulianDate.now());
+          if (
+            hierarchy &&
+            hierarchy.positions &&
+            hierarchy.positions.length > 0
+          ) {
+            // Use Rectangle to find the geographic center (lat/lon)
+            // This is more intuitive for map labels than a 3D Bounding Sphere
+            const rect = Rectangle.fromCartesianArray(hierarchy.positions);
+            const centerCartographic = Rectangle.center(rect);
+            const center = Cartesian3.fromRadians(
+              centerCartographic.longitude,
+              centerCartographic.latitude,
+            );
+
+            // Create or update label entity
+            const labelId = `${entity.id}-label`;
+            let labelEntity = dataSource.entities.getById(labelId);
+
+            const borderColor = Color.fromCssColorString(
+              style.color || "#00ffff",
+            );
+
+            if (!labelEntity) {
+              dataSource.entities.add({
+                id: labelId,
+                parent: entity,
+                position: center,
+                label: {
+                  text: name,
+                  font: "bold 20px sans-serif",
+                  fillColor: borderColor,
+                  style: 0, // LabelStyle.FILL
+                  showBackground: false,
+                  horizontalOrigin: HorizontalOrigin.CENTER,
+                  verticalOrigin: VerticalOrigin.CENTER,
+                  heightReference: HeightReference.CLAMP_TO_GROUND,
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                  distanceDisplayCondition: new DistanceDisplayCondition(
+                    0.0,
+                    10000000.0, // Increased to 10,000km for country-scale visibility
+                  ),
+                  scaleByDistance: new NearFarScalar(1.0e4, 1.0, 5.0e6, 0.2), // Scale down gradually up to 5,000km
+                },
+                show: new CallbackProperty(() => {
+                  const parentEntity = dataSource.entities.getById(entity.id);
+                  return parentEntity && parentEntity.show;
+                }, false),
+              });
+            } else {
+              labelEntity.position = center;
+              labelEntity.label.text = name;
+              labelEntity.label.fillColor = borderColor;
             }
           }
         }
@@ -324,9 +447,21 @@ function applyOverlayStyling(dataSource, layerName) {
 
 // List of all graphic property names on a Cesium Entity that can be pickable
 const allGraphicPropertyNames = [
-  "billboard", "box", "corridor", "cylinder", "ellipse", "ellipsoid",
-  "label", "model", "path", "point", "polygon", "polyline",
-  "polylineVolume", "rectangle", "wall"
+  "billboard",
+  "box",
+  "corridor",
+  "cylinder",
+  "ellipse",
+  "ellipsoid",
+  "label",
+  "model",
+  "path",
+  "point",
+  "polygon",
+  "polyline",
+  "polylineVolume",
+  "rectangle",
+  "wall",
 ];
 
 export async function toggleOverlayLayer(layerConfig, active) {
@@ -358,30 +493,33 @@ export async function toggleOverlayLayer(layerConfig, active) {
 
             applyOverlayStyling(dataSource, layerConfig.name);
 
-            // Post-process entities for better visibility on terrain and disable picking
+            // Post-process entities for better visibility on terrain and enable picking
             dataSource.entities.values.forEach((entity) => {
-              entity.pickable = false; // Disable infobox for the entity itself
+              entity.pickable = true; // Enable infobox for the entity itself
 
-              // Explicitly disable picking for all defined graphic properties
-              allGraphicPropertyNames.forEach(propName => {
+              // Explicitly enable picking for all defined graphic properties
+              allGraphicPropertyNames.forEach((propName) => {
                 if (entity[propName]) {
-                  entity[propName].pickable = false;
+                  entity[propName].pickable = true;
                 }
               });
 
               // Apply height reference and depth test distance for common clamped types
-              // (These were previously duplicated, consolidating the picking here)
               if (entity.billboard) {
-                entity.billboard.heightReference = HeightReference.CLAMP_TO_GROUND;
-                entity.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+                entity.billboard.heightReference =
+                  HeightReference.CLAMP_TO_GROUND;
+                entity.billboard.disableDepthTestDistance =
+                  Number.POSITIVE_INFINITY;
               }
               if (entity.label) {
                 entity.label.heightReference = HeightReference.CLAMP_TO_GROUND;
-                entity.label.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+                entity.label.disableDepthTestDistance =
+                  Number.POSITIVE_INFINITY;
               }
               if (entity.point) {
                 entity.point.heightReference = HeightReference.CLAMP_TO_GROUND;
-                entity.point.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+                entity.point.disableDepthTestDistance =
+                  Number.POSITIVE_INFINITY;
               }
               if (entity.polyline) {
                 entity.polyline.clampToGround = true;
@@ -408,6 +546,22 @@ export async function toggleOverlayLayer(layerConfig, active) {
   } else {
     const overlay = activeOverlays.get(layerConfig.name);
     if (overlay) {
+      // DESELECT BEFORE REMOVAL: Clear selection if it belongs to the overlay being removed
+      if (
+        viewer.selectedEntity &&
+        overlay.entities &&
+        overlay.entities.contains(viewer.selectedEntity)
+      ) {
+        viewer.selectedEntity = undefined;
+      }
+      if (
+        viewer.trackedEntity &&
+        overlay.entities &&
+        overlay.entities.contains(viewer.trackedEntity)
+      ) {
+        viewer.trackedEntity = undefined;
+      }
+
       if (layerConfig.type === "file") {
         viewer.dataSources.remove(overlay);
       } else {
@@ -420,9 +574,29 @@ export async function toggleOverlayLayer(layerConfig, active) {
 
 export function clearOverlayLayers() {
   activeOverlays.forEach((overlay) => {
-    // We need to know the type to remove correctly. 
+    // DESELECT BEFORE REMOVAL: Clear selection if it belongs to the overlay being removed
+    if (
+      viewer.selectedEntity &&
+      overlay.entities &&
+      overlay.entities.contains(viewer.selectedEntity)
+    ) {
+      viewer.selectedEntity = undefined;
+    }
+    if (
+      viewer.trackedEntity &&
+      overlay.entities &&
+      overlay.entities.contains(viewer.trackedEntity)
+    ) {
+      viewer.trackedEntity = undefined;
+    }
+
+    // We need to know the type to remove correctly.
     // Since we don't store the config, we check for DataSource properties
-    if (overlay && typeof overlay.show !== "undefined" && typeof overlay.entities !== "undefined") {
+    if (
+      overlay &&
+      typeof overlay.show !== "undefined" &&
+      typeof overlay.entities !== "undefined"
+    ) {
       viewer.dataSources.remove(overlay);
     } else {
       viewer.imageryLayers.remove(overlay);
@@ -430,7 +604,6 @@ export function clearOverlayLayers() {
   });
   activeOverlays.clear();
 }
-
 export async function initViewer() {
   // console.log("Initializing Viewer. Current appConfig:", appConfig); // Removed verbose log
 
@@ -440,7 +613,8 @@ export async function initViewer() {
   }
 
   // Use a simple initial imagery provider to avoid startup failure
-  const defaultBase = getBaseMaps().find((l) => l.name === "OpenStreetMap") || getBaseMaps()[0];
+  const defaultBase =
+    getBaseMaps().find((l) => l.name === "OpenStreetMap") || getBaseMaps()[0];
   const initialImagery = await createImageryProvider(defaultBase);
 
   viewer = new Viewer("cesiumContainer", {
@@ -457,41 +631,6 @@ export async function initViewer() {
     sceneModePicker: true,
     terrainExaggeration: appConfig.terrain_exaggeration || 1.0,
     terrainExaggerationRelativeHeight: 0.0,
-  });
-
-  // Add a listener to immediately deselect any entity that belongs to an active overlay
-  // Intercept LEFT_CLICK events to prevent infobox for overlay entities
-  const handler = new ScreenSpaceEventHandler(viewer.canvas);
-  handler.setInputAction((click) => {
-    const pickedObject = viewer.scene.pick(click.position);
-    if (pickedObject && pickedObject.id) {
-      // Check if the picked object (entity) belongs to an active file overlay
-      for (const [layerName, overlay] of activeOverlays) {
-        // Only consider DataSources, as they hold file-based entities
-        if (overlay && overlay.entities && overlay.entities.contains(pickedObject.id)) {
-          viewer.selectedEntity = undefined; // Clear any potential selection
-          // Stop processing this click, effectively "hijacking" it
-          // This prevents Cesium's default picking behavior and thus the infobox.
-          return;
-        }
-      }
-    }
-  }, ScreenSpaceEventType.LEFT_CLICK);
-
-  // Existing listener to immediately deselect any entity that belongs to an active overlay.
-  // This listener will now act as a secondary failsafe, as the ScreenSpaceEventHandler
-  // should prevent selection of overlay entities in the first place.
-  viewer.selectedEntityChanged.addEventListener(() => {
-    const selectedEntity = viewer.selectedEntity;
-    if (selectedEntity) {
-      for (const [layerName, overlay] of activeOverlays) {
-        // Check if the overlay is a DataSource (for file types) and contains the selected entity
-        if (overlay && overlay.entities && overlay.entities.contains(selectedEntity)) {
-          viewer.selectedEntity = undefined; // Deselect it immediately
-          break; // Stop checking further overlays
-        }
-      }
-    }
   });
 
   viewer.scene.globe.depthTestAgainstTerrain = true;

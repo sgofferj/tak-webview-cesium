@@ -66,6 +66,105 @@ class AuthManager:
         combined = f"{password}:{salt}:enrollment"
         return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
 
+    def validate_password_strength(self, password: str, username: str) -> bool:
+        """
+        Validate password strength.
+        Minimum 8 characters, must not be 'atakatak', username, or empty.
+        """
+        if not password or len(password) < 8:
+            return False
+        if password.lower() in ["atakatak", username.lower()]:
+            return False
+        return True
+
+    def upload_p12(
+        self,
+        p12_data: bytes,
+        current_password: str,
+        new_password: str | None = None,
+        server: str = "imported",
+    ) -> str | None:
+        """
+        Process a .p12 certificate upload.
+        Extracts username from Certificate CN. Returns username on success.
+        """
+        # pylint: disable=too-many-locals,too-many-arguments
+        from cryptography.hazmat.primitives.serialization import pkcs12
+
+        try:
+            # 1. Decrypt P12
+            p12_password = (
+                current_password.encode("utf-8") if current_password else None
+            )
+            private_key, certificate, additional_certificates = (
+                pkcs12.load_key_and_certificates(p12_data, p12_password)
+            )
+
+            if not private_key or not certificate:
+                logger.error("P12 file missing private key or certificate")
+                return None
+
+            # 2. Extract Username from CN
+            username = certificate.subject.get_attributes_for_oid(
+                x509.NameOID.COMMON_NAME
+            )[0].value
+            if not isinstance(username, str):
+                username = str(username)
+
+            # 3. Security Check
+            insecure = not self.validate_password_strength(current_password, username)
+            if insecure:
+                if not new_password or not self.validate_password_strength(
+                    new_password, username
+                ):
+                    logger.error(
+                        "Insecure P12 password and no valid new password provided"
+                    )
+                    return None
+                final_password = new_password
+            else:
+                final_password = current_password
+
+            # 4. Save everything in our format
+            self.wipe_ephemeral()
+
+            # Derive storage key
+            _, salt = self.hash_password(final_password)
+            storage_key = self._derive_fernet_key(final_password, salt)
+
+            # Encrypt private key
+            key_bytes = private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            f_box = Fernet(storage_key)
+            encrypted_key_blob = f_box.encrypt(key_bytes)
+
+            # Convert certificate to PEM
+            cert_pem = certificate.public_bytes(serialization.Encoding.PEM)
+
+            # Write files
+            with open(self.key_file, "wb") as f:
+                f.write(encrypted_key_blob)
+
+            with open(self.cert_file, "wb") as f:
+                f.write(cert_pem)
+
+            if additional_certificates:
+                with open(self.ca_file, "wb") as f:
+                    for ca in additional_certificates:
+                        f.write(ca.public_bytes(serialization.Encoding.PEM))
+                        f.write(b"\n")
+
+            self.save_credentials(username, final_password, server, salt=salt)
+            logger.info("P12 upload for user '%s' successful", username)
+            return username
+
+        except Exception as e:
+            logger.error("P12 import error: %s: %s", type(e).__name__, e)
+            return None
+
     def save_credentials(
         self, username: str, password: str, server: str, salt: str | None = None
     ) -> None:
@@ -163,8 +262,8 @@ class AuthManager:
                 "status": status,
                 "days_left": delta.days,
             }
-        except (OSError, ValueError, Exception) as e:
-            logger.error(f"Failed to read cert info: {e}")
+        except Exception as e:
+            logger.error("Failed to read cert info: %s", e)
             return None
 
     def get_private_key(self) -> bytes | None:
@@ -181,14 +280,17 @@ class AuthManager:
                 encrypted_key = f.read()
 
             f_box = Fernet(self._storage_key)
-            return f_box.decrypt(encrypted_key)
+            decrypted = f_box.decrypt(encrypted_key)
+            return bytes(decrypted) if decrypted is not None else None
         except Exception as e:
             logger.error(
-                f"Failed to decrypt private key in RAM: {type(e).__name__}: {e}"
+                "Failed to decrypt private key in RAM: %s: %s", type(e).__name__, e
             )
             return None
 
     async def enroll(self, server: str, username: str, password: str) -> bool:
+        """Enroll the client with a TAK server."""
+        # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         self.wipe_ephemeral()
         uid = settings.tak_uid_final
         base_url = f"https://{server}:{settings.tak_enroll_port}/Marti/api/tls"
@@ -207,7 +309,7 @@ class AuthManager:
                 config_resp = await client.get(f"{base_url}/config", auth=auth)
 
                 if config_resp.status_code != 200:
-                    logger.error(f"Config request failed: {config_resp.status_code}")
+                    logger.error("Config request failed: %s", config_resp.status_code)
                     return False
 
                 # 3. Parse Config for OIDs
@@ -265,7 +367,7 @@ class AuthManager:
                 )
 
                 if sign_resp.status_code != 200:
-                    logger.error(f"Signing failed: {sign_resp.status_code}")
+                    logger.error("Signing failed: %s", sign_resp.status_code)
                     return False
 
                 # 6. Parse XML Response
@@ -332,8 +434,8 @@ class AuthManager:
                 logger.info("Enrollment successful")
                 return True
 
-        except (httpx.RequestError, OSError, ValueError, Exception) as e:
-            logger.error(f"Enrollment error: {e}")
+        except Exception as e:
+            logger.error("Enrollment error: %s", e)
             return False
 
     def wipe_ephemeral(self) -> None:

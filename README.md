@@ -5,30 +5,35 @@ A unified web application for visualizing Cursor-on-Target (CoT) data from a TAK
 
 Licensed under the GNU General Public License V3 or later.
 
-> [!CAUTION]
-> The authentication and certificate management system has been completely refactored. Static certificate configurations are no longer supported. Please study the **Security Note**, **Configuration**, and **Quick Start** sections below for details on the new automated enrollment and login workflow.
-
 ## Description
-This application provides a real-time 3D tactical view of Cursor-on-Target (CoT) data from a TAK Server using the CesiumJS engine. It is designed to be a lightweight, web-based alternative for situational awareness, supporting standard military symbology and various imagery providers.
+This application provides a real-time 3D tactical view of Cursor-on-Target (CoT) data from a TAK Server. It's built as a lightweight, web-based tool for situational awareness, focusing on high-performance rendering and ease of use. It's an open-source project created by a TAK user for the community.
 
-### Features
-- **Automated Certificate Enrollment:** Securely obtain mTLS certificates directly from your TAK Server (port 8446).
-- **Silent Start & Authentication:** Ephemeral, session-based storage for certificates and hashed credentials with a "Silent Start" policy (no data shown until login).
-- **Status Tray:** Persistent indicator for certificate Common Name (CN), expiry status (Green/Orange/Red), and real-time connection status.
-- **Real-time Visualization:** View CoT data from TAK Server in a 3D CesiumJS environment.
-- **MIL-STD-2525 Support:** Rendering of standard military symbols using `milsymbol`.
-- **Custom Iconsets:** Support for TAK iconsets and custom imagery.
-- **Dynamic Layer Configuration:** Configure multiple base maps (WMS, XYZ, ArcGIS) with automatic extent discovery.
-- **Stackable Overlays:** Support for multiple simultaneous transparent overlay layers (e.g., OpenSeaMap, OpenAIP) on top of any base map.
-- **Incident & Emergency Handling:** Visual alerts and centering for emergency messages.
-- **Internationalization:** Multi-language support for the user interface.
-- **Traffic Optimization:** Minified binary communication (MessagePack) and frequency throttling.
+### Key Features
+- **Flexible Authentication:**
+    - **Automated Enrollment:** Securely obtain certificates directly from your TAK Server (port 8446).
+    - **Manual Certificate Upload:** Support for importing existing `.p12`/`.pfx` certificates.
+- **Privacy & Security:** Ephemeral session storage for certificates and credentials. No data is stored permanently on disk in unencrypted form.
+- **Status Tray:** Real-time feedback on connection status, certificate expiry, and identity.
+- **Advanced Visualization:** 
+    - **3D Environment:** Powered by CesiumJS for a global, high-fidelity view.
+    - **MIL-STD-2525 Support:** Military symbols rendered efficiently using `milsymbol`.
+    - **Staff Comments:** Highlighting of specific patterns in staff comments (e.g., callsigns or status codes).
+- **Intelligent Controls:** 
+    - **Quick Navigation:** Configurable "Goto" buttons for points of interest.
+    - **Zoom to All:** Automatically fits the view to all active entities.
+    - **Callsign Management:** Toggleable labels with automatic visibility for selected units.
+- **Layer & Overlay Support:**
+    - **Custom Map Sources:** Support for WMS, XYZ/TMS, and ArcGIS MapServer.
+    - **Local Overlays:** Automatic loading of GeoJSON, KML, and CZML files from a local directory.
+    - **Polygon Labeling:** Automatic geographic centering and labeling of polygon features.
+- **Performance:** Optimized communication using MessagePack and configurable update throttling.
+- **Internationalization:** Interface available in English, German, Finnish, and Swedish.
+- **Custom Branding:** Ability to set a custom application title and display a logo on both the map and the login screen.
 
 ## Custom Layers & Overlays
 
-You can configure your map layers in `customlayers.json`. Layers can be categorized and marked as overlays to allow for simultaneous display.
-
-### Example `customlayers.json`
+### Web Map Sources (`customlayers.json`)
+You can configure external map sources in `customlayers.json`. Layers can be categorized and marked as overlays for simultaneous display.
 
 ```json
 [
@@ -51,84 +56,44 @@ You can configure your map layers in `customlayers.json`. Layers can be categori
 ]
 ```
 
-## Security Note
-This application implements a rigorous, multi-layered security model designed to protect sensitive mission data and cryptographic identities:
+### Local File Overlays
+Place your `.geojson`, `.kml`, or `.czml` files in the `/app/overlays` directory (usually via a Docker volume bind). The application will automatically scan this directory and add them to the "Local Files" category in the layer switcher.
 
-- **Native Authentication:** No data is displayed or processed until the user successfully authenticates with the backend.
-- **Automated mTLS Enrollment:** The connection to the TAK Server is secured using industry-standard mTLS. Certificates are obtained dynamically via the 8446 enrollment protocol using a simplified, automated workflow.
-- **Secure Credential Handling:** User credentials for the web interface are never stored in plain text. They are hashed using `PBKDF2-HMAC-SHA256` with a unique random salt generated per enrollment session.
-- **Ephemeral Storage & Auto-Wipe:** All session-related data (certificates, keys, and hashed credentials) is stored in an ephemeral volume. This data is **automatically wiped** upon manual logout, certificate expiration, or after 3 failed login attempts.
+## Security Model
+The application is designed with a "Never-Unencrypted-on-Disk" philosophy:
 
-### Never-Unencrypted-on-Disk Philosophy
-To maintain the highest possible security posture, this application ensures that your **private key never exists in cleartext on the filesystem**:
+- **Transparent Encryption:** Private keys are encrypted using AES-128-CBC (Fernet) with keys derived from your session credentials.
+- **RAM-Only Decryption:** Keys are decrypted directly into memory (using Linux `memfd` where available) when connecting to the TAK Server.
+- **Ephemeral Storage:** All session data is automatically wiped upon logout, after three failed login attempts, or when the certificate expires.
 
-1.  **Transparent Encryption:** Upon enrollment, the private key is immediately encrypted using a strong `Fernet` (AES-128 in CBC mode with HMAC-SHA256) key derived from your login credentials. Only the encrypted blob is written to the persistent (ephemeral) volume.
-2.  **RAM-Only Decryption:** When the application connects to the TAK Server, the private key is decrypted directly into RAM. 
-3.  **Linux `memfd` Integration:** The application utilizes Linux-native `memfd_create` to create a virtual, RAM-backed file descriptor for the decrypted key. This allows the system to feed the private key to the standard SSL library without ever creating a temporary file on disk.
-4.  **Zero-Knowledge Secrets:** The secrets used for CSR enrollment and key storage are derived deterministically from your login credentials and salts, removing the need for user-chosen (and often weak) certificate passwords.
-
-**Note on Transport Encryption:** While the application handles authentication and mTLS natively, the web interface itself is served over standard HTTP. For production deployments, you **must** use a reverse proxy (e.g., Nginx, Traefik) to provide HTTPS transport encryption for the frontend-to-backend communication.
+**Note:** For production use, always run this application behind a reverse proxy (like Nginx or Traefik) to provide HTTPS transport security.
 
 ## Configuration
-The following values are supported and can be provided either as environment variables or through an .env-file.
+Configuration is handled via environment variables or an `.env` file.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
+| `APP_TITLE` | `TAK Cesium Map` | Title displayed in the browser tab and header |
 | `TAK_HOST` | `localhost` | Hostname or IP of the TAK Server |
-| `TAK_PORT` | `8089` | TCP/TLS port of the TAK Server |
-| `TAK_ENROLL_PORT` | `8446` | Enrollment port of the TAK Server |
-| `TAK_CALLSIGN` | `CesiumViewer` | Callsign used for enrollment and identification |
-| `TAK_UID` | `CesiumViewer-[Callsign]` | Unique ID for the viewer entity |
-| `SECRET_KEY` | (Random) | Secret for signing session cookies (Regenerated on every restart by default) |
-| `LAYERS_CONFIG_FILE` | `customlayers.json` | Filename for custom layers configuration |
-| `TERRAIN_URL` | (Empty) | URL to a Cesium terrain provider (quantized-mesh or heightmap) |
-| `TERRAIN_EXAGGERATION` | `1.0` | Vertical exaggeration for terrain |
-| `INITIAL_LAT` | `60.1699` | Initial latitude for map center |
-| `INITIAL_LON` | `24.9384` | Initial longitude for map center |
-| `LOG_COTS` | `false` | Set to `true` to log incoming CoT messages to the console |
-| `CENTER_ALERT` | `false` | Automatically zoom and alert on new emergency messages |
-| `TRUSTED_PROXIES` | `127.0.0.1` | Comma-separated list of IPs/CIDRs to trust for X-Forwarded-For |
-| `PORT` | `8000` | The port the web server listens on inside the container |
-| `CESIUM_ION_TOKEN` | (Empty) | Your Cesium Ion access token for Bing Maps and high-res terrain |
-| `LOGO` | (Empty) | Path to a custom logo file within the container |
-| `LOGO_POSITION` | `bottom_right` | Position of the logo: `top_left`, `top_center`, etc. |
+| `TAK_PORT` | `8089` | TLS port of the TAK Server |
+| `TAK_ENROLL_PORT` | `8446` | Enrollment port (for automated certificate setup) |
+| `TAK_CALLSIGN` | `CesiumViewer` | Callsign for this viewer instance |
+| `TAK_TYPE` | `a-f-G-U-C-I` | CoT type for the viewer entity |
+| `TAK_UID` | (Generated) | Unique ID for the viewer (defaults to `CesiumViewer-[Callsign]`) |
+| `TAK_STAFF_COMMENTS` | (Empty) | Comma-separated map for highlighting staff comments (e.g., `#SF=ShadowFleet,#LEO=LEO`) |
+| `GOTO_BUTTONS` | (Empty) | Quick-jump buttons: `Label:Lat,Lon,Zoom;...` |
+| `SECRET_KEY` | (Random) | Key for signing session cookies (regenerated on restart) |
+| `WS_THROTTLE` | `0.5` | Minimum seconds between updates per entity (throttles frontend traffic) |
+| `USE_MSGPACK` | `true` | Use MessagePack for binary WebSocket communication |
+| `CENTER_ALERT` | `false` | Automatically center the map on new emergency/alert messages |
+| `LOGO` | (Empty) | Path to a custom logo file inside the container |
+| `LOGO_POSITION` | `bottom_right` | Map logo position: `top_left`, `top_center`, `top_right`, etc. |
+| `CESIUM_ION_TOKEN` | (Empty) | Cesium Ion token for Bing Maps and global terrain |
+| `TERRAIN_URL` | (Empty) | URL to a Cesium terrain provider |
+| `INITIAL_LAT` / `LON` | Helsinki | Initial map center coordinates |
+| `TRUSTED_PROXIES` | `127.0.0.1` | IPs to trust for `X-Forwarded-For` headers |
 
-### Custom Imagery Configuration
-You can configure custom map layers by creating a `customlayers.json` file in the project root. This file is a JSON array of layer objects.
-
-Example `customlayers.json`:
-```json
-[
-  {
-    "name": "My WMS Layer",
-    "type": "wms",
-    "url": "https://example.com/wms?",
-    "layers": "my_layer_name",
-    "attribution": "© My Provider"
-  },
-  {
-    "name": "OpenStreetMap",
-    "type": "xyz",
-    "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    "attribution": "© OpenStreetMap contributors"
-  }
-]
-```
-
-#### Supported Layer Types
-- `wms`: Web Map Service.
-- `xyz` / `tms`: Tiled map services using `{z}/{x}/{y}` templates.
-- `arcgis`: ArcGIS MapServer layers.
-
-#### Automatic Extent Discovery
-For `wms` layers, if you omit the `rectangle` field, the backend will automatically attempt to fetch the layer's extent using a `GetCapabilities` request. You can also manually specify it as `[minLon, minLat, maxLon, maxLat]`.
-
-## Getting Started
-For instructions on how to set up the development environment, test, and deploy the application, please refer to the [DEVELOPMENT.md](./DEVELOPMENT.md) file.
-
-### Quick Start (Docker)
-1. Rename `.env.example` to `.env` and edit `TAK_HOST` to point to your server.
-2. Create and start the container:
+## Quick Start (Docker Compose)
 
 ```yaml
 services:
@@ -136,20 +101,27 @@ services:
     image: ghcr.io/sgofferj/tak-webview-cesium:latest
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     volumes:
       - ./customlayers.json:/app/customlayers.json:ro
-      - ./user_iconsets:/user_iconsets:ro
+      - ./overlays:/app/overlays:ro
+      - ./user_iconsets:/app/user_iconsets:ro
+    environment:
+      - TAK_HOST=your.takserver.com
+      - GOTO_BUTTONS=Helsinki:60.16,24.93,5000;Tampa:27.95,-82.45,10000
+      - TAK_STAFF_COMMENTS=#SF=ShadowFleet
     restart: unless-stopped
 ```
 
-4. Run:
-   ```bash
-   docker compose up -d
-   ```
-5. Open the web interface. You will be prompted to **Enroll** with your TAK Server credentials.
-6. Once enrolled, you will **Login** to start the real-time data flow.
-
 ## Support
-If you have a question about the software or find a bug, please open an issue. Suggestions for improvements or pull requests are also welcome 😀.
+If you find a bug or have a suggestion, feel free to open an issue or submit a pull request. This is a community effort!
+
+## Frontend Usage Hints
+
+Here are some tips for using the frontend that might not be immediately obvious:
+
+-   **Overlay Styling:** To change the display style of a local file overlay (GeoJSON, KML, CZML), **right-click** on its entry in the "Layers" panel. This opens a modal to customize its color, line width, and other properties.
+-   **Smart Selection:** Clicking on an entity's trail or course/speed vector arrow will automatically select the entity itself, making it easier to interact with moving units.
+-   **Hashtag Filtering:** In an entity's info box, any text that looks like a hashtag (e.g., `#incident-alpha`) becomes a clickable link. Clicking it will automatically filter the view to show only entities with that same tag.
+-   **"Zoom to All" Logic:** This button intelligently zooms to fit all *filtered* entities. It also automatically excludes extreme outliers to prevent zooming out to a global view unnecessarily.
+-   **"Reset View" Button:** This button does two things: it resets the camera to a top-down, North-up orientation, and its icon changes to indicate whether the current view is tilted or top-down.
+-   **Session Persistence:** The application automatically saves your view (camera position, filters, selected layers) to your browser's local storage. When you reload the page, your session will be restored exactly where you left off.

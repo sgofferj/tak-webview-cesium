@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     cesium_ion_token: str | None = None
     logo: str | None = None
     logo_position: str = "bottom_right"
+    goto_buttons: str = ""
 
     # Paths
     _iconsets_dir: str = "/iconsets"

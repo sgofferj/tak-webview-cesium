@@ -68,6 +68,10 @@ function applyStaticTranslations() {
     filterInput: (el) =>
       (el.placeholder = i18n.filterPlaceholder || "Filter..."),
     clearFilter: (el) => (el.innerText = i18n.clearButton || "Clear"),
+    zoomToAll: (el) => {
+      el.innerText = i18n.zoomToAllButton || "Zoom to All";
+      el.title = i18n.zoomToAllTitle || "Zoom to all filtered entities";
+    },
     resetView: (el) => {
       el.innerText = i18n.resetViewButton || "Reset View";
       el.title = i18n.resetViewTitle || "Reset to default view";
@@ -85,6 +89,34 @@ function applyStaticTranslations() {
       (el.innerText = i18n.sidebarHeaderFilter || "Filter"),
     sidebarHeaderTracks: (el) =>
       (el.innerText = i18n.sidebarHeaderTracks || "Active Tracks"),
+    sidebarHeaderStaff: (el) =>
+      (el.innerText = i18n.sidebarHeaderStaff || "Staff Comments"),
+    labelShowCallsigns: (el) =>
+      (el.innerText = i18n.labelShowCallsigns || "Show callsigns"),
+    labelAuthChoice: (el) =>
+      (el.innerText =
+        i18n.labelAuthChoice ||
+        "Please choose how to connect to the TAK network."),
+    labelEnroll: (el) => (el.innerText = i18n.labelEnroll || "Enrollment"),
+    labelUploadCert: (el) =>
+      (el.innerText = i18n.labelUploadCert || "Certificate Upload"),
+    labelEnrollDesc: (el) =>
+      (el.innerText =
+        i18n.labelEnrollDesc || "Please enroll to access the TAK network."),
+    labelUploadDesc: (el) =>
+      (el.innerText = i18n.labelUploadDesc || "Upload your .p12 certificate."),
+    labelInsecurePass: (el) =>
+      (el.innerText =
+        i18n.labelInsecurePass ||
+        "Your certificate password is insecure. Please set a new strong password (min 8 chars)."),
+    labelLoginDesc: (el) =>
+      (el.innerText = i18n.labelLoginDesc || "Authenticated access required."),
+    labelImportedCertFor: (el) =>
+      (el.innerText = i18n.labelImportedCertFor || "Imported certificate for:"),
+    enrollButton: (el) => (el.innerText = i18n.labelEnroll || "Enroll"),
+    uploadButton: (el) =>
+      (el.innerText = i18n.uploadButton || "Upload & Connect"),
+    loginButton: (el) => (el.innerText = i18n.loginButton || "Login"),
     showInfo: (el) => {
       el.innerText = "ⓘ " + (i18n.infoTitle || "Info");
     },
@@ -98,7 +130,6 @@ function applyStaticTranslations() {
   const affilSelect = document.getElementById("affiliationFilter");
   if (affilSelect) {
     const texts = [
-      i18n.allAffiliations || "All",
       i18n.affiliationFriendly || "Friendly",
       i18n.affiliationHostile || "Hostile",
       i18n.affiliationSuspect || "Suspect",
