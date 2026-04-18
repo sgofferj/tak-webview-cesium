@@ -147,3 +147,11 @@ Here are some tips for using the frontend that might not be immediately obvious:
 ### Staff comments (TAK_STAFF_COMMENTS="#shadowfleet=ShFl")
 
 ![Staff comments (TAK_STAFF_COMMENTS="#shadowfleet=ShFl")](images/staff_comments_filter.png)
+
+### Custom map layer (Finnish Landsurvey Orthophoto)
+
+![Custom map layer (Finnish Landsurvey Orthophoto)](images/Custom_map_3D.png)
+
+### Custom map layer with elevation data (Cesium quantized mesh tiles from Finnish Landsurvey 2m resolution LIDAR data)
+
+![Custom map layer with elevation data (Cesium quantized mesh tiles from Finnish Landsurvey 2m resolution LIDAR data)](images/Custom_map_3D_elevation.png)
