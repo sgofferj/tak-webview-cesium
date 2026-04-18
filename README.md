@@ -71,27 +71,27 @@ The application is designed with a "Never-Unencrypted-on-Disk" philosophy:
 ## Configuration
 Configuration is handled via environment variables or an `.env` file.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `APP_TITLE` | `TAK Cesium Map` | Title displayed in the browser tab and header |
-| `TAK_HOST` | `localhost` | Hostname or IP of the TAK Server |
-| `TAK_PORT` | `8089` | TLS port of the TAK Server |
-| `TAK_ENROLL_PORT` | `8446` | Enrollment port (for automated certificate setup) |
-| `TAK_CALLSIGN` | `CesiumViewer` | Callsign for this viewer instance |
-| `TAK_TYPE` | `a-f-G-U-C-I` | CoT type for the viewer entity |
-| `TAK_UID` | (Generated) | Unique ID for the viewer (defaults to `CesiumViewer-[Callsign]`) |
-| `TAK_STAFF_COMMENTS` | (Empty) | Comma-separated map for highlighting staff comments (e.g., `#SF=ShadowFleet,#LEO=LEO`) |
-| `GOTO_BUTTONS` | (Empty) | Quick-jump buttons: `Label:Lat,Lon,Zoom;...` |
-| `SECRET_KEY` | (Random) | Key for signing session cookies (regenerated on restart) |
-| `WS_THROTTLE` | `0.5` | Minimum seconds between updates per entity (throttles frontend traffic) |
-| `USE_MSGPACK` | `true` | Use MessagePack for binary WebSocket communication |
-| `CENTER_ALERT` | `false` | Automatically center the map on new emergency/alert messages |
-| `LOGO` | (Empty) | Path to a custom logo file inside the container |
-| `LOGO_POSITION` | `bottom_right` | Map logo position: `top_left`, `top_center`, `top_right`, etc. |
-| `CESIUM_ION_TOKEN` | (Empty) | Cesium Ion token for Bing Maps and global terrain |
-| `TERRAIN_URL` | (Empty) | URL to a Cesium terrain provider |
-| `INITIAL_LAT` / `LON` | Helsinki | Initial map center coordinates |
-| `TRUSTED_PROXIES` | `127.0.0.1` | IPs to trust for `X-Forwarded-For` headers |
+| Variable              | Default          | Purpose                                                                                |
+| --------------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| `APP_TITLE`           | `TAK Cesium Map` | Title displayed in the browser tab and header                                          |
+| `TAK_HOST`            | `localhost`      | Hostname or IP of the TAK Server                                                       |
+| `TAK_PORT`            | `8089`           | TLS port of the TAK Server                                                             |
+| `TAK_ENROLL_PORT`     | `8446`           | Enrollment port (for automated certificate setup)                                      |
+| `TAK_CALLSIGN`        | `CesiumViewer`   | Callsign for this viewer instance                                                      |
+| `TAK_TYPE`            | `a-f-G-U-C-I`    | CoT type for the viewer entity                                                         |
+| `TAK_UID`             | (Generated)      | Unique ID for the viewer (defaults to `CesiumViewer-[Callsign]`)                       |
+| `TAK_STAFF_COMMENTS`  | (Empty)          | Comma-separated map for highlighting staff comments (e.g., `#SF=ShadowFleet,#LEO=LEO`) |
+| `GOTO_BUTTONS`        | (Empty)          | Quick-jump buttons: `Label:Lat,Lon,Zoom;...`                                           |
+| `SECRET_KEY`          | (Random)         | Key for signing session cookies (regenerated on restart)                               |
+| `WS_THROTTLE`         | `0.5`            | Minimum seconds between updates per entity (throttles frontend traffic)                |
+| `USE_MSGPACK`         | `true`           | Use MessagePack for binary WebSocket communication                                     |
+| `CENTER_ALERT`        | `false`          | Automatically center the map on new emergency/alert messages                           |
+| `LOGO`                | (Empty)          | Path to a custom logo file inside the container                                        |
+| `LOGO_POSITION`       | `bottom_right`   | Map logo position: `top_left`, `top_center`, `top_right`, etc.                         |
+| `CESIUM_ION_TOKEN`    | (Empty)          | Cesium Ion token for Bing Maps and global terrain                                      |
+| `TERRAIN_URL`         | (Empty)          | URL to a Cesium terrain provider                                                       |
+| `INITIAL_LAT` / `LON` | Helsinki         | Initial map center coordinates                                                         |
+| `TRUSTED_PROXIES`     | `127.0.0.1`      | IPs to trust for `X-Forwarded-For` headers                                             |
 
 ## Quick Start (Docker Compose)
 
@@ -128,16 +128,22 @@ Here are some tips for using the frontend that might not be immediately obvious:
 
 ## Examples
 
+### Normal view
+
 ![Normal view](images/OSM_gulf_of_finland.png)
+
+### Filter (Air dimension)
 
 ![Filter (Air dimension)](images/filter_air_dimension.png)
 
+### Polygon overlay (Finnish borders)
+
 ![Polygon overlay (Finnish borders)](images/GeoJSON_overlay.png)
+
+### Polyline overlays (Baltic Sea infrastructure)
 
 ![Polyline overlays (Baltic Sea infrastructure](images/GeoJSON_infra.png)
 
+### Staff comments (TAK_STAFF_COMMENTS="#shadowfleet=ShFl")
+
 ![Staff comments (TAK_STAFF_COMMENTS="#shadowfleet=ShFl")](images/staff_comments_filter.png)
-
-
-
-
