@@ -1290,3 +1290,18 @@ window.filterByTag = function (tag) {
     });
   }
 init();
+
+// Chat button handler – toggle panel and show stored config
+const chatToggle = document.getElementById('chatToggle');
+const chatPanel = document.getElementById('chatPanel');
+if (chatToggle && chatPanel) {
+  chatToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    chatPanel.style.display = chatPanel.style.display === 'flex' ? 'none' : 'flex';
+    chatToggle.setAttribute('aria-expanded', chatPanel.style.display === 'flex');
+    const cs = localStorage.getItem('tk_callsign');
+    const col = localStorage.getItem('tk_color');
+    const rol = localStorage.getItem('tk_role');
+    alert('Callsign: ' + (cs || '—') + '\nColor: ' + (col || '—') + '\nRole: ' + (rol || '—'));
+  });
+}
