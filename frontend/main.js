@@ -46,6 +46,7 @@ import {
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
 
+let selfInfo = { uid: "", callsign: "" };
 async function init() {
   const authenticated = await checkAuth();
   if (authenticated) {
@@ -425,6 +426,69 @@ function setupAuthEvents() {
       message.classList.remove("hidden");
     }
   };
+  // Messaging Configuration
+
+  const configOverlay = document.getElementById("configOverlay");
+  const configToggle = document.getElementById("configToggle");
+  const configSave = document.getElementById("configSave");
+  const configCancel = document.getElementById("configCancel");
+
+  const selfInfoKey = "messagingConfig";
+
+  // Open config overlay
+  configToggle.addEventListener("click", () => {
+
+    const saved = localStorage.getItem(selfInfoKey);
+    if (saved) {
+
+      const cfg = JSON.parse(saved);
+      document.getElementById("configCallsign").value = cfg.callsign || "";
+      document.getElementById("configColor").value = cfg.color || "#4af";
+      document.getElementById("configRole").value = cfg.role || "Operator";
+    }
+
+    configOverlay.classList.remove("hidden");
+  });
+
+  // Save config
+  configSave.addEventListener("click", () => {
+
+    const callsign = document.getElementById("configCallsign").value.trim();
+    const color = document.getElementById("configColor").value;
+    const role = document.getElementById("configRole").value;
+
+    if (!callsign) {
+
+      alert("Callsign is required");
+      return;
+    }
+
+    const cfg = { callsign, color, role };
+    localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
+
+    // Sync with chat.js selfInfo
+    selfInfo.callsign = callsign;
+
+    // Apply color to entities
+    applyConfigColor(color);
+
+    configOverlay.classList.add("hidden");
+  });
+
+  // Cancel
+  configCancel.addEventListener("click", () => {
+
+    configOverlay.classList.add("hidden");
+  });
+
+  // Close on overlay click
+  configOverlay.addEventListener("click", (e) => {
+
+    if (e.target === configOverlay) {
+
+      configOverlay.classList.add("hidden");
+    }
+  });
 
   const triggerEnroll = async () => {
     const server = document.getElementById("enrollServer").value;
@@ -439,7 +503,22 @@ function setupAuthEvents() {
         body: JSON.stringify({ server, username, password }),
       });
       if (resp.ok) {
-        init(); // Re-run init to start app
+        
+
+  // Apply configured color to UI
+  function applyConfigColor(color) {
+    const colorEl = document.querySelector("[data-color]");
+    if (colorEl) {
+      colorEl.setAttribute("data-color", color);
+    }
+    // Update unit list colors
+    const unitItems = document.querySelectorAll(".unit-item");
+    unitItems.forEach(item => {
+      const nameEl = item.querySelector(".unit-name");
+      if (nameEl) nameEl.style.color = color;
+    });
+  }
+init(); // Re-run init to start app
       } else {
         const err = await resp.json();
         message.innerText = err.detail || "Enrollment failed";
@@ -463,7 +542,22 @@ function setupAuthEvents() {
         body: JSON.stringify({ username, password }),
       });
       if (resp.ok) {
-        init(); // Re-run init to start app
+        
+
+  // Apply configured color to UI
+  function applyConfigColor(color) {
+    const colorEl = document.querySelector("[data-color]");
+    if (colorEl) {
+      colorEl.setAttribute("data-color", color);
+    }
+    // Update unit list colors
+    const unitItems = document.querySelectorAll(".unit-item");
+    unitItems.forEach(item => {
+      const nameEl = item.querySelector(".unit-name");
+      if (nameEl) nameEl.style.color = color;
+    });
+  }
+init(); // Re-run init to start app
       } else {
         const err = await resp.json();
         message.innerText = err.detail || "Login failed";
@@ -1178,4 +1272,19 @@ window.filterByTag = function (tag) {
   }
 };
 
+
+
+  // Apply configured color to UI
+  function applyConfigColor(color) {
+    const colorEl = document.querySelector("[data-color]");
+    if (colorEl) {
+      colorEl.setAttribute("data-color", color);
+    }
+    // Update unit list colors
+    const unitItems = document.querySelectorAll(".unit-item");
+    unitItems.forEach(item => {
+      const nameEl = item.querySelector(".unit-name");
+      if (nameEl) nameEl.style.color = color;
+    });
+  }
 init();
