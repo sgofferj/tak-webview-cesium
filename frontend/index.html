@@ -1480,3 +1480,23 @@
     <script type="module" src="/main.js"></script>
   </body>
 </html>
+
+<script type="module">
+// chat button handler + info popup
+const chatToggle = document.getElementById('chatToggle');
+const chatPanel = document.getElementById('chatPanel');
+if (chatToggle && chatPanel) {
+  let open = false;
+  chatToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    open = !open;
+    chatPanel.style.display = open ? 'flex' : 'none';
+    chatToggle.setAttribute('aria-expanded', open);
+    // show info popup with stored values
+    const callsign = localStorage.getItem('tk_callsign') || '—';
+    const color = localStorage.getItem('tk_color') || '—';
+    const role = localStorage.getItem('tk_role') || '—';
+    alert(`Callsign: ${callsign}\nColor: ${color}\nRole: ${role}`);
+  });
+}
+</script>

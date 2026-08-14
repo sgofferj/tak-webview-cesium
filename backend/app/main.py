@@ -205,6 +205,40 @@ async def auth_logout_wipe(request: Request) -> dict[str, Any]:
     return {"status": "success"}
 
 
+messaging_config: dict[str, str] = {"callsign": "", "color": "", "role": ""}
+
+# ----------------------------------------------------------------------
+#  Endpoints for messaging configuration (callsign, colour, role)
+# ----------------------------------------------------------------------
+from fastapi import HTTPException
+
+
+@app.post("/api/messaging/config")
+async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
+    global messaging_config
+    callsign = req.get("callsign", "") or ""
+    color = req.get("color", "") or ""
+    role = req.get("role", "") or ""
+    # validate colour
+    from .config import Settings
+
+    valid_colors = Settings.VALID_COLOURS
+    valid_roles = Settings.VALID_ROLES
+    if color and color not in valid_colors:
+        raise HTTPException(status_code=400, detail="Invalid colour")
+    if role and role not in valid_roles:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    messaging_config["callsign"] = callsign
+    messaging_config["color"] = color
+    messaging_config["role"] = role
+    return {"status": "ok"}
+
+
+@app.get("/api/messaging/config")
+async def get_messaging_config() -> dict[str, str]:
+    return dict(messaging_config)
+
+
 @app.get("/config")
 async def config() -> dict[str, Any]:
     return await get_app_config()

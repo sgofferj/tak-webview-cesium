@@ -8,7 +8,7 @@
 # You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
 import secrets
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     tak_callsign: str = "CesiumViewer"
     tak_type: str = "a-f-G-U-C-I"
     tak_uid: str | None = None
+
+    # New fields for messaging configuration
+    tak_callsign_input: str = ""  # overridden callsign from UI
+    tak_color: str = ""  # color chosen by user
+    tak_role: str = ""  # role chosen by user
 
     # Enrollment
     tak_enroll_port: int = 8446
@@ -54,21 +59,72 @@ class Settings(BaseSettings):
     @classmethod
     def parse_trusted_proxies(cls, v: Any) -> list[str]:
         if isinstance(v, str):
-            # If it's a JSON-like string, try to parse it
-            if v.strip().startswith("[") and v.strip().endswith("]"):
-                import json
-
-                try:
-                    res = json.loads(v)
-                    if isinstance(res, list):
-                        return [str(item).strip() for item in res]
-                except json.JSONDecodeError:
-                    pass
-            # Fallback to comma-separated
-            return [item.strip() for item in v.split(",") if item.strip()]
-        if isinstance(v, list):
-            return [str(item).strip() for item in v]
+            return [x.strip() for x in v.split(",") if x.strip()]
         return ["127.0.0.1"]
+
+    # ------------------------------------------------------------------
+    #  Valid colour list (as specified by the TAK UI)
+    # ------------------------------------------------------------------
+    VALID_COLOURS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "White",
+            "Yellow",
+            "Orange",
+            "Magenta",
+            "Red",
+            "Maroon",
+            "Cyan",
+            "Dark Cyan",
+            "Blue",
+            "Dark Blue",
+            "Green",
+            "Dark Green",
+            "Brown",
+            "Purple",
+        }
+    )
+
+    # ------------------------------------------------------------------
+    #  Valid role list
+    # ------------------------------------------------------------------
+    VALID_ROLES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Team Member",
+            "Team Lead",
+            "HQ",
+            "Sniper",
+            "Medic",
+            "Forward Observer",
+            "RTO",
+            "K9",
+        }
+    )
+
+    # ------------------------------------------------------------------
+    #  Colour validator – only allow the whitelisted colours
+    # ------------------------------------------------------------------
+    @field_validator("tak_color", mode="before")
+    @classmethod
+    def validate_tak_color(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip() == "":
+            return v
+        if v not in cls.VALID_COLOURS:  # cls accesses the ClassVar
+            raise ValueError(
+                f"Invalid colour {v!r}; must be one of {cls.VALID_COLOURS}"
+            )
+        return v
+
+    # ------------------------------------------------------------------
+    #  Role validator – only allow the whitelisted roles
+    # ------------------------------------------------------------------
+    @field_validator("tak_role", mode="before")
+    @classmethod
+    def validate_tak_role(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip() == "":
+            return v
+        if v not in cls.VALID_ROLES:  # cls accesses the ClassVar
+            raise ValueError(f"Invalid role {v!r}; must be one of {cls.VALID_ROLES}")
+        return v
 
     # UI / Map
     initial_lat: float = 60.1699
