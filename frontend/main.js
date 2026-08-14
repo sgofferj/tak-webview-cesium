@@ -415,6 +415,7 @@ function setupAuthEvents() {
         message.classList.remove("hidden");
         message.style.color = "#4CAF50"; // Green for success
         setTimeout(() => init(), 1500); // Slight delay so user can see the CN
+    configToggle.click();
       } else {
         const err = await resp.json();
         message.innerText = err.detail || "Upload failed";
@@ -518,6 +519,7 @@ function setupAuthEvents() {
       if (nameEl) nameEl.style.color = color;
     });
   }
+    configToggle.click();
 init(); // Re-run init to start app
       } else {
         const err = await resp.json();
