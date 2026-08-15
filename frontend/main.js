@@ -450,7 +450,7 @@ function setupAuthEvents() {
   });
 
   // Save config
-  configSave.addEventListener("click", () => {
+  configSave.addEventListener("click", async () => {
     const callsign = document.getElementById("configCallsign").value.trim();
     const color = document.getElementById("configColor").value;
     const role = document.getElementById("configRole").value;
@@ -468,6 +468,21 @@ function setupAuthEvents() {
 
     // Apply color to entities
     applyConfigColor(color);
+
+    // Save to backend and start TAK client
+    try {
+      const resp = await fetch("/api/messaging/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        console.error("Failed to save messaging config:", err);
+      }
+    } catch (e) {
+      console.error("Failed to save messaging config:", e);
+    }
 
     configOverlay.classList.add("hidden");
   });
