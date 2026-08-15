@@ -43,7 +43,7 @@ from .tak_client import tak_client
 tak_client.on_cot = tak_client._broadcast_if_needed
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("tak-webview.main")

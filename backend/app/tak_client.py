@@ -704,7 +704,6 @@ class TAKClient:
 
     def chat_snapshot(self) -> dict[str, Any]:
         """Full chat state for a freshly connected web client."""
-        logger.debug(f"chat_snapshot: contacts={dict(self._chat_contacts)}")
         return {
             "self": {
                 "uid": self.config.tak_uid_final,
@@ -730,15 +729,9 @@ class TAKClient:
             "group_role": parsed.get("group_role"),
             "stale": parsed.get("stale"),
         }
-        logger.debug(
-            f"_update_contact: uid={uid}, callsign={info['callsign']}, endpoint={parsed.get('endpoint')}"
-        )
         known = self._chat_contacts.get(uid)
         self._chat_contacts[uid] = info
         if known is None or known.get("callsign") != info["callsign"]:
-            logger.debug(
-                f"_broadcast_contacts_update: uid={uid}, callsign={info['callsign']}"
-            )
             return (uid, info)
         return None
 
@@ -756,9 +749,6 @@ class TAKClient:
             pass
 
     async def _broadcast_contacts_update(self, uid: str, info: dict[str, Any]) -> None:
-        logger.debug(
-            f"_broadcast_contacts_update called: uid={uid}, callsign={info.get('callsign')}"
-        )
         payload: dict[str, Any] = {"contacts_update": {uid: info}}
         if self.config.use_msgpack:
             await manager.broadcast(msgpack.packb(payload))
@@ -893,15 +883,14 @@ class TAKClient:
                                 continue
                         elif b"t-x-d-d" in data:
                             await asyncio.to_thread(self._apply_delete, data)
+                        elif b"t-x-d-d" in data:
+                            await asyncio.to_thread(self._apply_delete, data)
 
                         parsed = await asyncio.to_thread(self.parse_cot, data)
                         if parsed:
                             # Update chat contacts for atoms with callsign AND endpoint (geochat capable)
                             callsign = parsed.get("callsign")
                             endpoint = parsed.get("endpoint")
-                            logger.debug(
-                                f"CoT parsed: uid={parsed.get('uid')}, callsign={callsign}, endpoint={endpoint}, type={parsed.get('type')}"
-                            )
                             if callsign and endpoint and callsign != parsed.get("uid"):
                                 changed = await asyncio.to_thread(
                                     self._update_contact, parsed

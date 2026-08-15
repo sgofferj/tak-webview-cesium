@@ -58,6 +58,14 @@ function getThreadDisplayName(threadKey) {
 }
 
 /**
+ * Check if chat panel is currently open
+ */
+function isChatOpen() {
+    const panel = document.getElementById("chatPanel");
+    return panel && !panel.classList.contains("collapsed");
+}
+
+/**
  * Get DOM element by ID
  */
 function $(id) {
@@ -117,8 +125,6 @@ export function handleChatMessage(data) {
  * Handle chat_init - initial state
  */
 function handleChatInit(payload) {
-    console.debug("handleChatInit:", payload);
-
     if (payload.self) {
         selfInfo = {
             uid: payload.self.uid || "",
@@ -134,7 +140,6 @@ function handleChatInit(payload) {
 
     // Load contacts
     if (payload.contacts) {
-        console.debug("handleChatInit contacts:", payload.contacts);
         for (const [uid, info] of Object.entries(payload.contacts)) {
             contacts.set(uid, info);
         }
@@ -234,8 +239,6 @@ function insertMessage(msg, isHistory = false) {
  */
 function handleContactsUpdate(payload) {
     if (!payload || typeof payload !== "object") return;
-
-    console.debug("handleContactsUpdate:", payload);
 
     let changed = false;
     for (const [uid, info] of Object.entries(payload)) {
