@@ -371,6 +371,10 @@ class TAKClient:
                 contact = detail.find("contact")
                 if contact is not None:
                     data["callsign"] = contact.get("callsign", uid)
+                    # Extract endpoint for geochat capability detection
+                    endpoint = contact.get("endpoint")
+                    if endpoint:
+                        data["endpoint"] = endpoint
                     track_val = contact.get("track")
                     if track_val:
                         data["squawk"] = track_val
@@ -883,9 +887,10 @@ class TAKClient:
 
                         parsed = await asyncio.to_thread(self.parse_cot, data)
                         if parsed:
-                            # Update chat contacts for any atom with a callsign (not just a-f-G-U-C)
+                            # Update chat contacts for atoms with callsign AND endpoint (geochat capable)
                             callsign = parsed.get("callsign")
-                            if callsign and callsign != parsed.get("uid"):
+                            endpoint = parsed.get("endpoint")
+                            if callsign and endpoint and callsign != parsed.get("uid"):
                                 changed = await asyncio.to_thread(
                                     self._update_contact, parsed
                                 )
