@@ -76,6 +76,7 @@ function $(id) {
  * Initialize chat module - called from main.js
  */
 export function initChat() {
+    console.debug("initChat: called");
     // Channel list click handler
     const channelList = $("chatChannelList");
     if (channelList) {
@@ -89,12 +90,14 @@ export function initChat() {
 
     // Send button handler
     const sendBtn = $("chatSend");
+    console.debug("initChat: sendBtn=", sendBtn);
     if (sendBtn) {
         sendBtn.addEventListener("click", sendMessage);
     }
 
     // Enter key in input
     const input = $("chatInput");
+    console.debug("initChat: input=", input);
     if (input) {
         input.addEventListener("keydown", (e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -265,6 +268,7 @@ function handleChatError(error) {
  * Select a thread (channel or DM)
  */
 function selectThread(threadKey) {
+    console.debug("selectThread:", threadKey);
     selectedThread = threadKey;
     const thread = threads.get(threadKey);
     if (thread) {
@@ -276,10 +280,6 @@ function selectThread(threadKey) {
     const input = $("chatInput");
     if (input) input.focus();
 }
-
-/**
- * Send a chat message
- */
 function sendMessage() {
     if (!selectedThread) return;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
