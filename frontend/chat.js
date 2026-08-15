@@ -236,6 +236,8 @@ function insertMessage(msg, isHistory = false) {
 function handleContactsUpdate(payload) {
     if (!payload || typeof payload !== "object") return;
 
+    console.debug("handleContactsUpdate:", payload);
+
     let changed = false;
     for (const [uid, info] of Object.entries(payload)) {
         const existing = contacts.get(uid);
@@ -249,10 +251,6 @@ function handleContactsUpdate(payload) {
         refreshAll();
     }
 }
-
-/**
- * Handle chat error
- */
 function handleChatError(error) {
     console.error("Chat error:", error);
     const input = $("chatInput");
