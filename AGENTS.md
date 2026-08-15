@@ -29,10 +29,12 @@ A TAK (Track Awareness Kit) Cesium map viewer for geochat/messaging functionalit
     - [x] **TAK Connection Lifecycle**: TLS with RAM-only keys (memfd), proper keepalive (RX_STALE/PING_INTERVAL/RX_DEAD), reconnection with exponential backoff.
     - [x] **Chat Button Fix**: Now properly opens chat panel instead of showing alert.
     - [x] **Messaging Config**: Config overlay saves callsign/color/role to backend; TAK client starts only after user confirms.
+    - [x] **Chat Panel UI**: Channel list (Rooms/Users), thread view, composer with send.
+    - [x] **Contact List**: Shows callsigns (not UIDs) from CoT contact/callsign + endpoint filter.
+    - [ ] **First Message Send (DM)**: **BROKEN** - First message from webviewer to a contact without existing thread fails silently. Send button disabled despite renderThread enabling it. No sendMessage call. Debug logging added to trace.
     - [ ] **Rate Limiting:** Implement rate limiting on the FastAPI backend for enrollment and CoT endpoints.
     - [ ] **Backend Robustness:** Add comprehensive unit tests for CoT parsing.
     - [ ] **Frontend Polish:** Implement a more sophisticated "Entity Selection" UI with a cleaner side panel.
-- **Architectural Decisions:**
 ### Agent Coordination
 - This file coordinates agent work on the tak-webview-cesium project.
 - See `GEMINI.md` for persistent project context loaded into every session.
