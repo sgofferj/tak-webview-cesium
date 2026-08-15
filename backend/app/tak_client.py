@@ -847,6 +847,35 @@ class TAKClient:
                         if b"b-t-f" in data:
                             chat = await asyncio.to_thread(self.parse_chat, data)
                             if chat:
+                                # Update contact from chat sender info
+                                sender_uid = chat.get("sender_uid")
+                                sender = chat.get("sender")
+                                if (
+                                    sender_uid
+                                    and sender
+                                    and sender_uid != self.config.tak_uid_final
+                                ):
+                                    info = self._chat_contacts.get(sender_uid)
+                                    new_callsign = sender
+                                    if not info or info.get("callsign") != new_callsign:
+                                        self._chat_contacts[sender_uid] = {
+                                            "callsign": new_callsign,
+                                            "group_name": (
+                                                info.get("group_name") if info else None
+                                            ),
+                                            "group_role": (
+                                                info.get("group_role") if info else None
+                                            ),
+                                            "stale": (
+                                                info.get("stale") if info else None
+                                            ),
+                                        }
+                                        asyncio.create_task(
+                                            self._broadcast_contacts_update(
+                                                sender_uid,
+                                                self._chat_contacts[sender_uid],
+                                            )
+                                        )
                                 await self._push_chat(chat)
                                 continue
                         elif b"t-x-d-d" in data:
