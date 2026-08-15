@@ -39,8 +39,10 @@ from .iconsets import iconsets_cache, load_iconsets
 from .layers import get_app_config, load_layers
 from .tak_client import tak_client
 
+# Wire TAK client to broadcast entities to websockets
+tak_client.on_cot = tak_client._broadcast_if_needed
+
 logging.basicConfig(
-    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("tak-webview.main")
