@@ -904,7 +904,24 @@ class TAKClient:
                 await self._run_task
             except asyncio.CancelledError:
                 pass
-            self._run_task = None
+        self._run_task = None
+
+    def update_config(
+        self,
+        callsign: str | None = None,
+        color: str | None = None,
+        role: str | None = None,
+    ) -> None:
+        """Update callsign/color/role and trigger reconnect if running."""
+        if callsign is not None:
+            self.config.tak_callsign_input = callsign
+        if color is not None:
+            self.config.tak_color = color
+        if role is not None:
+            self.config.tak_role = role
+        # Trigger reconnect by setting stop event
+        if self.is_running:
+            self._stop = True
 
 
 tak_client = TAKClient()
