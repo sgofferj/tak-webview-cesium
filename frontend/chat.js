@@ -121,6 +121,8 @@ export function handleChatMessage(data) {
  * Handle chat_init - initial state
  */
 function handleChatInit(payload) {
+    console.debug("handleChatInit:", payload);
+
     if (payload.self) {
         selfInfo = {
             uid: payload.self.uid || "",
@@ -136,6 +138,7 @@ function handleChatInit(payload) {
 
     // Load contacts
     if (payload.contacts) {
+        console.debug("handleChatInit contacts:", payload.contacts);
         for (const [uid, info] of Object.entries(payload.contacts)) {
             contacts.set(uid, info);
         }

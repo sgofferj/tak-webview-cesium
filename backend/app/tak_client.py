@@ -704,6 +704,7 @@ class TAKClient:
 
     def chat_snapshot(self) -> dict[str, Any]:
         """Full chat state for a freshly connected web client."""
+        logger.debug(f"chat_snapshot: contacts={dict(self._chat_contacts)}")
         return {
             "self": {
                 "uid": self.config.tak_uid_final,
