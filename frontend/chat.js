@@ -44,21 +44,17 @@ function escapeHtml(str) {
  */
 function getThreadDisplayName(threadKey) {
     const thread = threads.get(threadKey);
-    if (!thread) return threadKey;
+    if (!thread) {
+        // Check contacts map directly for DMs without threads
+        const contact = contacts.get(threadKey);
+        return contact?.callsign || threadKey;
+    }
 
     if (thread.kind === "dm") {
         const contact = contacts.get(threadKey);
         return contact?.callsign || threadKey;
     }
     return thread.name || threadKey;
-}
-
-/**
- * Check if chat panel is currently open
- */
-function isChatOpen() {
-    const panel = document.getElementById("chatPanel");
-    return panel && !panel.classList.contains("collapsed");
 }
 
 /**
