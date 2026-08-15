@@ -97,6 +97,7 @@ class Settings(BaseSettings):
             "Forward Observer",
             "RTO",
             "K9",
+            "Pilot",
         }
     )
 

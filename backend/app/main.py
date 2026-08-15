@@ -127,8 +127,7 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     # Automatically authenticate after enrollment
     request.session["authenticated"] = True
     auth_manager.failed_attempts = 0
-    # Start TAK client
-    await tak_client.start()
+    # TAK client will start when messaging config is saved
 
     return {"status": "success"}
 
@@ -154,8 +153,7 @@ async def auth_upload_p12(
     # Automatically authenticate after upload
     request.session["authenticated"] = True
     auth_manager.failed_attempts = 0
-    # Start TAK client
-    await tak_client.start()
+    # TAK client will start when messaging config is saved
 
     return {"status": "success", "username": username}
 
@@ -174,8 +172,7 @@ async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
     if auth_manager.verify_credentials(req.username, req.password):
         request.session["authenticated"] = True
         auth_manager.failed_attempts = 0
-        # Start TAK client
-        await tak_client.start()
+        # TAK client will start when messaging config is saved
         return {"status": "success"}
 
     auth_manager.failed_attempts += 1
@@ -231,6 +228,18 @@ async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
     messaging_config["callsign"] = callsign
     messaging_config["color"] = color
     messaging_config["role"] = role
+
+    # Update settings for TAK client
+    settings.tak_callsign_input = callsign
+    settings.tak_color = color
+    settings.tak_role = role
+
+    # Start or reconnect TAK client with new config
+    if tak_client._run_task is None or tak_client._run_task.done():
+        await tak_client.start()
+    else:
+        tak_client.update_config(callsign=callsign, color=color, role=role)
+
     return {"status": "ok"}
 
 

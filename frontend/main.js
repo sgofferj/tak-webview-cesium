@@ -415,7 +415,7 @@ function setupAuthEvents() {
         message.classList.remove("hidden");
         message.style.color = "#4CAF50"; // Green for success
         setTimeout(() => init(), 1500); // Slight delay so user can see the CN
-    configToggle.click();
+        configToggle.click();
       } else {
         const err = await resp.json();
         message.innerText = err.detail || "Upload failed";
@@ -438,10 +438,8 @@ function setupAuthEvents() {
 
   // Open config overlay
   configToggle.addEventListener("click", () => {
-
     const saved = localStorage.getItem(selfInfoKey);
     if (saved) {
-
       const cfg = JSON.parse(saved);
       document.getElementById("configCallsign").value = cfg.callsign || "";
       document.getElementById("configColor").value = cfg.color || "#4af";
@@ -453,13 +451,11 @@ function setupAuthEvents() {
 
   // Save config
   configSave.addEventListener("click", () => {
-
     const callsign = document.getElementById("configCallsign").value.trim();
     const color = document.getElementById("configColor").value;
     const role = document.getElementById("configRole").value;
 
     if (!callsign) {
-
       alert("Callsign is required");
       return;
     }
@@ -478,15 +474,12 @@ function setupAuthEvents() {
 
   // Cancel
   configCancel.addEventListener("click", () => {
-
     configOverlay.classList.add("hidden");
   });
 
   // Close on overlay click
   configOverlay.addEventListener("click", (e) => {
-
     if (e.target === configOverlay) {
-
       configOverlay.classList.add("hidden");
     }
   });
@@ -504,23 +497,8 @@ function setupAuthEvents() {
         body: JSON.stringify({ server, username, password }),
       });
       if (resp.ok) {
-        
-
-  // Apply configured color to UI
-  function applyConfigColor(color) {
-    const colorEl = document.querySelector("[data-color]");
-    if (colorEl) {
-      colorEl.setAttribute("data-color", color);
-    }
-    // Update unit list colors
-    const unitItems = document.querySelectorAll(".unit-item");
-    unitItems.forEach(item => {
-      const nameEl = item.querySelector(".unit-name");
-      if (nameEl) nameEl.style.color = color;
-    });
-  }
-    configToggle.click();
-init(); // Re-run init to start app
+        configToggle.click();
+        init(); // Re-run init to start app
       } else {
         const err = await resp.json();
         message.innerText = err.detail || "Enrollment failed";
@@ -544,22 +522,7 @@ init(); // Re-run init to start app
         body: JSON.stringify({ username, password }),
       });
       if (resp.ok) {
-        
-
-  // Apply configured color to UI
-  function applyConfigColor(color) {
-    const colorEl = document.querySelector("[data-color]");
-    if (colorEl) {
-      colorEl.setAttribute("data-color", color);
-    }
-    // Update unit list colors
-    const unitItems = document.querySelectorAll(".unit-item");
-    unitItems.forEach(item => {
-      const nameEl = item.querySelector(".unit-name");
-      if (nameEl) nameEl.style.color = color;
-    });
-  }
-init(); // Re-run init to start app
+        init(); // Re-run init to start app
       } else {
         const err = await resp.json();
         message.innerText = err.detail || "Login failed";
@@ -1274,34 +1237,79 @@ window.filterByTag = function (tag) {
   }
 };
 
-
-
-  // Apply configured color to UI
-  function applyConfigColor(color) {
-    const colorEl = document.querySelector("[data-color]");
-    if (colorEl) {
-      colorEl.setAttribute("data-color", color);
-    }
-    // Update unit list colors
-    const unitItems = document.querySelectorAll(".unit-item");
-    unitItems.forEach(item => {
-      const nameEl = item.querySelector(".unit-name");
-      if (nameEl) nameEl.style.color = color;
-    });
+// Apply configured color to UI
+function applyConfigColor(color) {
+  const colorEl = document.querySelector("[data-color]");
+  if (colorEl) {
+    colorEl.setAttribute("data-color", color);
   }
+  // Update unit list colors
+  const unitItems = document.querySelectorAll(".unit-item");
+  unitItems.forEach((item) => {
+    const nameEl = item.querySelector(".unit-name");
+    if (nameEl) nameEl.style.color = color;
+  });
+}
 init();
 
-// Chat button handler – toggle panel and show stored config
-const chatToggle = document.getElementById('chatToggle');
-const chatPanel = document.getElementById('chatPanel');
+// Chat button handler – open chat panel and ensure messaging config is loaded
+const chatToggle = document.getElementById("chatToggle");
+const chatPanel = document.getElementById("chatPanel");
 if (chatToggle && chatPanel) {
-  chatToggle.addEventListener('click', (e) => {
+  chatToggle.addEventListener("click", async (e) => {
     e.stopPropagation();
-    chatPanel.style.display = chatPanel.style.display === 'flex' ? 'none' : 'flex';
-    chatToggle.setAttribute('aria-expanded', chatPanel.style.display === 'flex');
-    const cs = localStorage.getItem('tk_callsign');
-    const col = localStorage.getItem('tk_color');
-    const rol = localStorage.getItem('tk_role');
-    alert('Callsign: ' + (cs || '—') + '\nColor: ' + (col || '—') + '\nRole: ' + (rol || '—'));
+    const isOpen = chatPanel.style.display === "flex";
+    chatPanel.style.display = isOpen ? "none" : "flex";
+    chatToggle.setAttribute("aria-expanded", !isOpen);
+
+    if (!isOpen) {
+      // Ensure messaging config is loaded when opening chat
+      await loadMessagingConfig();
+    }
   });
+}
+
+async function loadMessagingConfig() {
+  const selfInfoKey = "messagingConfig";
+  let cfg = null;
+
+  // 1. Try localStorage first
+  const saved = localStorage.getItem(selfInfoKey);
+  if (saved) {
+    try {
+      cfg = JSON.parse(saved);
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  // 2. If not in localStorage, try backend
+  if (!cfg || !cfg.callsign) {
+    try {
+      const resp = await fetch("/api/messaging/config");
+      if (resp.ok) {
+        const backendCfg = await resp.json();
+        if (backendCfg && backendCfg.callsign) {
+          cfg = backendCfg;
+          localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
+        }
+      }
+    } catch {
+      // ignore network errors
+    }
+  }
+
+  // 3. If still no callsign, open config overlay
+  if (!cfg || !cfg.callsign) {
+    const configOverlay = document.getElementById("configOverlay");
+    if (configOverlay) {
+      configOverlay.classList.remove("hidden");
+    }
+    return;
+  }
+
+  // Apply config to selfInfo
+  selfInfo.callsign = cfg.callsign;
+  selfInfo.uid = cfg.callsign; // Use callsign as UID for now
+  applyConfigColor(cfg.color);
 }

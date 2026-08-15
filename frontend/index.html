@@ -762,26 +762,27 @@
 
       /* Auth Overlay */
       #authOverlay {
-       position: fixed;
-       top: 0;
-       left: 0;
-       width: 100%;
-       height: 100%;
-       background: #000;
-       z-index: 5000;
-       display: flex;
-       flex-direction: column;
-       justify-content: center;
-       align-items: center;
-       color: white;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        z-index: 5000;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
       }
       #authLogo {
-       max-width: 200px;
-       max-height: 100px;
-       margin-bottom: 30px;
-       object-fit: contain;
+        max-width: 200px;
+        max-height: 100px;
+        margin-bottom: 30px;
+        object-fit: contain;
       }
-      #authContent {        background: #111;
+      #authContent {
+        background: #111;
         padding: 40px;
         border-radius: 8px;
         border: 1px solid #333;
@@ -1100,9 +1101,13 @@
       <!-- Custom Layer Picker Button -->
 
       <!-- Messaging Config Toggle Button -->
-      <button id="configToggle" title="Messaging Config" aria-label="Open messaging configuration">
+      <button
+        id="configToggle"
+        title="Messaging Config"
+        aria-label="Open messaging configuration"
+      >
         <svg viewBox="0 0 24 24">
-          <path d="M12 5v14M5 12h14"/>
+          <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
       <button id="toggleLayerPicker" title="Layers">
@@ -1337,7 +1342,12 @@
 
     <!-- Auth Overlay -->
     <div id="authOverlay">
-      <img id="authLogo" src="/logo" alt="Logo" onerror="this.style.display='none'" />
+      <img
+        id="authLogo"
+        src="/logo"
+        alt="Logo"
+        onerror="this.style.display = 'none'"
+      />
       <div id="authContent">
         <h2 id="authTitle">TAK Login</h2>
 
@@ -1430,7 +1440,6 @@
       </div>
     </div>
 
-
     <div id="configOverlay" class="hidden">
       <div id="configContent">
         <h2 id="configTitle">Messaging Configuration</h2>
@@ -1480,4 +1489,3 @@
     <script type="module" src="/main.js"></script>
   </body>
 </html>
-

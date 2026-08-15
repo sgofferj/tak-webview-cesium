@@ -10,12 +10,13 @@
 import asyncio
 import datetime
 import logging
-from collections.abc import Awaitable, Callable
-from typing import Any
+import os
+import ssl
+from typing import Any, Optional
+from lxml import etree  # type: ignore[import-untyped]
 
-from lxml import etree
-
-from .config import Settings, settings
+from .auth import auth_manager
+from .config import settings
 from .connection import manager
 
 logger = logging.getLogger("tak-webview.tak")
@@ -65,13 +66,13 @@ def _build_sa(
 
 # ------------------------------------------------------------------
 #  TAKClient – minimal implementation needed for the messaging flow
-# ------------------------------------------------------------------
 class TAKClient:
     def __init__(self) -> None:
         self._stop = asyncio.Event()
-        self._run_task = None
-        self._reader = None
-        self._writer = None
+        self._run_task: Optional[asyncio.Task[None]] = None
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._reconnect_requested = False
 
         # Callsign/color/role may be overridden after enrollment / login
         self._callsign: str = settings.tak_callsign_input or settings.tak_callsign
@@ -137,7 +138,7 @@ class TAKClient:
                     self._writer.write(etree.tostring(ping))
                     await self._writer.drain()
                 except (OSError, RuntimeError) as e:
-                    logger.error(f"Failed to send heartbeat: {e}")
+                    logger.error("Failed to send heartbeat: %s", e)
             await asyncio.sleep(30)
 
     # ------------------------------------------------------------------
@@ -152,7 +153,7 @@ class TAKClient:
             # Very small extraction; real parsing lives in the UI layer.
             return {"uid": uid} if uid else None
         except Exception as exc:  # pragma: no cover
-            logger.debug(f"CoT parse error: {exc}")
+            logger.debug("CoT parse error: %s", exc)
             return None
 
     # ------------------------------------------------------------------
@@ -170,15 +171,177 @@ class TAKClient:
             await self._run_task
         self._run_task = None
 
+    def update_config(
+        self,
+        callsign: str | None = None,
+        color: str | None = None,
+        role: str | None = None,
+    ) -> None:
+        """Update callsign/color/role and trigger reconnect if running."""
+        if callsign is not None:
+            self._callsign = callsign
+        if color is not None:
+            self._color = color
+        if role is not None:
+            self._role = role
+        # Trigger reconnect by setting stop event and reconnect flag
+        if self._run_task and not self._run_task.done():
+            self._reconnect_requested = True
+        self._stop.set()
+
     async def run(self) -> None:
         """Main loop: connect to the TAK server, send initial SA, then heartbeat."""
-        # The actual TCP connection logic is in the FastAPI websocket handler;
-        # this run() is kept for compatibility with any future TCP usage.
-        logger.info("TAKClient run called – awaiting external connection.")
-        # For now just keep the task alive so the event loop does not exit.
+        logger.info(
+            "TAKClient run started – connecting to %s:%s",
+            settings.tak_host,
+            settings.tak_port,
+        )
+
+        # Start heartbeat task
+        heartbeat_task = asyncio.create_task(self._send_heartbeat())
+
+        # Exponential backoff for reconnection
+        reconnect_delay = 5
+        max_reconnect_delay = 300  # 5 minutes
+
+        while True:
+            self._stop.clear()
+            try:
+                await self._connect_and_read()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error("TAK connection error: %s", e)
+                if self._reconnect_requested:
+                    # Config update requested, clear flag and reconnect immediately
+                    self._reconnect_requested = False
+                    reconnect_delay = 5  # Reset delay on config update
+                    continue
+                logger.info("Reconnecting in %d seconds...", reconnect_delay)
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)
+                continue
+
+        heartbeat_task.cancel()
         try:
-            await asyncio.sleep(86400)  # one day – will be replaced by real code
-        finally:
-            await self.stop()
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("TAKClient run stopped")
+
+    async def _connect_and_read(self) -> None:
+        """Connect to TAK server and read CoT messages."""
+        # Update callsign/color/role from settings (may have been updated via API)
+        self._callsign = settings.tak_callsign_input or settings.tak_callsign
+        self._color = settings.tak_color
+        self._role = settings.tak_role
+
+        # Validate required config
+        if not self._color:
+            raise RuntimeError("TAK color not configured")
+        if not self._role:
+            raise RuntimeError("TAK role not configured")
+
+        # Use enrolled server if available, fall back to config
+        enrolled_server = auth_manager.enrolled_server
+        if enrolled_server:
+            host = enrolled_server
+            logger.info("Using enrolled TAK server: %s", host)
+        else:
+            host = settings.tak_host
+            logger.warning(
+                "No enrolled server found, falling back to config: %s:%s",
+                settings.tak_host,
+                settings.tak_port,
+            )
+
+        # Create SSL context with client certs (RAM-only key)
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        cert_file = auth_manager.cert_file
+        ca_file = auth_manager.ca_file
+
+        if os.path.exists(cert_file) and os.path.exists(ca_file):
+            # Get decrypted private key from AuthManager (RAM only)
+            key_bytes = auth_manager.get_private_key()
+            if not key_bytes:
+                logger.error("Failed to decrypt private key in RAM")
+                raise RuntimeError("Private key not available in RAM")
+
+            # Use memfd to feed bytes to ssl.load_cert_chain (Linux only)
+            with open(cert_file, "rb") as f:
+                cert_bytes = f.read()
+
+            fd_cert = os.memfd_create("tak_cert", 0)
+            fd_key = os.memfd_create("tak_key", 0)
+            try:
+                os.write(fd_cert, cert_bytes)
+                os.write(fd_key, key_bytes)
+                os.lseek(fd_cert, 0, 0)
+                os.lseek(fd_key, 0, 0)
+                ssl_context.load_cert_chain(
+                    certfile=f"/dev/fd/{fd_cert}", keyfile=f"/dev/fd/{fd_key}"
+                )
+            finally:
+                os.close(fd_cert)
+                os.close(fd_key)
+
+            ssl_context.load_verify_locations(cafile=ca_file)
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+            ssl_context.check_hostname = True
+            logger.info("Initialized secure SSL context (RAM-only key)")
+        else:
+            logger.warning("Certificate or CA file missing, using insecure TLS")
+        reader, writer = await asyncio.open_connection(
+            host, settings.tak_port, ssl=ssl_context
+        )
+        self._reader = reader
+        self._writer = writer
+        logger.info("Connected to TAK server at %s:%s (TLS)", host, settings.tak_port)
+
+        # Send initial SA
+        await self._send_initial_sa()
+
+        # Read loop - CoT is typically length-prefixed XML
+        buffer = bytearray()
+        while not self._stop.is_set():
+            try:
+                # Read data
+                assert self._reader is not None
+                data = await self._reader.read(4096)
+                if not data:
+                    logger.warning("TAK server closed connection")
+                    break
+
+                buffer.extend(data)
+
+                # Process complete CoT messages (simple approach: split on </event>)
+                while b"</event>" in buffer:
+                    end_idx = buffer.index(b"</event>") + len(b"</event>")
+                    message = bytes(buffer[:end_idx])
+                    del buffer[:end_idx]
+
+                    # Broadcast to frontend websocket clients
+                    await manager.broadcast(message)
+
+                    # Also parse for logging
+                    parsed = self.parse_cot(message)
+                    if parsed:
+                        logger.debug("Received CoT: uid=%s", parsed.get("uid"))
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("Error reading from TAK server: %s", e)
+                break
+            finally:
+                if self._writer:
+                    self._writer.close()
+                    await self._writer.wait_closed()
+                self._reader = None
+                self._writer = None
+
 
 tak_client = TAKClient()
