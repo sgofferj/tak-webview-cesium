@@ -198,14 +198,15 @@ class TAKClient:
 
         detail = etree.SubElement(cot, "detail")
         contact = etree.SubElement(detail, "contact")
-        contact.set("callsign", self.config.tak_callsign)
+        contact.set(
+            "callsign", self.config.tak_callsign_input or self.config.tak_callsign
+        )
         contact.set("endpoint", "*:-1:stcp")
 
         # Add __group for TAK server (color, not cert group)
         group = etree.SubElement(detail, "__group")
-        group.set("name", self.config.tak_group_color)
-        group.set("role", "Team Member")
-
+        group.set("name", self.config.tak_color or self.config.tak_group_color)
+        group.set("role", self.config.tak_role or "Team Member")
         status = etree.SubElement(detail, "status")
         status.set("battery", "100")
 

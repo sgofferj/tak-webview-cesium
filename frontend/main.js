@@ -1271,15 +1271,14 @@ function applyConfigColor(color) {
   });
 }
 init();
-
 // Chat button handler – open chat panel and ensure messaging config is loaded
 const chatToggle = document.getElementById("chatToggle");
 const chatPanel = document.getElementById("chatPanel");
 if (chatToggle && chatPanel) {
   chatToggle.addEventListener("click", async (e) => {
     e.stopPropagation();
-    const isOpen = chatPanel.style.display === "flex";
-    chatPanel.style.display = isOpen ? "none" : "flex";
+    const isOpen = !chatPanel.classList.contains("collapsed");
+    chatPanel.classList.toggle("collapsed", isOpen);
     chatToggle.setAttribute("aria-expanded", !isOpen);
 
     if (!isOpen) {
