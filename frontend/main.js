@@ -442,8 +442,13 @@ function setupAuthEvents() {
     if (saved) {
       const cfg = JSON.parse(saved);
       document.getElementById("configCallsign").value = cfg.callsign || "";
-      document.getElementById("configColor").value = cfg.color || "#4af";
-      document.getElementById("configRole").value = cfg.role || "Operator";
+      // Only use localStorage values if they're valid (non-empty)
+      if (cfg.color) {
+        document.getElementById("configColor").value = cfg.color;
+      }
+      if (cfg.role) {
+        document.getElementById("configRole").value = cfg.role;
+      }
     }
 
     configOverlay.classList.remove("hidden");
