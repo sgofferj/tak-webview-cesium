@@ -46,6 +46,9 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+logger = logging.getLogger("tak-webview.main")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
@@ -60,7 +63,6 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(lifespan=lifespan)
-
 # Session management - max_age=None makes it a session-only cookie
 app.add_middleware(
     SessionMiddleware,
