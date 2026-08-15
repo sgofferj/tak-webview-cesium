@@ -883,7 +883,9 @@ class TAKClient:
 
                         parsed = await asyncio.to_thread(self.parse_cot, data)
                         if parsed:
-                            if parsed["type"] == "a-f-G-U-C":
+                            # Update chat contacts for any atom with a callsign (not just a-f-G-U-C)
+                            callsign = parsed.get("callsign")
+                            if callsign and callsign != parsed.get("uid"):
                                 changed = await asyncio.to_thread(
                                     self._update_contact, parsed
                                 )
@@ -896,23 +898,22 @@ class TAKClient:
                                     await self.on_cot(parsed)
                                 else:
                                     self.on_cot(parsed)
-                            await self._broadcast_if_needed(parsed)
-                finally:
-                    heartbeat_task.cancel()
-                    try:
-                        await heartbeat_task
-                    except asyncio.CancelledError:
-                        pass
-
+                except (
+                    ssl.SSLError,
+                    asyncio.IncompleteReadError,
+                    etree.LxmlError,
+                ) as e:
+                    if not self._stop:
+                        logger.error(f"Connection error: {e}. Retrying in 10s...")
+                        self._writer = None
+                        await asyncio.sleep(10)
             except (
-                OSError,
                 ssl.SSLError,
                 asyncio.IncompleteReadError,
-                etree.LxmlError,
+                OSError,
             ) as e:
                 if not self._stop:
-                    logger.error(f"Connection error: {e}. Retrying in 10s...")
-                    self._writer = None
+                    logger.error(f"Connection failed: {e}. Retrying in 10s...")
                     await asyncio.sleep(10)
 
     async def stop(self) -> None:
