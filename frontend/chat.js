@@ -292,7 +292,6 @@ function sendMessage() {
 
     const thread = threads.get(selectedThread);
     if (!thread) return;
-
     const isDM = thread.kind === "dm";
     const messageId = crypto.randomUUID();
 
@@ -318,6 +317,7 @@ function sendMessage() {
     input.value = "";
 
     // Send via websocket
+    console.debug("sendMessage: ws.readyState=", ws?.readyState, "WebSocket.OPEN=", WebSocket.OPEN, "isDM=", isDM, "selectedThread=", selectedThread);
     const payload = {
         chat_send: {
             room: isDM ? null : selectedThread,
@@ -327,9 +327,13 @@ function sendMessage() {
             client_id: messageId
         }
     };
-
     try {
-        ws.send(JSON.stringify(payload));
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(payload));
+            console.debug("sendMessage: sent payload", payload);
+        } else {
+            console.error("sendMessage: websocket not open, readyState=", ws?.readyState);
+        }
     } catch (e) {
         console.error("Failed to send chat:", e);
     }

@@ -323,6 +323,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             cs = msg.get("chat_send")
             if not isinstance(cs, dict):
                 continue
+            logger.debug(f"chat_send: room={cs.get('room')}, peer_uid={cs.get('peer_uid')}, peer_callsign={cs.get('peer_callsign')}, text={cs.get('text')}, client_id={cs.get('client_id')}")
             try:
                 await tak_client.send_chat(
                     room=str(cs.get("room") or "All Chat Rooms"),
@@ -333,7 +334,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 )
             except ValueError as e:
                 await websocket.send_text(json.dumps({"chat_error": str(e)}))
-    except WebSocketDisconnect:
         pass
     finally:
         manager.disconnect(websocket)
