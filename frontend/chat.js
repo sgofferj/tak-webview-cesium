@@ -392,6 +392,8 @@ function renderThread() {
     const input = $("chatInput");
     const sendBtn = $("chatSend");
 
+    console.debug("renderThread: selectedThread=", selectedThread, "sendBtn=", sendBtn, "thread=", threads.get(selectedThread));
+
     if (!header || !threadDiv || !input || !sendBtn) return;
 
     if (!selectedThread) {
