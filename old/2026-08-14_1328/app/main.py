@@ -126,6 +126,11 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     if not success:
         raise HTTPException(status_code=401, detail="Enrollment failed")
 
+    # Get enrollment config from credentials
+    enrollment_callsign = auth_manager.get_enrollment_callsign() or ""
+    enrollment_color = auth_manager.get_enrollment_color() or ""
+    enrollment_role = auth_manager.get_enrollment_role() or ""
+
     # Automatically authenticate after enrollment
     request.session["authenticated"] = True
     request.session["sid"] = secrets.token_hex(16)
@@ -133,6 +138,11 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     auth_manager.failed_attempts = 0
     # Start TAK client
     await tak_client.start()
+
+    # Return enrollment config for client-side configuration
+    return {"enrollment_callsign": enrollment_callsign,
+            "enrollment_color": enrollment_color,
+            "enrollment_role": enrollment_role}
 
     return {"status": "success"}
 
