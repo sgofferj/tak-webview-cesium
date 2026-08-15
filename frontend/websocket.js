@@ -9,7 +9,9 @@
 import { decode } from "@msgpack/msgpack";
 import { updateEntity } from "./state.js";
 import { checkAuth } from "./main.js";
+import { handleChatMessage } from "./chat.js";
 
+export let ws = null;
 let pulseTimeout = null;
 function triggerPulse() {
   const dot = document.getElementById("statusPulse");
@@ -24,7 +26,7 @@ function triggerPulse() {
 
 export function startWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
@@ -46,6 +48,7 @@ export function startWebSocket() {
       }
       triggerPulse();
       updateEntity(data);
+      handleChatMessage(data);
     } catch (e) {
       console.error("Error parsing WS message", e);
     }

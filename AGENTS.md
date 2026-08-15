@@ -12,7 +12,7 @@ A TAK (Track Awareness Kit) Cesium map viewer for geochat/messaging functionalit
     - **Backend:** Poetry, Ruff, MyPy, PyLint.
     - **Frontend:** ESLint, Prettier, Vite, Vitest.
     - **Python standards:** Always run `black`, `mypy`, and `pylint` after modifying Python code.
-- **Current Status (as of April 17, 2026):**
+- **Current Status (as of August 15, 2026):**
     - [x] **Callsign Style Updated**: Black text, no outline, transparent white background.
     - [x] **Callsign Visibility Toggle**: Implemented sidebar checkbox with local persistence and i18n.
     - [x] **Polygon Overlay Labels**: Geographic center labeling using `Rectangle` for accuracy.
@@ -25,48 +25,21 @@ A TAK (Track Awareness Kit) Cesium map viewer for geochat/messaging functionalit
     - [x] **Automated Enrollment Secrets:** SHA256-derived CSR passwords.
     - [x] **UX Simplification**: Removed Certificate Password from enrollment UI.
     - [x] **Automatic Re-encryption:** Force strong passwords for imported insecure certificates.
+    - [x] **Geochat (b-t-f) Implementation**: Full chat send/receive with thread history, contact tracking, `__milsym`/`__milicon` parsing, staff comments, throttling, msgpack minification.
+    - [x] **TAK Connection Lifecycle**: TLS with RAM-only keys (memfd), proper keepalive (RX_STALE/PING_INTERVAL/RX_DEAD), reconnection with exponential backoff.
+    - [x] **Chat Button Fix**: Now properly opens chat panel instead of showing alert.
+    - [x] **Messaging Config**: Config overlay saves callsign/color/role to backend; TAK client starts only after user confirms.
     - [ ] **Rate Limiting:** Implement rate limiting on the FastAPI backend for enrollment and CoT endpoints.
     - [ ] **Backend Robustness:** Add comprehensive unit tests for CoT parsing.
     - [ ] **Frontend Polish:** Implement a more sophisticated "Entity Selection" UI with a cleaner side panel.
 - **Architectural Decisions:**
-    - **Surface Clamping:** Ground/Surface units use `CLAMP_TO_GROUND`. Air units use `HeightReference.NONE`.
-    - **Trail Stability:** `clampToGround: true` with two-point minimum history for stability.
-    - **Distance Configuration:**
-        - **Tactical (Labels/Trails):** 300km (`TACTICAL_DISTANCE`).
-        - **Horizon (Depth Test):** 1000km (`HORIZON_LIMIT`).
-        - **Global Visibility (Icons):** 100,000km (`MAX_DISTANCE`).
-        - **Overlay Labels:** 10,000km with scaling.
-    - **Dynamic Secrets:** Randomized `SECRET_KEY` on startup to secure session cookies.
-- **Security Hardening Roadmap (High Priority):**
-    - [x] **Transparent Key Encryption:** Fernet-encrypted private keys on disk, RAM-only decryption.
-    - [x] **Automated Enrollment Secrets:** SHA256-derived CSR passwords.
-    - [x] **UX Simplification**: Removed Certificate Password from enrollment UI.
-    - [x] **Automatic Re-encryption:** Force strong passwords for imported insecure certificates.
-    - [ ] **Rate Limiting:** Implement rate limiting on the FastAPI backend for enrollment and CoT endpoints.
-- **Session Wrap-up (2026-04-17):**
-    - [x] **Callsign UI Refinement**: Reduced font size to 12px and switched to high-contrast black-on-white-smoke style.
-    - [x] **Visibility Control**: Added "Show callsigns" toggle; unselected entities hide labels when toggled off.
-    - [x] **Polygon Labeling**: Implemented robust geographic labeling for overlay features. Added support for Finnish/Swedish fallback attributes (`NAMEFIN`, `NAMESWE`).
-    - [x] **Advanced Authentication**: Implemented manual `.p12` upload flow. 
-    - [x] **Identity Automation**: Extracted username (CN) directly from uploaded certificates, simplifying the UX.
-    - [x] **Secure Import:** Implemented server-side check for weak cert passwords ("atakatak", username, short), forcing re-encryption with a strong user-defined secret.
-    - [x] **Backend Robustness:** Integrated `python-multipart` for reliable form/file handling.
-    - [x] **UI Polish:** Placed the project logo on the authentication screen with vertical stacking and fallback logic.
-    - [x] **Documentation:** Extensively updated `README.md` to reflect the new security model and features.
-    - Verified `tak-webview-cesium:test` deployment.
-- **Future Considerations:**
-    - **High Contrast / Monochrome Icon Theme:** Implement a toggle to switch milsymbols and SVGs to a line-only, monochrome style.
-    - **Rate Limiting:** Implement rate limiting on the FastAPI backend for enrollment and CoT endpoints.
-    - **Backend Robustness:** Add comprehensive unit tests for CoT parsing.
-    - **Frontend Polish:** Implement a more sophisticated "Entity Selection" UI with a cleaner side panel.
-
 ### Agent Coordination
 - This file coordinates agent work on the tak-webview-cesium project.
 - See `GEMINI.md` for persistent project context loaded into every session.
 - Agent tasks should reference both this file and `GEMINI.md` for complete context.
 - Recent agent-facilitated changes include: Messaging Configuration Popup (callsign, color, role dropdowns).
-- **⚠️ NOTE TO FUTURE MODELS:** Don't delete working TLS/CoT implementations when "refactoring" - the previous commit 1eb5c4b replaced a fully functional RAM-only SSL context with `await asyncio.sleep(86400)`. Read the existing code FIRST. If it works, don't rewrite it unless asked.
-
+- **⚠️ NOTE TO FUTURE MODELS:** Don't delete working TLS/CoT implementations when "refactoring" - commit 1eb5c4b (2026-08-14) replaced a fully functional 910-line RAM-only SSL context + geochat implementation with `await asyncio.sleep(86400)`. The working code was recovered from Docker test images (13AUG/14AUG). Read the existing code FIRST. If it works, don't rewrite it unless asked.
+- **⚠️ NOTE:** The TAK client lifecycle is now: starts ONLY after user confirms messaging config (callsign/color/role) via config overlay. Does NOT start on enrollment/login. Stops when last web client disconnects.
 ### Development Commands
 - `bun install` / `npm install` - Install frontend dependencies
 - `bun run dev` / `npm run dev` - Start development server

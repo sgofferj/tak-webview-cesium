@@ -45,7 +45,7 @@ import {
   initStateManager,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
-
+import { initChat } from "./chat.js";
 let selfInfo = { uid: "", callsign: "" };
 async function init() {
   const authenticated = await checkAuth();
@@ -229,12 +229,9 @@ async function startApp() {
     await setTerrain(false);
     updateLayerPickerUI();
   }
-  // Ensure filters are applied after loading app state (or defaults) to correctly set visibility
-  applyFilter();
-
   startWebSocket();
+  initChat();
   // After websocket starts and entities begin flowing in, we need to ensure their visibility is set
-  // This helps catch any entities that might have been processed by throttledReconcileForegroundEntities
   // before the first general applyFilter from setTabVisibility.
   applyFilter();
 
