@@ -303,8 +303,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         tracker.ws_closed(sid)
         return
     # A web client is now viewing: make sure the TAK connection is up.
+    # Only start if messaging config has been saved (callsign + color + role)
     if not tak_client.is_running:
-        await tak_client.start()
+        if settings.tak_callsign_input and settings.tak_color and settings.tak_role:
+            await tak_client.start()
+        else:
+            logger.info("TAK client not started: messaging config not set")
     # Give the new client the current chat state (history, contacts, self).
     await websocket.send_text(json.dumps({"chat_init": tak_client.chat_snapshot()}))
     try:
