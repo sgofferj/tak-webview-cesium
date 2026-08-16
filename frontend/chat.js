@@ -291,8 +291,9 @@ function sendMessage() {
     if (!text) return;
 
     const thread = threads.get(selectedThread);
-    if (!thread) return;
-    const isDM = thread.kind === "dm";
+    const contact = contacts.get(selectedThread);
+    if (!thread && !contact) return;
+    const isDM = thread?.kind === "dm" || !!contact;
     const messageId = crypto.randomUUID();
 
     // Optimistic UI: add local message immediately
@@ -303,7 +304,7 @@ function sendMessage() {
         time: new Date().toISOString(),
         thread: selectedThread,
         room: isDM ? getThreadDisplayName(selectedThread) : selectedThread,
-        kind: thread.kind,
+        kind: isDM ? "dm" : "room",
         message_id: messageId,
         sender: selfInfo.callsign || "Me",
         sender_uid: selfInfo.uid || "",
