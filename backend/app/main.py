@@ -134,6 +134,7 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     tracker.register(request.session["sid"])
     auth_manager.failed_attempts = 0
     # TAK client will start when messaging config is saved
+    reset_messaging_config()
     return {"status": "success"}
 
 
@@ -161,6 +162,7 @@ async def auth_upload_p12(
     tracker.register(request.session["sid"])
     auth_manager.failed_attempts = 0
     # TAK client will start when messaging config is saved
+    reset_messaging_config()
     return {"status": "success", "username": username}
 
 
@@ -219,6 +221,7 @@ async def auth_logout_wipe(request: Request) -> dict[str, Any]:
     # Certificates are gone - the connection cannot be sustained
     await tak_client.stop()
     auth_manager.wipe_ephemeral()
+    reset_messaging_config()
     request.session.clear()
     return {"status": "success"}
 
@@ -230,9 +233,25 @@ async def config() -> dict[str, Any]:
 
 messaging_config: dict[str, str] = {"callsign": "", "color": "", "role": ""}
 
+
+def reset_messaging_config() -> None:
+    """Clear saved messaging config so the TAK client cannot auto-start.
+
+    Called when the authentication context changes (new enrollment, upload or
+    full logout) so the TAK client only starts after the user confirms a
+    fresh messaging config in the config overlay.
+    """
+    global messaging_config
+    messaging_config = {"callsign": "", "color": "", "role": ""}
+    settings.tak_callsign_input = ""
+    settings.tak_color = ""
+    settings.tak_role = ""
+
+
 # ----------------------------------------------------------------------
 #  Endpoints for messaging configuration (callsign, colour, role)
 # ----------------------------------------------------------------------
+
 
 @app.post("/api/messaging/config")
 async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
@@ -310,10 +329,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         else:
             logger.info("TAK client not started: messaging config not set")
     # Give the new client the current chat state (history, contacts, self).
-    await websocket.send_text(json.dumps({"chat_init": tak_client.chat_snapshot()}))
     try:
+        await websocket.send_text(json.dumps({"chat_init": tak_client.chat_snapshot()}))
         while True:
-            raw = await websocket.receive_text()
+            try:
+                raw = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
             try:
                 msg = json.loads(raw)
             except (json.JSONDecodeError, TypeError, ValueError):
@@ -339,8 +361,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     client_id=str(cs.get("client_id") or ""),
                 )
             except ValueError as e:
-                await websocket.send_text(json.dumps({"chat_error": str(e)}))
-        pass
+                try:
+                    await websocket.send_text(json.dumps({"chat_error": str(e)}))
+                except WebSocketDisconnect:
+                    break
+            except WebSocketDisconnect:
+                break
     finally:
         manager.disconnect(websocket)
         tracker.ws_closed(sid)

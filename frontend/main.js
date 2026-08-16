@@ -613,6 +613,7 @@ function setupAuthEvents() {
       } catch {
         console.error("Forget failed");
       }
+      localStorage.removeItem("messagingConfig");
       location.reload();
     }
   });
