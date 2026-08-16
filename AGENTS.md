@@ -31,8 +31,13 @@ A TAK (Track Awareness Kit) Cesium map viewer for geochat/messaging functionalit
     - [x] **Messaging Config**: Config overlay saves callsign/color/role to backend; TAK client starts only after user confirms.
     - [x] **Chat Panel UI**: Channel list (Rooms/Users), thread view, composer with send.
     - [x] **Contact List**: Shows callsigns (not UIDs) from CoT contact/callsign + endpoint filter.
-    - [ ] **First Message Send (DM)**: **BROKEN** - First message from webviewer to a contact without existing thread fails silently. Send button disabled despite renderThread enabling it. No sendMessage call. Debug logging added to trace.
+    - [x] **First Message Send (DM)**: Fixed - sendMessage now checks the contacts map for DMs without an existing thread (commit 1532744).
+    - [x] **WebSocketDisconnect Handling**: Disconnect (1001) no longer produces uncaught ASGI tracebacks on logout/reload/drop; clean teardown through finally.
+    - [x] **TAK Connect Ordering**: TAK client no longer auto-starts before the messaging config is confirmed (reset_messaging_config on enroll/upload/logout-wipe).
+    - [x] **Health Endpoint**: GET /health liveness probe excluded from the access log (HealthCheckLogFilter).
     - [ ] **Rate Limiting:** Implement rate limiting on the FastAPI backend for enrollment and CoT endpoints.
+    - [ ] **IP Banning:** Ban IPs with increasing ban time on failed enrollment and failed logins (escalating window, e.g. 5 min -> double up to 24 h cap; bounded LRU table; respect trusted_proxies for X-Forwarded-For).
+    - [ ] **Multi-User Refactor:** See `MULTIUSER_PLAN.md`. Users registry (per-user cert/key/creds, RAM-only decryption per session), ClientPool keyed by (server, user), per-user session roster, FORCE_SERVER/MAX_USERS/MAX_SERVERS env vars, logout-wipe isolation, distinct per-user UID.
     - [ ] **Backend Robustness:** Add comprehensive unit tests for CoT parsing.
     - [ ] **Frontend Polish:** Implement a more sophisticated "Entity Selection" UI with a cleaner side panel.
 ### Agent Coordination
