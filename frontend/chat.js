@@ -25,6 +25,7 @@ const threads = new Map();         // threadKey -> {key, kind, name, messages[],
 const pendingIds = new Map();      // threadKey -> Set(message_id)
 let selectedThread = null;
 let selfInfo = { uid: "", callsign: "" };
+let chatConnected = false;
 
 /**
  * HTML escape helper
@@ -106,6 +107,15 @@ export function initChat() {
             }
         });
     }
+}
+
+/**
+ * Update whether the websocket (and therefore send) is available.
+ * Called from websocket.js on open/close.
+ */
+export function setChatConnected(connected) {
+    chatConnected = connected;
+    renderThread();
 }
 
 /**
@@ -282,7 +292,7 @@ function selectThread(threadKey) {
 }
 function sendMessage() {
     if (!selectedThread) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (!chatConnected || !ws || ws.readyState !== WebSocket.OPEN) return;
 
     const input = $("chatInput");
     if (!input) return;
@@ -407,8 +417,8 @@ function renderThread() {
 
     const thread = threads.get(selectedThread);
     header.textContent = getThreadDisplayName(selectedThread);
-    input.disabled = false;
-    sendBtn.disabled = false;
+    input.disabled = !chatConnected;
+    sendBtn.disabled = !chatConnected;
 
     if (!thread || thread.messages.length === 0) {
         threadDiv.innerHTML = '<div class="chat-empty">No messages yet</div>';

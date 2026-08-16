@@ -434,22 +434,32 @@ function setupAuthEvents() {
   const selfInfoKey = "messagingConfig";
 
   // Open config overlay
-  configToggle.addEventListener("click", () => {
+  const openConfigOverlay = () => {
     const saved = localStorage.getItem(selfInfoKey);
     if (saved) {
-      const cfg = JSON.parse(saved);
-      document.getElementById("configCallsign").value = cfg.callsign || "";
-      // Only use localStorage values if they're valid (non-empty)
-      if (cfg.color) {
-        document.getElementById("configColor").value = cfg.color;
-      }
-      if (cfg.role) {
-        document.getElementById("configRole").value = cfg.role;
+      try {
+        const cfg = JSON.parse(saved);
+        document.getElementById("configCallsign").value = cfg.callsign || "";
+        // Only use localStorage values if they're valid (non-empty)
+        if (cfg.color) {
+          document.getElementById("configColor").value = cfg.color;
+        }
+        if (cfg.role) {
+          document.getElementById("configRole").value = cfg.role;
+        }
+      } catch {
+        // ignore malformed saved config
       }
     }
 
     configOverlay.classList.remove("hidden");
-  });
+  };
+
+  configToggle.addEventListener("click", openConfigOverlay);
+  const configStatusBtn = document.getElementById("configStatusBtn");
+  if (configStatusBtn) {
+    configStatusBtn.addEventListener("click", openConfigOverlay);
+  }
 
   // Save config
   configSave.addEventListener("click", async () => {

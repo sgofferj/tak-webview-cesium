@@ -89,6 +89,7 @@ class TAKClient:
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._run_task: asyncio.Task[None] | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
         # Keepalive state (per connection, reset in run())
         self._last_inbound: float = 0.0
         self._last_ping: float = 0.0
@@ -117,6 +118,11 @@ class TAKClient:
                     pattern, comment = pair.split("=", 1)
                     # Also strip each side to be safe
                     self.staff_comments[pattern.strip("\"' ")] = comment.strip("\"' ")
+
+    @property
+    def chat_callsign(self) -> str:
+        """Callsign used for chat: the user-configured one when set."""
+        return self.config.tak_callsign_input or self.config.tak_callsign
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
@@ -199,7 +205,7 @@ class TAKClient:
         detail = etree.SubElement(cot, "detail")
         contact = etree.SubElement(detail, "contact")
         contact.set(
-            "callsign", self.config.tak_callsign_input or self.config.tak_callsign
+            "callsign", self.chat_callsign
         )
         contact.set("endpoint", "*:-1:stcp")
 
@@ -619,7 +625,7 @@ class TAKClient:
         chat_el.set("messageId", message_id)
         chat_el.set("chatroom", chatroom)
         chat_el.set("id", grp_id)
-        chat_el.set("senderCallsign", self.config.tak_callsign)
+        chat_el.set("senderCallsign", self.chat_callsign)
         grp_el = etree.SubElement(chat_el, "chatgrp")
         grp_el.set("uid0", my_uid)
         grp_el.set("uid1", uid1)
@@ -671,7 +677,7 @@ class TAKClient:
             "room": room or CHAT_ROOM_ALL,
             "kind": "dm" if peer_uid else "room",
             "message_id": message_id,
-            "sender": self.config.tak_callsign,
+            "sender": self.chat_callsign,
             "sender_uid": self.config.tak_uid_final,
             "peer": peer_uid,
             "text": text,
@@ -707,7 +713,7 @@ class TAKClient:
         return {
             "self": {
                 "uid": self.config.tak_uid_final,
-                "callsign": self.config.tak_callsign,
+                "callsign": self.chat_callsign,
             },
             "threads": {k: list(v) for k, v in self._chat_threads.items()},
             "contacts": dict(self._chat_contacts),
@@ -816,7 +822,7 @@ class TAKClient:
                 self._last_inbound = time.monotonic()
                 self._last_ping = 0.0
                 self._connection_dead = False
-                heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+                self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
                 try:
                     while not self._stop:
@@ -883,12 +889,11 @@ class TAKClient:
                                 continue
                         elif b"t-x-d-d" in data:
                             await asyncio.to_thread(self._apply_delete, data)
-                        elif b"t-x-d-d" in data:
-                            await asyncio.to_thread(self._apply_delete, data)
 
                         parsed = await asyncio.to_thread(self.parse_cot, data)
                         if parsed:
-                            # Update chat contacts for atoms with callsign AND endpoint (geochat capable)
+                            # Update chat contacts for atoms with callsign AND
+                            # endpoint (geochat capable)
                             callsign = parsed.get("callsign")
                             endpoint = parsed.get("endpoint")
                             if callsign and endpoint and callsign != parsed.get("uid"):
@@ -913,6 +918,8 @@ class TAKClient:
                         logger.error(f"Connection error: {e}. Retrying in 10s...")
                         self._writer = None
                         await asyncio.sleep(10)
+                finally:
+                    self._cancel_heartbeat()
             except (
                 ssl.SSLError,
                 asyncio.IncompleteReadError,
@@ -922,9 +929,17 @@ class TAKClient:
                     logger.error(f"Connection failed: {e}. Retrying in 10s...")
                     await asyncio.sleep(10)
 
+    def _cancel_heartbeat(self) -> None:
+        """Cancel the per-connection heartbeat task if one is running."""
+        if self._heartbeat_task is not None:
+            if not self._heartbeat_task.done():
+                self._heartbeat_task.cancel()
+            self._heartbeat_task = None
+
     async def stop(self) -> None:
         """Cleanly shut down: announce our removal, then close the stream."""
         self._stop = True
+        self._cancel_heartbeat()
         if self._writer is not None:
             # Soft t-x-d-d so TAK clients/server expire our SA point.
             await self._send_xml(self._build_self_delete_event())
@@ -943,22 +958,22 @@ class TAKClient:
                 pass
         self._run_task = None
 
-    def update_config(
+    async def update_config(
         self,
         callsign: str | None = None,
         color: str | None = None,
         role: str | None = None,
     ) -> None:
-        """Update callsign/color/role and trigger reconnect if running."""
+        """Update callsign/color/role and restart the connection if running."""
         if callsign is not None:
             self.config.tak_callsign_input = callsign
         if color is not None:
             self.config.tak_color = color
         if role is not None:
             self.config.tak_role = role
-        # Trigger reconnect by setting stop event
-        if self.is_running:
-            self._stop = True
+        # Restart so the new identity is announced to the server
+        await self.stop()
+        await self.start()
 
 
 tak_client = TAKClient()

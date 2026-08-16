@@ -233,8 +233,6 @@ messaging_config: dict[str, str] = {"callsign": "", "color": "", "role": ""}
 # ----------------------------------------------------------------------
 #  Endpoints for messaging configuration (callsign, colour, role)
 # ----------------------------------------------------------------------
-from fastapi import HTTPException
-
 
 @app.post("/api/messaging/config")
 async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
@@ -264,7 +262,7 @@ async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
     if tak_client._run_task is None or tak_client._run_task.done():
         await tak_client.start()
     else:
-        tak_client.update_config(callsign=callsign, color=color, role=role)
+        await tak_client.update_config(callsign=callsign, color=color, role=role)
 
     return {"status": "ok"}
 
@@ -323,7 +321,15 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             cs = msg.get("chat_send")
             if not isinstance(cs, dict):
                 continue
-            logger.debug(f"chat_send: room={cs.get('room')}, peer_uid={cs.get('peer_uid')}, peer_callsign={cs.get('peer_callsign')}, text={cs.get('text')}, client_id={cs.get('client_id')}")
+            logger.debug(
+                "chat_send: room=%s, peer_uid=%s, peer_callsign=%s, text=%s, "
+                "client_id=%s",
+                cs.get("room"),
+                cs.get("peer_uid"),
+                cs.get("peer_callsign"),
+                cs.get("text"),
+                cs.get("client_id"),
+            )
             try:
                 await tak_client.send_chat(
                     room=str(cs.get("room") or "All Chat Rooms"),

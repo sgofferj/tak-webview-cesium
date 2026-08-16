@@ -7,6 +7,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
+import json
 import secrets
 from typing import Any, ClassVar
 
@@ -60,7 +61,17 @@ class Settings(BaseSettings):
     @classmethod
     def parse_trusted_proxies(cls, v: Any) -> list[str]:
         if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(x).strip() for x in parsed if str(x).strip()]
+                except (ValueError, TypeError):
+                    pass
             return [x.strip() for x in v.split(",") if x.strip()]
+        if isinstance(v, list | tuple):
+            return [str(x).strip() for x in v if str(x).strip()]
         return ["127.0.0.1"]
 
     # ------------------------------------------------------------------
@@ -110,11 +121,12 @@ class Settings(BaseSettings):
     def validate_tak_color(cls, v: Any) -> str:
         if isinstance(v, str) and v.strip() == "":
             return v
-        if v not in cls.VALID_COLOURS:  # cls accesses the ClassVar
+        value = str(v)
+        if value not in cls.VALID_COLOURS:  # cls accesses the ClassVar
             raise ValueError(
-                f"Invalid colour {v!r}; must be one of {cls.VALID_COLOURS}"
+                f"Invalid colour {value!r}; must be one of {cls.VALID_COLOURS}"
             )
-        return v
+        return value
 
     # ------------------------------------------------------------------
     #  Role validator – only allow the whitelisted roles
@@ -124,9 +136,12 @@ class Settings(BaseSettings):
     def validate_tak_role(cls, v: Any) -> str:
         if isinstance(v, str) and v.strip() == "":
             return v
-        if v not in cls.VALID_ROLES:  # cls accesses the ClassVar
-            raise ValueError(f"Invalid role {v!r}; must be one of {cls.VALID_ROLES}")
-        return v
+        value = str(v)
+        if value not in cls.VALID_ROLES:  # cls accesses the ClassVar
+            raise ValueError(
+                f"Invalid role {value!r}; must be one of {cls.VALID_ROLES}"
+            )
+        return value
 
     # UI / Map
     initial_lat: float = 60.1699

@@ -9,7 +9,7 @@
 import { decode } from "@msgpack/msgpack";
 import { updateEntity } from "./state.js";
 import { checkAuth } from "./main.js";
-import { handleChatMessage } from "./chat.js";
+import { handleChatMessage, setChatConnected } from "./chat.js";
 
 export let ws = null;
 let pulseTimeout = null;
@@ -31,6 +31,7 @@ export function startWebSocket() {
 
   ws.onopen = () => {
     console.log("WebSocket Connection Open");
+    setChatConnected(true);
     const conn = document.getElementById("statusConnection");
     if (conn) {
       conn.innerText = "Connected";
@@ -61,6 +62,7 @@ export function startWebSocket() {
 
   ws.onclose = (event) => {
     console.log(`WebSocket Connection Closed: ${event.code} ${event.reason}`);
+    setChatConnected(false);
     const conn = document.getElementById("statusConnection");
     if (conn) {
       conn.innerText = "Disconnected";
