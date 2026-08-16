@@ -7,6 +7,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
+import hashlib
 import json
 import secrets
 from typing import Any, ClassVar
@@ -182,14 +183,16 @@ class Settings(BaseSettings):
         return f"CesiumViewer-{self.tak_callsign}"
 
     def uid_for_username(self, username: str) -> str:
-        """Derive a stable, distinct per-user UID from the cert CN (username)."""
+        """Derive a stable, distinct per-user UID from the cert CN (username).
+
+        The username is hashed so it is never transmitted in cleartext as the
+        UID. The hash is deterministic, so the same user always gets the same
+        UID (and it can be verified internally by re-hashing the username).
+        """
         if self.tak_uid:
             return self.tak_uid
-        clean = (
-            "".join(c for c in (username or "").strip() if c.isalnum() or c in "._-")
-            or "User"
-        )
-        return f"CesiumViewer-{clean}"
+        digest = hashlib.sha256((username or "").strip().encode("utf-8")).hexdigest()
+        return f"CesiumViewer-{digest[:16]}"
 
 
 settings = Settings()
