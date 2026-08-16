@@ -204,9 +204,7 @@ class TAKClient:
 
         detail = etree.SubElement(cot, "detail")
         contact = etree.SubElement(detail, "contact")
-        contact.set(
-            "callsign", self.chat_callsign
-        )
+        contact.set("callsign", self.chat_callsign)
         contact.set("endpoint", "*:-1:stcp")
 
         # Add __group for TAK server (color, not cert group)

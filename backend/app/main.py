@@ -148,7 +148,9 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
     auth_manager.failed_attempts = 0
     # TAK client will start when messaging config is saved
     reset_messaging_config()
-    return {"status": "success"}
+    # Return the server-pushed profile (if any) so the frontend can prefill
+    # the config popup: server profile > localStorage > defaults.
+    return {"status": "success", "profile": auth_manager.enrollment_profile}
 
 
 @app.post("/api/auth/upload-p12")

@@ -9,10 +9,12 @@
 
 import base64
 import hashlib
+import io
 import json
 import logging
 import os
 import secrets
+import zipfile
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,6 +24,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from lxml import etree
 
 from .config import settings
 
@@ -41,6 +44,18 @@ class AuthManager:
         self.failed_attempts = 0
         # This will now store the master STORAGE_KEY instead of the cleartext password
         self._storage_key: bytes | None = None
+        self._callsign = ""
+        self._color = ""
+        self._role = ""
+
+    @property
+    def enrollment_profile(self) -> dict[str, str]:
+        """Callsign/color/role from the last successful enrollment profile."""
+        return {
+            "callsign": self._callsign,
+            "color": self._color,
+            "role": self._role,
+        }
 
     def _derive_fernet_key(self, password: str, salt: str) -> bytes:
         """Derive a Fernet key from a password and salt."""
@@ -158,6 +173,9 @@ class AuthManager:
                         f.write(b"\n")
 
             self.save_credentials(username, final_password, server, salt=salt)
+            # Persist the stable per-user UID so the TAK client uses the same
+            # identity that the certificate was enrolled/imported under.
+            settings.tak_uid = settings.uid_for_username(username)
             logger.info("P12 upload for user '%s' successful", username)
             return username
 
@@ -288,11 +306,70 @@ class AuthManager:
             )
             return None
 
+    async def _fetch_enrollment_profile(
+        self, client: httpx.AsyncClient, base_url: str, uid: str, auth: httpx.BasicAuth
+    ) -> dict[str, str]:
+        """Fetch and parse the enrollment-time device profile from the server.
+
+        After signClient, the TAK Server can push a mission package containing
+        a user-profile.pref with locationCallsign/locationTeam/atakRoleType.
+        Returns ""-valued dict when the server has no profile for this user.
+        """
+        try:
+            resp = await client.get(
+                f"{base_url}/profile/enrollment",
+                params={"clientUid": uid},
+                auth=auth,
+                follow_redirects=True,
+            )
+            if resp.status_code != 200:
+                logger.info(
+                    "No enrollment profile (status %s) for uid %s",
+                    resp.status_code,
+                    uid,
+                )
+                return {}
+
+            profile = self._parse_profile_package(resp.content)
+            logger.info("Enrollment profile for %s: %s", uid, profile)
+            return profile
+        except Exception as e:
+            logger.warning("Failed to fetch enrollment profile: %s", e)
+            return {}
+
+    def _parse_profile_package(self, data: bytes) -> dict[str, str]:
+        """Extract callsign/color/role from a profile.zip mission package."""
+        self._callsign = ""
+        self._color = ""
+        self._role = ""
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                for name in zf.namelist():
+                    if not name.lower().endswith(".pref"):
+                        continue
+                    try:
+                        root = etree.fromstring(zf.read(name))
+                    except etree.XMLSyntaxError:
+                        continue
+                    for entry in root.xpath("//*[local-name()='entry']"):
+                        key = entry.get("key")
+                        if entry.text:
+                            value = entry.text.strip()
+                            if key == "locationCallsign" and self._callsign == "":
+                                self._callsign = value
+                            elif key == "locationTeam" and self._color == "":
+                                self._color = value
+                            elif key == "atakRoleType" and self._role == "":
+                                self._role = value
+        except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
+            logger.warning("Profile package is not a valid zip: %s", e)
+        return {"callsign": self._callsign, "color": self._color, "role": self._role}
+
     async def enroll(self, server: str, username: str, password: str) -> bool:
         """Enroll the client with a TAK server."""
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
         self.wipe_ephemeral()
-        uid = settings.tak_uid_final
+        uid = settings.uid_for_username(username)
         base_url = f"https://{server}:{settings.tak_enroll_port}/Marti/api/tls"
 
         # Initialize salt early for enrollment secret derivation
@@ -313,8 +390,6 @@ class AuthManager:
                     return False
 
                 # 3. Parse Config for OIDs
-                from lxml import etree
-
                 config_root = etree.fromstring(config_resp.content)
                 name_entries = []
                 for entry in config_root.xpath("//*[local-name()='nameEntry']"):
@@ -431,6 +506,21 @@ class AuthManager:
                             f.write(b"\n")
 
                 self.save_credentials(username, password, server, salt=salt)
+
+                # Persist the stable per-user UID so the TAK client uses the
+                # same identity the certificate was enrolled under.
+                settings.tak_uid = uid
+
+                # Fetch the enrollment-time device profile (callsign/color/role)
+                # and keep it for the frontend to prefill the config popup.
+                profile = await self._fetch_enrollment_profile(
+                    client, base_url, uid, auth
+                )
+                if profile:
+                    self._callsign = profile.get("callsign", "")
+                    self._color = profile.get("color", "")
+                    self._role = profile.get("role", "")
+
                 logger.info("Enrollment successful")
                 return True
 
@@ -441,6 +531,9 @@ class AuthManager:
     def wipe_ephemeral(self) -> None:
         self.failed_attempts = 0
         self._storage_key = None
+        self._callsign = ""
+        self._color = ""
+        self._role = ""
         for f in [self.cert_file, self.key_file, self.ca_file, self.creds_file]:
             if os.path.exists(f):
                 os.remove(f)

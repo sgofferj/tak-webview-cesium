@@ -181,5 +181,15 @@ class Settings(BaseSettings):
             return self.tak_uid
         return f"CesiumViewer-{self.tak_callsign}"
 
+    def uid_for_username(self, username: str) -> str:
+        """Derive a stable, distinct per-user UID from the cert CN (username)."""
+        if self.tak_uid:
+            return self.tak_uid
+        clean = (
+            "".join(c for c in (username or "").strip() if c.isalnum() or c in "._-")
+            or "User"
+        )
+        return f"CesiumViewer-{clean}"
+
 
 settings = Settings()

@@ -432,23 +432,41 @@ function setupAuthEvents() {
   const configCancel = document.getElementById("configCancel");
 
   const selfInfoKey = "messagingConfig";
+  // Profile pushed by the TAK server on enrollment (takes priority over
+  // localStorage, if present).
+  let pendingServerProfile = null;
+
+  const prefillConfigFields = (cfg) => {
+    document.getElementById("configCallsign").value = cfg.callsign || "";
+    if (cfg.color) {
+      const colorSelect = document.getElementById("configColor");
+      if ([...colorSelect.options].some((o) => o.value === cfg.color)) {
+        colorSelect.value = cfg.color;
+      }
+    }
+    if (cfg.role) {
+      const roleSelect = document.getElementById("configRole");
+      if ([...roleSelect.options].some((o) => o.value === cfg.role)) {
+        roleSelect.value = cfg.role;
+      }
+    }
+  };
 
   // Open config overlay
   const openConfigOverlay = () => {
-    const saved = localStorage.getItem(selfInfoKey);
-    if (saved) {
-      try {
-        const cfg = JSON.parse(saved);
-        document.getElementById("configCallsign").value = cfg.callsign || "";
-        // Only use localStorage values if they're valid (non-empty)
-        if (cfg.color) {
-          document.getElementById("configColor").value = cfg.color;
+    // 1. Prefer the server-pushed enrollment profile (one-shot, consumed).
+    if (pendingServerProfile && pendingServerProfile.callsign) {
+      prefillConfigFields(pendingServerProfile);
+      pendingServerProfile = null;
+    } else {
+      // 2. Fall back to localStorage.
+      const saved = localStorage.getItem(selfInfoKey);
+      if (saved) {
+        try {
+          prefillConfigFields(JSON.parse(saved));
+        } catch {
+          // ignore malformed saved config
         }
-        if (cfg.role) {
-          document.getElementById("configRole").value = cfg.role;
-        }
-      } catch {
-        // ignore malformed saved config
       }
     }
 
@@ -461,16 +479,22 @@ function setupAuthEvents() {
     configStatusBtn.addEventListener("click", openConfigOverlay);
   }
 
-  // Save config
-  configSave.addEventListener("click", async () => {
+  // Guard: a callsign is mandatory before the overlay can be saved or closed.
+  const requireCallsign = () => {
     const callsign = document.getElementById("configCallsign").value.trim();
-    const color = document.getElementById("configColor").value;
-    const role = document.getElementById("configRole").value;
-
     if (!callsign) {
       alert("Callsign is required");
-      return;
+      return null;
     }
+    return callsign;
+  };
+
+  // Save config
+  configSave.addEventListener("click", async () => {
+    const callsign = requireCallsign();
+    if (!callsign) return;
+    const color = document.getElementById("configColor").value;
+    const role = document.getElementById("configRole").value;
 
     const cfg = { callsign, color, role };
     localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
@@ -499,14 +523,16 @@ function setupAuthEvents() {
     configOverlay.classList.add("hidden");
   });
 
-  // Cancel
+  // Cancel - blocked while callsign is empty
   configCancel.addEventListener("click", () => {
+    if (!requireCallsign()) return;
     configOverlay.classList.add("hidden");
   });
 
-  // Close on overlay click
+  // Close on overlay click - blocked while callsign is empty
   configOverlay.addEventListener("click", (e) => {
     if (e.target === configOverlay) {
+      if (!requireCallsign()) return;
       configOverlay.classList.add("hidden");
     }
   });
@@ -524,6 +550,11 @@ function setupAuthEvents() {
         body: JSON.stringify({ server, username, password }),
       });
       if (resp.ok) {
+        const result = await resp.json();
+        // Server-pushed enrollment profile (callsign/color/role), if any.
+        if (result && result.profile) {
+          pendingServerProfile = result.profile;
+        }
         configToggle.click();
         init(); // Re-run init to start app
       } else {

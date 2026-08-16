@@ -79,7 +79,7 @@ Configuration is handled via environment variables or an `.env` file.
 | `TAK_ENROLL_PORT`     | `8446`           | Enrollment port (for automated certificate setup)                                      |
 | `TAK_CALLSIGN`        | `CesiumViewer`   | Callsign for this viewer instance                                                      |
 | `TAK_TYPE`            | `a-f-G-U-C-I`    | CoT type for the viewer entity                                                         |
-| `TAK_UID`             | (Generated)      | Unique ID for the viewer (defaults to `CesiumViewer-[Callsign]`)                       |
+| `TAK_UID`             | (Generated)      | Fixed UID override. When unset, a distinct per-user UID (`CesiumViewer-<username>`) is derived automatically from the certificate CN at enrollment/import time                                        |
 | `TAK_STAFF_COMMENTS`  | (Empty)          | Comma-separated map for highlighting staff comments (e.g., `#SF=ShadowFleet,#LEO=LEO`) |
 | `GOTO_BUTTONS`        | (Empty)          | Quick-jump buttons: `Label:Lat,Lon,Zoom;...`                                           |
 | `SECRET_KEY`          | (Random)         | Key for signing session cookies (regenerated on restart)                               |
