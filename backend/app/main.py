@@ -49,6 +49,19 @@ logging.basicConfig(
 logger = logging.getLogger("tak-webview.main")
 
 
+class HealthCheckLogFilter(logging.Filter):
+    """Suppress access-log noise from haproxy alive checks."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(HealthCheckLogFilter())
+
+# FastAPI access logging is handled by uvicorn; this keeps health checks quiet
+logger.info("Health checks on /health are excluded from the access log.")
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
@@ -224,6 +237,12 @@ async def auth_logout_wipe(request: Request) -> dict[str, Any]:
     reset_messaging_config()
     request.session.clear()
     return {"status": "success"}
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    """Liveness probe for load balancers. Excluded from the access log."""
+    return {"status": "ok"}
 
 
 @app.get("/config")
