@@ -132,12 +132,21 @@ async def auth_status(request: Request) -> dict[str, Any]:
         "enrolled": auth_manager.is_enrolled(),
         "authenticated": authenticated,
         "cert": auth_manager.get_cert_info(),
+        "pinnedServer": auth_manager.get_pinned_server(),
+        "forceServer": settings.force_server,
     }
 
 
 @app.post("/api/auth/enroll")
 async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
-    success = await auth_manager.enroll(req.server, req.username, req.password)
+    ok, server = auth_manager.decide_server(req.server)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="TAK Server does not match the server pinned for this install",
+        )
+    assert server is not None
+    success = await auth_manager.enroll(server, req.username, req.password)
     if not success:
         raise HTTPException(status_code=401, detail="Enrollment failed")
 
@@ -159,11 +168,18 @@ async def auth_upload_p12(
     file: UploadFile = File(...),
     password: str = Form(...),
     new_password: str | None = Form(None),
-    server: str = Form("imported"),
+    server: str = Form(""),
 ) -> dict[str, Any]:
     # pylint: disable=too-many-arguments
+    ok, decided_server = auth_manager.decide_server(server)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="TAK Server does not match the server pinned for this install",
+        )
+    assert decided_server is not None
     p12_data = await file.read()
-    username = auth_manager.upload_p12(p12_data, password, new_password, server)
+    username = auth_manager.upload_p12(p12_data, password, new_password, decided_server)
     if not username:
         # If decryption fails, we can't extract the username yet.
         # Failures can be due to wrong password or insecure password requirements.

@@ -278,6 +278,21 @@ export async function checkAuth() {
     const resp = await fetch("/api/auth/status");
     const status = await resp.json();
 
+    // Single-server pinning: once a server is decided (FORCE_SERVER or the
+    // first enrollment/upload), it is fixed for the install and the server
+    // fields are hidden from the enrollment/upload dialogs.
+    const decidedServer = status.forceServer || status.pinnedServer || null;
+    for (const id of ["enrollServer", "uploadServer"]) {
+      const el = document.getElementById(id);
+      if (decidedServer) {
+        el.value = decidedServer;
+        el.style.display = "none";
+      } else {
+        el.value = "";
+        el.style.display = "";
+      }
+    }
+
     if (status.authenticated) {
       overlay.classList.add("hidden");
       statusBar.classList.remove("hidden");
@@ -542,6 +557,12 @@ function setupAuthEvents() {
     const username = document.getElementById("enrollUser").value;
     const password = document.getElementById("enrollPass").value;
     message.classList.add("hidden");
+
+    if (!server) {
+      message.innerText = "Please enter the TAK Server address";
+      message.classList.remove("hidden");
+      return;
+    }
 
     try {
       const resp = await fetch("/api/auth/enroll", {

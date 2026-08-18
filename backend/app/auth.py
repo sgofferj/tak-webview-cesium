@@ -35,6 +35,7 @@ class AuthManager:
     def __init__(self) -> None:
         self.ephemeral_dir = settings.ephemeral_dir
         self.creds_file = os.path.join(self.ephemeral_dir, settings.ephemeral_creds)
+        self.pinned_server_file = os.path.join(self.ephemeral_dir, "pinned_server.json")
 
         self.cert_file = os.path.join(self.ephemeral_dir, settings.ephemeral_cert)
         self.key_file = os.path.join(self.ephemeral_dir, settings.ephemeral_key)
@@ -56,6 +57,40 @@ class AuthManager:
             "color": self._color,
             "role": self._role,
         }
+
+    def get_pinned_server(self) -> str | None:
+        """The install-level TAK server chosen by the first enrollment/upload."""
+        try:
+            with open(self.pinned_server_file, encoding="utf-8") as f_in:
+                data = json.load(f_in)
+            server = data.get("server")
+            return str(server) if server else None
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def pin_server(self, server: str) -> None:
+        """Persist the install-level server chosen by the first user."""
+        with open(self.pinned_server_file, "w", encoding="utf-8") as f_out:
+            json.dump({"server": server}, f_out)
+
+    def decide_server(self, requested: str) -> tuple[bool, str | None]:
+        """Enforce single-server pinning; returns (ok, effective_server).
+
+        `FORCE_SERVER` always wins. Otherwise the first successful enrollment
+        or certificate upload pins the server; later requests must match it.
+        """
+        if settings.force_server:
+            if requested and requested != settings.force_server:
+                return False, None
+            return True, settings.force_server
+        pinned = self.get_pinned_server()
+        if pinned:
+            if requested and requested != pinned:
+                return False, None
+            return True, pinned
+        if not requested:
+            return False, None
+        return True, requested
 
     def _derive_fernet_key(self, password: str, salt: str) -> bytes:
         """Derive a Fernet key from a password and salt."""
@@ -176,6 +211,7 @@ class AuthManager:
             # Persist the stable per-user UID so the TAK client uses the same
             # identity that the certificate was enrolled/imported under.
             settings.tak_uid = settings.uid_for_username(username)
+            self.pin_server(server)
             logger.info("P12 upload for user '%s' successful", username)
             return username
 
@@ -511,6 +547,8 @@ class AuthManager:
                 # same identity the certificate was enrolled under.
                 settings.tak_uid = uid
 
+                self.pin_server(server)
+
                 # Fetch the enrollment-time device profile (callsign/color/role)
                 # and keep it for the frontend to prefill the config popup.
                 profile = await self._fetch_enrollment_profile(
@@ -529,11 +567,18 @@ class AuthManager:
             return False
 
     def wipe_ephemeral(self) -> None:
+        """Wipe per-user credential storage.
+
+        Without FORCE_SERVER the pinned server is reset too, so the next
+        enrollment after wiping the last certificate decides the server anew.
+        """
         self.failed_attempts = 0
         self._storage_key = None
         self._callsign = ""
         self._color = ""
         self._role = ""
+        if not settings.force_server and os.path.exists(self.pinned_server_file):
+            os.remove(self.pinned_server_file)
         for f in [self.cert_file, self.key_file, self.ca_file, self.creds_file]:
             if os.path.exists(f):
                 os.remove(f)
