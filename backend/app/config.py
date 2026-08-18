@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     # Enrollment
     tak_enroll_port: int = 8446
+    force_server: str | None = None
     _ephemeral_dir: str = "/app/certs/ephemeral"
     ephemeral_cert: str = "cert.pem"
     ephemeral_key: str = "cert.key"
