@@ -567,11 +567,18 @@ class AuthManager:
             return False
 
     def wipe_ephemeral(self) -> None:
+        """Wipe per-user credential storage.
+
+        Without FORCE_SERVER the pinned server is reset too, so the next
+        enrollment after wiping the last certificate decides the server anew.
+        """
         self.failed_attempts = 0
         self._storage_key = None
         self._callsign = ""
         self._color = ""
         self._role = ""
+        if not settings.force_server and os.path.exists(self.pinned_server_file):
+            os.remove(self.pinned_server_file)
         for f in [self.cert_file, self.key_file, self.ca_file, self.creds_file]:
             if os.path.exists(f):
                 os.remove(f)

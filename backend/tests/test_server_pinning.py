@@ -61,8 +61,25 @@ def test_pin_persisted(manager: AuthManager) -> None:
     assert AuthManager().get_pinned_server() == "tak.example.com"
 
 
-def test_pin_survives_wipe(manager: AuthManager) -> None:
+def test_pin_reset_on_wipe_without_force(manager: AuthManager) -> None:
     manager.pin_server("tak.example.com")
+    manager.wipe_ephemeral()
+    assert manager.get_pinned_server() is None
+
+
+def test_pin_kept_on_wipe_with_force(
+    manager: AuthManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager.pin_server("tak.example.com")
+    fake_settings = types.SimpleNamespace(
+        ephemeral_dir=manager.ephemeral_dir,
+        ephemeral_creds="creds.json",
+        ephemeral_cert="cert.pem",
+        ephemeral_key="cert.key",
+        ephemeral_ca="ca.pem",
+        force_server="forced.tak.example",
+    )
+    monkeypatch.setattr(auth_module, "settings", fake_settings)
     manager.wipe_ephemeral()
     assert manager.get_pinned_server() == "tak.example.com"
 
