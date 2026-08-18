@@ -7,8 +7,6 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
-import base64
-import hashlib
 import io
 import json
 import logging
@@ -23,10 +21,10 @@ from cryptography import x509
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from lxml import etree
 
 from .config import settings
+from .users import UserRegistry
 
 logger = logging.getLogger("tak-webview.auth")
 
@@ -36,6 +34,7 @@ class AuthManager:
         self.ephemeral_dir = settings.ephemeral_dir
         self.creds_file = os.path.join(self.ephemeral_dir, settings.ephemeral_creds)
         self.pinned_server_file = os.path.join(self.ephemeral_dir, "pinned_server.json")
+        self.registry = UserRegistry(self.ephemeral_dir)
 
         self.cert_file = os.path.join(self.ephemeral_dir, settings.ephemeral_cert)
         self.key_file = os.path.join(self.ephemeral_dir, settings.ephemeral_key)
@@ -70,8 +69,11 @@ class AuthManager:
 
     def pin_server(self, server: str) -> None:
         """Persist the install-level server chosen by the first user."""
+        had_pin = self.get_pinned_server() is not None
         with open(self.pinned_server_file, "w", encoding="utf-8") as f_out:
             json.dump({"server": server}, f_out)
+        if not had_pin:
+            logger.info("First enrollment succeeded, pinned server to %s", server)
 
     def decide_server(self, requested: str) -> tuple[bool, str | None]:
         """Enforce single-server pinning; returns (ok, effective_server).
@@ -93,39 +95,20 @@ class AuthManager:
         return True, requested
 
     def _derive_fernet_key(self, password: str, salt: str) -> bytes:
-        """Derive a Fernet key from a password and salt."""
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt.encode("utf-8"),
-            iterations=100000,
-        )
-        return base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
+        """Derive a Fernet key from a password and salt (registry crypto)."""
+        return self.registry.derive_fernet_key(password, salt)
 
     def hash_password(self, password: str, salt: str | None = None) -> tuple[str, str]:
-        if salt is None:
-            salt = secrets.token_hex(16)
-
-        pw_hash = hashlib.pbkdf2_hmac(
-            "sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000
-        ).hex()
-        return pw_hash, salt
+        """PBKDF2 hash + salt (registry crypto)."""
+        return self.registry.hash_password(password, salt)
 
     def _get_enrollment_secret(self, password: str, salt: str) -> str:
-        """Generate a deterministic but strong secret for the TAK enrollment CSR."""
-        combined = f"{password}:{salt}:enrollment"
-        return hashlib.sha256(combined.encode("utf-8")).hexdigest()[:16]
+        """Deterministic but strong secret for the TAK enrollment CSR."""
+        return self.registry.get_enrollment_secret(password, salt)
 
     def validate_password_strength(self, password: str, username: str) -> bool:
-        """
-        Validate password strength.
-        Minimum 8 characters, must not be 'atakatak', username, or empty.
-        """
-        if not password or len(password) < 8:
-            return False
-        if password.lower() in ["atakatak", username.lower()]:
-            return False
-        return True
+        """Minimum 8 chars, must not be 'atakatak', username, or empty."""
+        return self.registry.validate_password_strength(password, username)
 
     def upload_p12(
         self,
@@ -298,6 +281,10 @@ class AuthManager:
 
             cert = x509.load_pem_x509_certificate(cert_data)
             cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+            org_attrs = cert.subject.get_attributes_for_oid(
+                x509.NameOID.ORGANIZATION_NAME
+            )
+            org = str(org_attrs[0].value) if org_attrs else None
             expiry = cert.not_valid_after_utc
 
             now = datetime.now(UTC)
@@ -312,6 +299,7 @@ class AuthManager:
 
             return {
                 "cn": cn,
+                "org": org,
                 "expiry": expiry.isoformat(),
                 "status": status,
                 "days_left": delta.days,
@@ -569,19 +557,25 @@ class AuthManager:
     def wipe_ephemeral(self) -> None:
         """Wipe per-user credential storage.
 
-        Without FORCE_SERVER the pinned server is reset too, so the next
-        enrollment after wiping the last certificate decides the server anew.
+        The pinned server is reset only when the *last* certificate in the
+        storage is gone (multiuser: last user's cert), unless FORCE_SERVER
+        is set. This lets a fresh enrollment decide the server anew.
         """
         self.failed_attempts = 0
         self._storage_key = None
         self._callsign = ""
         self._color = ""
         self._role = ""
-        if not settings.force_server and os.path.exists(self.pinned_server_file):
-            os.remove(self.pinned_server_file)
         for f in [self.cert_file, self.key_file, self.ca_file, self.creds_file]:
             if os.path.exists(f):
                 os.remove(f)
+        if (
+            not settings.force_server
+            and not os.path.exists(self.cert_file)
+            and not self.registry.any_certificates_remain()
+            and os.path.exists(self.pinned_server_file)
+        ):
+            os.remove(self.pinned_server_file)
         logger.info("Ephemeral storage wiped.")
 
 

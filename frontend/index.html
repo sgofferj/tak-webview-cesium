@@ -814,6 +814,15 @@
         margin-top: 15px;
         color: #ff4444;
       }
+      #authServerInfo {
+        margin-bottom: 15px;
+        padding: 10px;
+        background: #000;
+        border: 1px solid #444;
+        color: #bbb;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
       .auth-choice-row {
         display: flex;
         gap: 10px;
@@ -1351,6 +1360,11 @@
       />
       <div id="authContent">
         <h2 id="authTitle">TAK Login</h2>
+
+        <!-- Pinned/forced TAK server shown instead of the server input fields -->
+        <div id="authServerInfo" class="hidden">
+          TAK Server: <span id="authServerName"></span>
+        </div>
 
         <!-- Choice Screen -->
         <div id="authChoiceForm" class="hidden">

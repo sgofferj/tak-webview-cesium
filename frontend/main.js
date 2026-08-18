@@ -279,9 +279,11 @@ export async function checkAuth() {
     const status = await resp.json();
 
     // Single-server pinning: once a server is decided (FORCE_SERVER or the
-    // first enrollment/upload), it is fixed for the install and the server
-    // fields are hidden from the enrollment/upload dialogs.
+    // first enrollment/upload), it is fixed for the install. The server input
+    // fields are hidden and the pinned server is shown as text instead.
     const decidedServer = status.forceServer || status.pinnedServer || null;
+    const serverInfo = document.getElementById("authServerInfo");
+    const serverName = document.getElementById("authServerName");
     for (const id of ["enrollServer", "uploadServer"]) {
       const el = document.getElementById(id);
       if (decidedServer) {
@@ -291,6 +293,12 @@ export async function checkAuth() {
         el.value = "";
         el.style.display = "";
       }
+    }
+    if (decidedServer) {
+      serverName.textContent = decidedServer;
+      serverInfo.classList.remove("hidden");
+    } else {
+      serverInfo.classList.add("hidden");
     }
 
     if (status.authenticated) {
@@ -322,7 +330,9 @@ function updateStatus(status) {
     const cn = document.getElementById("certCN");
     const expiry = document.getElementById("certExpiry");
     if (cn) {
-      cn.innerText = status.cert.cn;
+      // Show the cert organization (O) instead of the CN/username so the
+      // login identity is not exposed on screen.
+      cn.innerText = status.cert.org || status.cert.cn;
       cn.className = `status-${status.cert.status}`;
     }
     if (expiry) {

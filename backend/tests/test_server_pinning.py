@@ -1,3 +1,4 @@
+import os
 import types
 
 import pytest
@@ -65,6 +66,17 @@ def test_pin_reset_on_wipe_without_force(manager: AuthManager) -> None:
     manager.pin_server("tak.example.com")
     manager.wipe_ephemeral()
     assert manager.get_pinned_server() is None
+
+
+def test_pin_kept_when_other_cert_remains(manager: AuthManager) -> None:
+    """Multiuser: wiping one user keeps the pin while other certs exist."""
+    manager.pin_server("tak.example.com")
+    cert_path = os.path.join(manager.registry.user_dir("other"), "cert.pem")
+    os.makedirs(os.path.dirname(cert_path), exist_ok=True)
+    with open(cert_path, "w", encoding="utf-8") as f:
+        f.write("dummy")
+    manager.wipe_ephemeral()
+    assert manager.get_pinned_server() == "tak.example.com"
 
 
 def test_pin_kept_on_wipe_with_force(

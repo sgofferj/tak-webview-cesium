@@ -70,6 +70,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # In dynamic session-based mode, the TAK client starts ONLY
     # when a user actively logs in.
     logger.info("Application startup. Waiting for user login to start TAK client.")
+    if settings.force_server:
+        logger.info("Server forced to %s", settings.force_server)
     yield
     # Shutdown
     await tak_client.stop()
