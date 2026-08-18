@@ -119,3 +119,74 @@ async def test_broadcast_minified_json() -> None:
     # Check for minified keys
     assert decoded[KEY_MAP["uid"]] == "test-uid"
     assert decoded[KEY_MAP["callsign"]] == "TestUnit"
+
+
+DELETE_XML = {
+    "valid": (
+        b'<event version="2.0" uid="a60a0594-1" type="t-x-d-d" '
+        b'time="2024-03-04T12:00:00Z" start="2024-03-04T11:59:40Z" '
+        b'stale="2024-03-04T12:00:20Z" how="h-g-i-g-o">'
+        b'<point ce="9999999" le="9999999" hae="0" lat="0" lon="0"/>'
+        b'<detail><link relation="p-p" uid="ANDROID-deadbeef" type="a-f-G-U-C"/>'
+        b"</detail></event>"
+    ),
+    "linkless": (
+        b'<event version="2.0" uid="keepalive" type="t-x-d-d" time="" '
+        b'how="m-g"><point lat="0" lon="0" hae="0"/></event>'
+    ),
+    "missing_attrs": (b'<event version="2.0" uid="u2" type="t-x-d-d" time=""></event>'),
+}
+
+
+def test_parse_delete_valid() -> None:
+    config = Settings()
+    client = TAKClient(config)
+    client._chat_contacts["ANDROID-deadbeef"] = {"callsign": "Alpha"}
+    removed = client._parse_delete(DELETE_XML["valid"])
+    assert removed == ["ANDROID-deadbeef"]
+    assert "ANDROID-deadbeef" not in client._chat_contacts
+
+
+def test_parse_delete_linkless_keepalive_ignored() -> None:
+    config = Settings()
+    client = TAKClient(config)
+    client._chat_contacts["ANDROID-deadbeef"] = {"callsign": "Alpha"}
+    removed = client._parse_delete(DELETE_XML["linkless"])
+    assert removed == []
+    assert "ANDROID-deadbeef" in client._chat_contacts
+
+
+def test_parse_delete_missing_link_attrs_ignored() -> None:
+    config = Settings()
+    client = TAKClient(config)
+    removed = client._parse_delete(DELETE_XML["missing_attrs"])
+    assert removed == []
+
+
+def test_parse_delete_ignores_own_uid() -> None:
+    config = Settings()
+    config.tak_uid = "ANDROID-self"
+    client = TAKClient(config)
+    xml = DELETE_XML["valid"].replace(b"ANDROID-deadbeef", b"ANDROID-self")
+    removed = client._parse_delete(xml)
+    assert removed == []
+
+
+def test_parse_delete_invalid_xml() -> None:
+    config = Settings()
+    client = TAKClient(config)
+    assert client._parse_delete(b"not xml") == []
+
+
+@pytest.mark.asyncio
+async def test_apply_delete_broadcasts_cot_delete() -> None:
+    config = Settings()
+    config.use_msgpack = False
+    client = TAKClient(config)
+    with patch(
+        "app.tak_client.manager.broadcast", new_callable=AsyncMock
+    ) as mock_broadcast:
+        await client._apply_delete(DELETE_XML["valid"])
+    mock_broadcast.assert_called_once()
+    payload = mock_broadcast.call_args[0][0]
+    assert json.loads(payload) == {"cot_delete": ["ANDROID-deadbeef"]}

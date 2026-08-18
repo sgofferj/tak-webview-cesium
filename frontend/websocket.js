@@ -7,9 +7,13 @@
 // You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
 import { decode } from "@msgpack/msgpack";
-import { updateEntity } from "./state.js";
+import { updateEntity, removeEntity } from "./state.js";
 import { checkAuth } from "./main.js";
-import { handleChatMessage, setChatConnected } from "./chat.js";
+import {
+  handleChatMessage,
+  setChatConnected,
+  handleCotDelete,
+} from "./chat.js";
 
 export let ws = null;
 let pulseTimeout = null;
@@ -48,7 +52,14 @@ export function startWebSocket() {
         data = JSON.parse(event.data);
       }
       triggerPulse();
-      updateEntity(data);
+      if (data.cot_delete !== undefined) {
+        for (const uid of data.cot_delete) {
+          removeEntity(uid);
+        }
+        handleCotDelete(data.cot_delete);
+      } else {
+        updateEntity(data);
+      }
       handleChatMessage(data);
     } catch (e) {
       console.error("Error parsing WS message", e);

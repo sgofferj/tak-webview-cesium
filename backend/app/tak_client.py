@@ -739,18 +739,49 @@ class TAKClient:
             return (uid, info)
         return None
 
-    def _apply_delete(self, xml_data: bytes) -> None:
-        """Remove a contact announced as gone via t-x-d-d."""
+    def _parse_delete(self, xml_data: bytes) -> list[str]:
+        """Parse a t-x-d-d delete task and return the UIDs it targets.
+
+        Mirrors ATAK's CotDeleteImporter: acts only when detail/link carries
+        all three attributes (uid, relation, type) non-empty. Link-less
+        t-x-d-d events are keepalives repurposing the codepoint, not deletes,
+        and are ignored. Our own UID is skipped so a remote delete cannot
+        remove our own SA entity.
+        """
+        removed: list[str] = []
         try:
             root = etree.fromstring(xml_data.strip())
-            if root.get("type") != "t-x-d-d":
-                return
-            link = root.find("detail/link")
-            uid = link.get("uid") if link is not None else None
-            if uid:
-                self._chat_contacts.pop(uid, None)
         except etree.LxmlError:
-            pass
+            return removed
+        if root.get("type") != "t-x-d-d":
+            return removed
+        link = root.find("detail/link")
+        if link is None:
+            return removed
+        uid = link.get("uid")
+        relation = link.get("relation")
+        type_ = link.get("type")
+        if not uid or not relation or not type_:
+            return removed
+        if uid == self.config.tak_uid_final:
+            return removed
+        self._chat_contacts.pop(uid, None)
+        removed.append(uid)
+        return removed
+
+    async def _apply_delete(self, xml_data: bytes) -> None:
+        """Handle an inbound t-x-d-d: prune the contact and tell the web
+        clients so the map entity is removed too."""
+        removed = await asyncio.to_thread(self._parse_delete, xml_data)
+        if removed:
+            await self._broadcast_cot_delete(removed)
+
+    async def _broadcast_cot_delete(self, uids: list[str]) -> None:
+        payload: dict[str, Any] = {"cot_delete": uids}
+        if self.config.use_msgpack:
+            await manager.broadcast(msgpack.packb(payload))
+        else:
+            await manager.broadcast(json.dumps(payload))
 
     async def _broadcast_contacts_update(self, uid: str, info: dict[str, Any]) -> None:
         payload: dict[str, Any] = {"contacts_update": {uid: info}}
@@ -886,7 +917,7 @@ class TAKClient:
                                 await self._push_chat(chat)
                                 continue
                         elif b"t-x-d-d" in data:
-                            await asyncio.to_thread(self._apply_delete, data)
+                            await self._apply_delete(data)
 
                         parsed = await asyncio.to_thread(self.parse_cot, data)
                         if parsed:
