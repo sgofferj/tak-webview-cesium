@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import secrets
+import shutil
 from dataclasses import dataclass
 
 from cryptography.fernet import Fernet
@@ -31,6 +32,7 @@ class UserAccount:
     salt: str
     server: str
     cert_expiry: str | None = None
+    uid: str | None = None
 
 
 @dataclass
@@ -104,6 +106,7 @@ class UserRegistry:
                     "salt": account.salt,
                     "server": account.server,
                     "cert_expiry": account.cert_expiry,
+                    "uid": account.uid,
                 },
                 f,
             )
@@ -120,6 +123,7 @@ class UserRegistry:
                 cert_expiry=(
                     str(data["cert_expiry"]) if data.get("cert_expiry") else None
                 ),
+                uid=str(data["uid"]) if data.get("uid") else None,
             )
         except (OSError, json.JSONDecodeError):
             return None
@@ -128,6 +132,63 @@ class UserRegistry:
         path = self._account_path(username)
         if os.path.exists(path):
             os.remove(path)
+
+    # ------------------------------------------------------------------
+    #  Per-user certificate material (encrypted key at rest)
+    # ------------------------------------------------------------------
+
+    def _cert_path(self, username: str) -> str:
+        return os.path.join(self.user_dir(username), "cert.pem")
+
+    def _key_path(self, username: str) -> str:
+        return os.path.join(self.user_dir(username), "cert.key")
+
+    def _ca_path(self, username: str) -> str:
+        return os.path.join(self.user_dir(username), "ca.pem")
+
+    def save_cert(self, username: str, cert_pem: bytes) -> None:
+        os.makedirs(self.user_dir(username), exist_ok=True)
+        with open(self._cert_path(username), "wb") as f:
+            f.write(cert_pem)
+
+    def load_cert(self, username: str) -> bytes | None:
+        try:
+            with open(self._cert_path(username), "rb") as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def save_encrypted_key(self, username: str, blob: bytes) -> None:
+        os.makedirs(self.user_dir(username), exist_ok=True)
+        with open(self._key_path(username), "wb") as f:
+            f.write(blob)
+
+    def load_encrypted_key(self, username: str) -> bytes | None:
+        try:
+            with open(self._key_path(username), "rb") as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def save_ca(self, username: str, ca_pem: bytes) -> None:
+        os.makedirs(self.user_dir(username), exist_ok=True)
+        with open(self._ca_path(username), "wb") as f:
+            f.write(ca_pem)
+
+    def load_ca(self, username: str) -> bytes | None:
+        try:
+            with open(self._ca_path(username), "rb") as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def delete_user(self, username: str) -> None:
+        """Remove all of a single user's records (account, cert, key, CA)."""
+        shutil.rmtree(self.user_dir(username), ignore_errors=True)
+        logger.info("Deleted user '%s' from registry", username)
+
+    def count(self) -> int:
+        return len(self.list_accounts())
 
     def list_accounts(self) -> list[UserAccount]:
         accounts: list[UserAccount] = []
@@ -162,6 +223,17 @@ class UserRegistry:
             if os.path.exists(os.path.join(self.user_dir(name), "cert.pem")):
                 return True
         return False
+
+
+def uid_for_username(username: str) -> str:
+    """Derive a stable, distinct per-user UID from the cert CN (username).
+
+    The username is hashed so it is never transmitted in cleartext as the
+    UID. The hash is deterministic, so the same user always gets the same
+    UID (and it can be verified internally by re-hashing the username).
+    """
+    digest = hashlib.sha256((username or "").strip().encode("utf-8")).hexdigest()
+    return f"CesiumViewer-{digest[:16]}"
 
 
 def encrypt_key_blob(storage_key: bytes, key_bytes: bytes) -> bytes:

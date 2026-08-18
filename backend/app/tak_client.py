@@ -128,12 +128,12 @@ class TAKClient:
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         from .auth import auth_manager
 
-        # Only use ephemeral certs
-        cert_file = os.path.join(self.config.ephemeral_dir, self.config.ephemeral_cert)
-        ca_file = os.path.join(self.config.ephemeral_dir, self.config.ephemeral_ca)
+        # Only use the active user's ephemeral certs
+        cert_bytes = auth_manager.get_cert_bytes()
+        ca_bytes = auth_manager.get_ca_bytes()
 
-        if not os.path.exists(cert_file):
-            raise FileNotFoundError(f"Certificate file missing: {cert_file}")
+        if not cert_bytes:
+            raise FileNotFoundError("Certificate file missing for active user")
 
         logger.info("Initializing secure SSL context (RAM-only key)")
 
@@ -142,11 +142,7 @@ class TAKClient:
         if not key_bytes:
             raise RuntimeError("Failed to decrypt private key in RAM")
 
-        # 2. Read cert from disk
-        with open(cert_file, "rb") as f:
-            cert_bytes = f.read()
-
-        # 3. Use memfd to feed bytes to ssl.load_cert_chain (Linux only)
+        # 2. Use memfd to feed bytes to ssl.load_cert_chain (Linux only)
         fd_cert = os.memfd_create("tak_cert", 0)
         fd_key = os.memfd_create("tak_key", 0)
 
@@ -166,8 +162,14 @@ class TAKClient:
             os.close(fd_cert)
             os.close(fd_key)
 
-        if os.path.exists(ca_file):
-            ctx.load_verify_locations(cafile=ca_file)
+        if ca_bytes:
+            fd_ca = os.memfd_create("tak_ca", 0)
+            try:
+                os.write(fd_ca, ca_bytes)
+                os.lseek(fd_ca, 0, 0)
+                ctx.load_verify_locations(cafile=f"/dev/fd/{fd_ca}")
+            finally:
+                os.close(fd_ca)
         else:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
@@ -716,6 +718,13 @@ class TAKClient:
             "threads": {k: list(v) for k, v in self._chat_threads.items()},
             "contacts": dict(self._chat_contacts),
         }
+
+    def reset_chat(self) -> None:
+        """Drop chat state when the active user changes (multiuser isolation)."""
+        self._chat_threads = {}
+        self._chat_contacts = {}
+        self._last_send_time = cachetools.TTLCache(maxsize=1000, ttl=60)
+        logger.info("Chat state reset (active user changed)")
 
     # ------------------------------------------------------------------
     # Chat contact registry (live SA users, for the DM recipient list)

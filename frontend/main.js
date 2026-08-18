@@ -47,6 +47,10 @@ import {
 import { startWebSocket } from "./websocket.js";
 import { initChat } from "./chat.js";
 let selfInfo = { uid: "", callsign: "" };
+
+// Logged-in username (populated from /api/auth/status). Used to scope the
+// messaging config localStorage key so different users don't share settings.
+let currentUser = null;
 async function init() {
   const authenticated = await checkAuth();
   if (authenticated) {
@@ -277,6 +281,7 @@ export async function checkAuth() {
   try {
     const resp = await fetch("/api/auth/status");
     const status = await resp.json();
+    currentUser = status.username || null;
 
     // Single-server pinning: once a server is decided (FORCE_SERVER or the
     // first enrollment/upload), it is fixed for the install. The server input
@@ -326,6 +331,10 @@ export async function checkAuth() {
 }
 
 function updateStatus(status) {
+  const userEl = document.getElementById("statusUser");
+  if (userEl) {
+    userEl.innerText = status.username ? `User: ${status.username}` : "";
+  }
   if (status.cert) {
     const cn = document.getElementById("certCN");
     const expiry = document.getElementById("certExpiry");
@@ -456,7 +465,9 @@ function setupAuthEvents() {
   const configSave = document.getElementById("configSave");
   const configCancel = document.getElementById("configCancel");
 
-  const selfInfoKey = "messagingConfig";
+  const selfInfoKey = currentUser
+    ? `messagingConfig.${currentUser}`
+    : "messagingConfig";
   // Profile pushed by the TAK server on enrollment (takes priority over
   // localStorage, if present).
   let pendingServerProfile = null;
@@ -675,7 +686,9 @@ function setupAuthEvents() {
       } catch {
         console.error("Forget failed");
       }
-      localStorage.removeItem("messagingConfig");
+      localStorage.removeItem(
+        currentUser ? `messagingConfig.${currentUser}` : "messagingConfig",
+      );
       location.reload();
     }
   });
@@ -1359,7 +1372,9 @@ if (chatToggle && chatPanel) {
 }
 
 async function loadMessagingConfig() {
-  const selfInfoKey = "messagingConfig";
+  const selfInfoKey = currentUser
+    ? `messagingConfig.${currentUser}`
+    : "messagingConfig";
   let cfg = null;
 
   // 1. Try localStorage first

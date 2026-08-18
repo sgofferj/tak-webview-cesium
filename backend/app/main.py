@@ -130,10 +130,21 @@ class EnrollRequest(BaseModel):
 @app.get("/api/auth/status")
 async def auth_status(request: Request) -> dict[str, Any]:
     authenticated = request.session.get("authenticated", False)
+    username = tracker.username_for(request.session.get("sid"))
+    if authenticated and username:
+        enrolled = auth_manager.is_user_enrolled(username)
+        cert = auth_manager.get_cert_info(username)
+        user_server = auth_manager.user_server(username)
+    else:
+        enrolled = auth_manager.is_enrolled()
+        cert = None
+        user_server = None
     return {
-        "enrolled": auth_manager.is_enrolled(),
+        "enrolled": enrolled,
         "authenticated": authenticated,
-        "cert": auth_manager.get_cert_info(),
+        "username": username,
+        "cert": cert,
+        "userServer": user_server,
         "pinnedServer": auth_manager.get_pinned_server(),
         "forceServer": settings.force_server,
     }
@@ -148,20 +159,27 @@ async def auth_enroll(req: EnrollRequest, request: Request) -> dict[str, Any]:
             detail="TAK Server does not match the server pinned for this install",
         )
     assert server is not None
+    prev = auth_manager.active_user
     success = await auth_manager.enroll(server, req.username, req.password)
     if not success:
         raise HTTPException(status_code=401, detail="Enrollment failed")
 
     # Automatically authenticate after enrollment
     request.session["authenticated"] = True
+    request.session["username"] = req.username
     request.session["sid"] = secrets.token_hex(16)
-    tracker.register(request.session["sid"])
-    auth_manager.failed_attempts = 0
+    tracker.register(request.session["sid"], req.username)
+    auth_manager.reset_failed_logins(req.username)
+    reset_chat_on_user_switch(prev)
     # TAK client will start when messaging config is saved
-    reset_messaging_config()
+    reset_messaging_config(req.username)
     # Return the server-pushed profile (if any) so the frontend can prefill
     # the config popup: server profile > localStorage > defaults.
-    return {"status": "success", "profile": auth_manager.enrollment_profile}
+    return {
+        "status": "success",
+        "username": req.username,
+        "profile": auth_manager.enrollment_profile,
+    }
 
 
 @app.post("/api/auth/upload-p12")
@@ -181,6 +199,7 @@ async def auth_upload_p12(
         )
     assert decided_server is not None
     p12_data = await file.read()
+    prev = auth_manager.active_user
     username = auth_manager.upload_p12(p12_data, password, new_password, decided_server)
     if not username:
         # If decryption fails, we can't extract the username yet.
@@ -191,11 +210,13 @@ async def auth_upload_p12(
 
     # Automatically authenticate after upload
     request.session["authenticated"] = True
+    request.session["username"] = username
     request.session["sid"] = secrets.token_hex(16)
-    tracker.register(request.session["sid"])
-    auth_manager.failed_attempts = 0
+    tracker.register(request.session["sid"], username)
+    auth_manager.reset_failed_logins(username)
+    reset_chat_on_user_switch(prev)
     # TAK client will start when messaging config is saved
-    reset_messaging_config()
+    reset_messaging_config(username)
     return {"status": "success", "username": username}
 
 
@@ -205,24 +226,27 @@ async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Not enrolled")
 
     # Check expiry
-    cert_info = auth_manager.get_cert_info()
+    cert_info = auth_manager.get_cert_info(req.username)
     if cert_info and cert_info.get("status") == "expired":
-        auth_manager.wipe_ephemeral()
+        auth_manager.wipe_user(req.username)
         raise HTTPException(status_code=401, detail="Certificate expired")
 
-    if auth_manager.verify_credentials(req.username, req.password):
+    prev = auth_manager.active_user
+    if auth_manager.login(req.username, req.password):
         request.session["authenticated"] = True
+        request.session["username"] = req.username
         request.session["sid"] = secrets.token_hex(16)
-        tracker.register(request.session["sid"])
-        auth_manager.failed_attempts = 0
+        tracker.register(request.session["sid"], req.username)
+        auth_manager.reset_failed_logins(req.username)
+        reset_chat_on_user_switch(prev)
         # TAK client will start when messaging config is saved
-        return {"status": "success"}
+        return {"status": "success", "username": req.username}
 
-    auth_manager.failed_attempts += 1
-    if auth_manager.failed_attempts >= 3:
-        auth_manager.wipe_ephemeral()
+    attempts = auth_manager.record_failed_login(req.username)
+    if attempts >= 3:
+        auth_manager.wipe_user(req.username)
         request.session.clear()
-        detail = "Max attempts reached. Ephemeral storage wiped."
+        detail = "Max attempts reached. Enrollment wiped."
         raise HTTPException(status_code=401, detail=detail)
 
     raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -232,29 +256,39 @@ async def auth_login(req: LoginRequest, request: Request) -> dict[str, Any]:
 async def auth_logout(request: Request) -> dict[str, Any]:
     """Session logout only - keeps certificates."""
     sid = request.session.get("sid")
+    username = None
     if sid:
-        tracker.unregister(sid)
+        username = tracker.unregister(sid)
     else:
         tracker.reset()
     # Stop the TAK connection only when no web client is left
     if not tracker.active:
         await tak_client.stop()
+    # Drop the RAM-only key once the user's last session is gone
+    if username and not tracker.sessions_for(username):
+        auth_manager.drop_session(username)
     request.session.clear()
     return {"status": "success"}
 
 
 @app.post("/api/auth/logout-wipe")
 async def auth_logout_wipe(request: Request) -> dict[str, Any]:
-    """Full logout and wipe of ephemeral storage."""
+    """Full logout: delete only the logged-in user's records."""
     sid = request.session.get("sid")
+    username = None
     if sid:
-        tracker.unregister(sid)
+        username = tracker.unregister(sid)
     else:
         tracker.reset()
     # Certificates are gone - the connection cannot be sustained
     await tak_client.stop()
-    auth_manager.wipe_ephemeral()
-    reset_messaging_config()
+    if username:
+        auth_manager.wipe_user(username)
+        reset_messaging_config(username)
+    else:
+        # Legacy fallback when the sid could not be attributed
+        auth_manager.wipe_ephemeral()
+        reset_messaging_config(None)
     request.session.clear()
     return {"status": "success"}
 
@@ -270,21 +304,35 @@ async def config() -> dict[str, Any]:
     return await get_app_config()
 
 
-messaging_config: dict[str, str] = {"callsign": "", "color": "", "role": ""}
+# Per-user messaging config (callsign/color/role), RAM only.
+messaging_config: dict[str, dict[str, str]] = {}
 
 
-def reset_messaging_config() -> None:
-    """Clear saved messaging config so the TAK client cannot auto-start.
+def reset_messaging_config(username: str | None) -> None:
+    """Clear the user's saved messaging config so the TAK client cannot
+    auto-start until they confirm a fresh config in the config overlay.
 
     Called when the authentication context changes (new enrollment, upload or
-    full logout) so the TAK client only starts after the user confirms a
-    fresh messaging config in the config overlay.
+    full logout).
     """
-    global messaging_config
-    messaging_config = {"callsign": "", "color": "", "role": ""}
-    settings.tak_callsign_input = ""
-    settings.tak_color = ""
-    settings.tak_role = ""
+    if username:
+        messaging_config.pop(username, None)
+    # If the cleared user is the one driving the connection, clear the runtime
+    # identity so the client cannot start with stale values.
+    if not username or username == auth_manager.active_user:
+        settings.tak_callsign_input = ""
+        settings.tak_color = ""
+        settings.tak_role = ""
+
+
+def reset_chat_on_user_switch(prev: str | None) -> None:
+    """Drop the TAK client's chat state when the active user changed.
+
+    Prevents one user's threads/contacts leaking to the next user while only
+    a single connection exists (multiuser-singleserver).
+    """
+    if auth_manager.active_user != prev:
+        tak_client.reset_chat()
 
 
 # ----------------------------------------------------------------------
@@ -293,8 +341,11 @@ def reset_messaging_config() -> None:
 
 
 @app.post("/api/messaging/config")
-async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
-    global messaging_config
+async def set_messaging_config(req: dict[str, str], request: Request) -> dict[str, Any]:
+    username = tracker.username_for(request.session.get("sid"))
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     callsign = req.get("callsign", "") or ""
     color = req.get("color", "") or ""
     role = req.get("role", "") or ""
@@ -307,11 +358,16 @@ async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Invalid colour")
     if role and role not in valid_roles:
         raise HTTPException(status_code=400, detail="Invalid role")
-    messaging_config["callsign"] = callsign
-    messaging_config["color"] = color
-    messaging_config["role"] = role
+    messaging_config[username] = {
+        "callsign": callsign,
+        "color": color,
+        "role": role,
+    }
 
-    # Update settings for TAK client
+    # Activate this user on the single TAK connection and apply their identity
+    prev = auth_manager.active_user
+    auth_manager.activate_user(username)
+    reset_chat_on_user_switch(prev)
     settings.tak_callsign_input = callsign
     settings.tak_color = color
     settings.tak_role = role
@@ -326,8 +382,11 @@ async def set_messaging_config(req: dict[str, str]) -> dict[str, Any]:
 
 
 @app.get("/api/messaging/config")
-async def get_messaging_config() -> dict[str, str]:
-    return dict(messaging_config)
+async def get_messaging_config(request: Request) -> dict[str, str]:
+    username = tracker.username_for(request.session.get("sid"))
+    if not username:
+        return {}
+    return dict(messaging_config.get(username, {}))
 
 
 @app.get("/iconsets")
@@ -354,6 +413,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         return
 
     sid = session["sid"]
+    username = tracker.username_for(sid)
+    if not username:
+        await websocket.accept()
+        await websocket.close(code=4001)
+        return
     tracker.ws_opened(sid)
     try:
         await manager.connect(websocket)
@@ -361,9 +425,16 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         tracker.ws_closed(sid)
         return
     # A web client is now viewing: make sure the TAK connection is up.
-    # Only start if messaging config has been saved (callsign + color + role)
+    # Only start if this user saved a messaging config (callsign+color+role).
     if not tak_client.is_running:
-        if settings.tak_callsign_input and settings.tak_color and settings.tak_role:
+        cfg = messaging_config.get(username)
+        if cfg and cfg.get("callsign") and cfg.get("color") and cfg.get("role"):
+            prev = auth_manager.active_user
+            auth_manager.activate_user(username)
+            reset_chat_on_user_switch(prev)
+            settings.tak_callsign_input = cfg["callsign"]
+            settings.tak_color = cfg["color"]
+            settings.tak_role = cfg["role"]
             await tak_client.start()
         else:
             logger.info("TAK client not started: messaging config not set")

@@ -11,7 +11,6 @@ import io
 import json
 import logging
 import os
-import secrets
 import zipfile
 from datetime import UTC, datetime
 from typing import Any
@@ -24,7 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from lxml import etree
 
 from .config import settings
-from .users import UserRegistry
+from .users import UserRegistry, uid_for_username
 
 logger = logging.getLogger("tak-webview.auth")
 
@@ -32,30 +31,29 @@ logger = logging.getLogger("tak-webview.auth")
 class AuthManager:
     def __init__(self) -> None:
         self.ephemeral_dir = settings.ephemeral_dir
-        self.creds_file = os.path.join(self.ephemeral_dir, settings.ephemeral_creds)
         self.pinned_server_file = os.path.join(self.ephemeral_dir, "pinned_server.json")
         self.registry = UserRegistry(self.ephemeral_dir)
 
-        self.cert_file = os.path.join(self.ephemeral_dir, settings.ephemeral_cert)
-        self.key_file = os.path.join(self.ephemeral_dir, settings.ephemeral_key)
-        self.ca_file = os.path.join(self.ephemeral_dir, settings.ephemeral_ca)
-
         os.makedirs(self.ephemeral_dir, exist_ok=True)
-        self.failed_attempts = 0
-        # This will now store the master STORAGE_KEY instead of the cleartext password
-        self._storage_key: bytes | None = None
-        self._callsign = ""
-        self._color = ""
-        self._role = ""
+        # RAM-only per-user storage keys (decrypted Fernet keys), keyed by username
+        self._sessions: dict[str, Any] = {}
+        # One-shot enrollment profiles per user (callsign/color/role from
+        # the TAK server)
+        self._enrollment_profiles: dict[str, dict[str, str]] = {}
+        # Per-user failed login counters
+        self._failed_attempts: dict[str, int] = {}
+        # The user currently driving the single TAK connection
+        self.active_user: str | None = None
 
     @property
     def enrollment_profile(self) -> dict[str, str]:
         """Callsign/color/role from the last successful enrollment profile."""
-        return {
-            "callsign": self._callsign,
-            "color": self._color,
-            "role": self._role,
-        }
+        username = self.active_user
+        if not username:
+            return {"callsign": "", "color": "", "role": ""}
+        return self._enrollment_profiles.get(
+            username, {"callsign": "", "color": "", "role": ""}
+        )
 
     def get_pinned_server(self) -> str | None:
         """The install-level TAK server chosen by the first enrollment/upload."""
@@ -158,10 +156,7 @@ class AuthManager:
             else:
                 final_password = current_password
 
-            # 4. Save everything in our format
-            self.wipe_ephemeral()
-
-            # Derive storage key
+            # Save everything in our format (per-user, key encrypted at rest)
             _, salt = self.hash_password(final_password)
             storage_key = self._derive_fernet_key(final_password, salt)
 
@@ -171,30 +166,40 @@ class AuthManager:
                 format=serialization.PrivateFormat.PKCS8,
                 encryption_algorithm=serialization.NoEncryption(),
             )
-            f_box = Fernet(storage_key)
-            encrypted_key_blob = f_box.encrypt(key_bytes)
+            encrypted_key_blob = Fernet(storage_key).encrypt(key_bytes)
 
             # Convert certificate to PEM
             cert_pem = certificate.public_bytes(serialization.Encoding.PEM)
+            expiry = certificate.not_valid_after_utc.isoformat()
 
-            # Write files
-            with open(self.key_file, "wb") as f:
-                f.write(encrypted_key_blob)
-
-            with open(self.cert_file, "wb") as f:
-                f.write(cert_pem)
-
+            self.registry.save_cert(username, cert_pem)
+            self.registry.save_encrypted_key(username, encrypted_key_blob)
             if additional_certificates:
-                with open(self.ca_file, "wb") as f:
-                    for ca in additional_certificates:
-                        f.write(ca.public_bytes(serialization.Encoding.PEM))
-                        f.write(b"\n")
+                ca_pem = (
+                    b"\n".join(
+                        ca.public_bytes(serialization.Encoding.PEM)
+                        for ca in additional_certificates
+                    )
+                    + b"\n"
+                )
+                self.registry.save_ca(username, ca_pem)
 
-            self.save_credentials(username, final_password, server, salt=salt)
-            # Persist the stable per-user UID so the TAK client uses the same
-            # identity that the certificate was enrolled/imported under.
-            settings.tak_uid = settings.uid_for_username(username)
+            self._save_user_credentials(
+                username,
+                final_password,
+                server,
+                salt,
+                expiry,
+                uid_for_username(username),
+            )
             self.pin_server(server)
+            self.login(username, final_password)
+            self.reset_failed_logins(username)
+            self._enrollment_profiles[username] = {
+                "callsign": "",
+                "color": "",
+                "role": "",
+            }
             logger.info("P12 upload for user '%s' successful", username)
             return username
 
@@ -202,63 +207,119 @@ class AuthManager:
             logger.error("P12 import error: %s: %s", type(e).__name__, e)
             return None
 
-    def save_credentials(
-        self, username: str, password: str, server: str, salt: str | None = None
-    ) -> None:
-        """
-        Save login hash and server address.
-        Uses provided salt or generates new one.
-        """
-        pw_hash, salt = self.hash_password(password, salt)
-        self._storage_key = self._derive_fernet_key(password, salt)
+    # ------------------------------------------------------------------
+    #  Per-user account storage and RAM-only sessions
+    # ------------------------------------------------------------------
 
-        data = {
-            "username": username,
-            "hash": pw_hash,
-            "salt": salt,
-            "server": server,
-        }
-        with open(self.creds_file, "w", encoding="utf-8") as f_out:
-            json.dump(data, f_out)
+    def _save_user_credentials(
+        self,
+        username: str,
+        password: str,
+        server: str,
+        salt: str | None,
+        cert_expiry: str | None,
+        uid: str,
+    ) -> None:
+        """Persist the per-user account record (hash + salt + server + UID).
+
+        The storage key is derived from the password and kept in RAM only.
+        """
+        from .users import UserAccount
+
+        pw_hash, salt = self.hash_password(password, salt)
+        self.registry.save_account(
+            UserAccount(
+                username=username,
+                pw_hash=pw_hash,
+                salt=salt,
+                server=server,
+                cert_expiry=cert_expiry,
+                uid=uid,
+            )
+        )
+
+    def _activate(self, username: str, uid: str) -> None:
+        """Make `username` the user driving the single TAK connection."""
+        prev = self.active_user
+        self.active_user = username
+        settings.tak_uid = uid
+        if prev != username:
+            # Switching users must not carry over the previous user's identity
+            self._reset_runtime_identity()
+
+    def _deactivate(self) -> None:
+        """Clear the active user so the TAK client cannot start/resume."""
+        self.active_user = None
+        settings.tak_uid = None
+        self._reset_runtime_identity()
+
+    @staticmethod
+    def _reset_runtime_identity() -> None:
+        settings.tak_callsign_input = ""
+        settings.tak_color = ""
+        settings.tak_role = ""
+
+    def activate_user(self, username: str | None) -> None:
+        """Make `username` the active user (after their messaging config is set)."""
+        if not username:
+            return
+        account = self.registry.get_account(username)
+        uid = account.uid if account and account.uid else uid_for_username(username)
+        self._activate(username, uid)
+
+    def login(self, username: str, password: str) -> bool:
+        """Authenticate against the registry.
+
+        On success a RAM-only UserSession (decrypted key) is created and the
+        user is activated on the single connection.
+        """
+        session = self.registry.verify_credentials(username, password)
+        if not session:
+            return False
+        self._sessions[username] = session
+        account = self.registry.get_account(username)
+        uid = account.uid if account and account.uid else uid_for_username(username)
+        self._activate(username, uid)
+        return True
+
+    def drop_session(self, username: str) -> None:
+        """Drop the RAM-only storage key when the user's last session ends."""
+        self._sessions.pop(username, None)
+        if self.active_user == username:
+            self._deactivate()
+
+    def session_for(self, username: str) -> Any | None:
+        return self._sessions.get(username)
+
+    def is_user_enrolled(self, username: str | None) -> bool:
+        if not username:
+            return False
+        return self.registry.get_account(username) is not None
+
+    def is_enrolled(self) -> bool:
+        """Any user is enrolled in this install."""
+        return self.registry.count() > 0
+
+    def user_server(self, username: str | None) -> str | None:
+        if not username:
+            return None
+        account = self.registry.get_account(username)
+        return account.server if account and account.server else None
+
+    def record_failed_login(self, username: str | None) -> int:
+        if not username:
+            return 0
+        self._failed_attempts[username] = self._failed_attempts.get(username, 0) + 1
+        return self._failed_attempts[username]
+
+    def reset_failed_logins(self, username: str | None) -> None:
+        if username:
+            self._failed_attempts.pop(username, None)
 
     @property
     def enrolled_server(self) -> str | None:
-        if not os.path.exists(self.creds_file):
-            return None
-        try:
-            with open(self.creds_file, encoding="utf-8") as f_in:
-                data = json.load(f_in)
-            server = data.get("server")
-            return str(server) if server is not None else None
-        except (OSError, json.JSONDecodeError):
-            return None
-
-    def verify_credentials(self, username: str, password: str) -> bool:
-        if not os.path.exists(self.creds_file):
-            return False
-
-        try:
-            with open(self.creds_file, encoding="utf-8") as f_in:
-                data = json.load(f_in)
-
-            if data.get("username") != username:
-                return False
-
-            salt = data.get("salt")
-            check_hash, _ = self.hash_password(password, salt)
-            if secrets.compare_digest(check_hash, data.get("hash", "")):
-                # Derive and cache the storage key in RAM only
-                self._storage_key = self._derive_fernet_key(password, salt)
-                return True
-            return False
-        except (OSError, json.JSONDecodeError) as e:
-            logger.error("Failed to verify credentials: %s", e)
-            return False
-
-    def is_enrolled(self) -> bool:
-        return all(
-            os.path.exists(f) for f in [self.cert_file, self.key_file, self.creds_file]
-        )
+        """The active user's TAK server (single connection)."""
+        return self.user_server(self.active_user)
 
     def _ensure_pem_headers(self, cert_str: str, tag: str = "CERTIFICATE") -> bytes:
         cert_str = (cert_str or "").strip()
@@ -271,14 +332,29 @@ class AuthManager:
             cert_str = f"{header}\n{cert_str}\n{footer}"
         return cert_str.encode("utf-8")
 
-    def get_cert_info(self) -> dict[str, Any] | None:
-        if not os.path.exists(self.cert_file):
+    def get_cert_bytes(self, username: str | None = None) -> bytes | None:
+        """The active (or named) user's certificate, for the TLS chain."""
+        name = username or self.active_user
+        if not name:
+            return None
+        return self.registry.load_cert(name)
+
+    def get_ca_bytes(self, username: str | None = None) -> bytes | None:
+        """The active (or named) user's CA bundle, for server verification."""
+        name = username or self.active_user
+        if not name:
+            return None
+        return self.registry.load_ca(name)
+
+    def get_cert_info(self, username: str | None = None) -> dict[str, Any] | None:
+        username = username or self.active_user
+        if not username:
+            return None
+        cert_data = self.registry.load_cert(username)
+        if not cert_data:
             return None
 
         try:
-            with open(self.cert_file, "rb") as f:
-                cert_data = f.read()
-
             cert = x509.load_pem_x509_certificate(cert_data)
             cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
             org_attrs = cert.subject.get_attributes_for_oid(
@@ -308,21 +384,23 @@ class AuthManager:
             logger.error("Failed to read cert info: %s", e)
             return None
 
-    def get_private_key(self) -> bytes | None:
-        """Decrypt the private key from disk into RAM."""
-        if not os.path.exists(self.key_file):
-            logger.error("Private key file missing on disk")
+    def get_private_key(self, username: str | None = None) -> bytes | None:
+        """Decrypt the user's private key into RAM using their RAM-only key."""
+        username = username or self.active_user
+        if not username:
+            logger.error("No active user for private key")
             return None
-        if not self._storage_key:
-            logger.error("Storage key not initialized in RAM (not logged in?)")
+        encrypted_key = self.registry.load_encrypted_key(username)
+        if not encrypted_key:
+            logger.error("Private key file missing for user '%s' on disk", username)
+            return None
+        session = self._sessions.get(username)
+        if not session:
+            logger.error("No RAM session for user '%s' (not logged in?)", username)
             return None
 
         try:
-            with open(self.key_file, "rb") as f:
-                encrypted_key = f.read()
-
-            f_box = Fernet(self._storage_key)
-            decrypted = f_box.decrypt(encrypted_key)
+            decrypted = Fernet(session.storage_key).decrypt(encrypted_key)
             return bytes(decrypted) if decrypted is not None else None
         except Exception as e:
             logger.error(
@@ -363,9 +441,9 @@ class AuthManager:
 
     def _parse_profile_package(self, data: bytes) -> dict[str, str]:
         """Extract callsign/color/role from a profile.zip mission package."""
-        self._callsign = ""
-        self._color = ""
-        self._role = ""
+        callsign = ""
+        color = ""
+        role = ""
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as zf:
                 for name in zf.namelist():
@@ -379,21 +457,20 @@ class AuthManager:
                         key = entry.get("key")
                         if entry.text:
                             value = entry.text.strip()
-                            if key == "locationCallsign" and self._callsign == "":
-                                self._callsign = value
-                            elif key == "locationTeam" and self._color == "":
-                                self._color = value
-                            elif key == "atakRoleType" and self._role == "":
-                                self._role = value
+                            if key == "locationCallsign" and callsign == "":
+                                callsign = value
+                            elif key == "locationTeam" and color == "":
+                                color = value
+                            elif key == "atakRoleType" and role == "":
+                                role = value
         except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
             logger.warning("Profile package is not a valid zip: %s", e)
-        return {"callsign": self._callsign, "color": self._color, "role": self._role}
+        return {"callsign": callsign, "color": color, "role": role}
 
     async def enroll(self, server: str, username: str, password: str) -> bool:
         """Enroll the client with a TAK server."""
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-        self.wipe_ephemeral()
-        uid = settings.uid_for_username(username)
+        uid = uid_for_username(username)
         base_url = f"https://{server}:{settings.tak_enroll_port}/Marti/api/tls"
 
         # Initialize salt early for enrollment secret derivation
@@ -513,39 +590,38 @@ class AuthManager:
                     format=serialization.PrivateFormat.PKCS8,
                     encryption_algorithm=serialization.NoEncryption(),
                 )
-                f_box = Fernet(storage_key)
-                encrypted_key_blob = f_box.encrypt(key_bytes)
+                encrypted_key_blob = Fernet(storage_key).encrypt(key_bytes)
 
-                # Write files
-                with open(self.key_file, "wb") as f:  # noqa: ASYNC101
-                    f.write(encrypted_key_blob)
-
-                with open(self.cert_file, "wb") as f:  # noqa: ASYNC101
-                    f.write(client_cert_pem)
-
+                # Store per-user
+                self.registry.save_encrypted_key(username, encrypted_key_blob)
+                self.registry.save_cert(username, client_cert_pem)
                 if ca_certs:
-                    with open(self.ca_file, "wb") as f:  # noqa: ASYNC101
-                        for cert in ca_certs:
-                            f.write(cert)
-                            f.write(b"\n")
+                    ca_pem = b"\n".join(ca_certs) + b"\n"
+                    self.registry.save_ca(username, ca_pem)
 
-                self.save_credentials(username, password, server, salt=salt)
+                try:
+                    cert = x509.load_pem_x509_certificate(client_cert_pem)
+                    cert_expiry = cert.not_valid_after_utc.isoformat()
+                except Exception:
+                    cert_expiry = None
 
-                # Persist the stable per-user UID so the TAK client uses the
-                # same identity the certificate was enrolled under.
-                settings.tak_uid = uid
-
+                self._save_user_credentials(
+                    username, password, server, salt, cert_expiry, uid
+                )
                 self.pin_server(server)
+                self.login(username, password)
+                self.reset_failed_logins(username)
 
                 # Fetch the enrollment-time device profile (callsign/color/role)
                 # and keep it for the frontend to prefill the config popup.
                 profile = await self._fetch_enrollment_profile(
                     client, base_url, uid, auth
                 )
-                if profile:
-                    self._callsign = profile.get("callsign", "")
-                    self._color = profile.get("color", "")
-                    self._role = profile.get("role", "")
+                self._enrollment_profiles[username] = profile or {
+                    "callsign": "",
+                    "color": "",
+                    "role": "",
+                }
 
                 logger.info("Enrollment successful")
                 return True
@@ -554,28 +630,46 @@ class AuthManager:
             logger.error("Enrollment error: %s", e)
             return False
 
-    def wipe_ephemeral(self) -> None:
-        """Wipe per-user credential storage.
+    def _reset_pin_if_last_cert(self) -> None:
+        """Reset the pinned server once the last certificate is gone.
 
-        The pinned server is reset only when the *last* certificate in the
-        storage is gone (multiuser: last user's cert), unless FORCE_SERVER
-        is set. This lets a fresh enrollment decide the server anew.
+        FORCE_SERVER keeps the pin forever.
         """
-        self.failed_attempts = 0
-        self._storage_key = None
-        self._callsign = ""
-        self._color = ""
-        self._role = ""
-        for f in [self.cert_file, self.key_file, self.ca_file, self.creds_file]:
-            if os.path.exists(f):
-                os.remove(f)
         if (
             not settings.force_server
-            and not os.path.exists(self.cert_file)
             and not self.registry.any_certificates_remain()
             and os.path.exists(self.pinned_server_file)
         ):
             os.remove(self.pinned_server_file)
+
+    def wipe_user(self, username: str | None) -> None:
+        """Delete a single user's records and drop their RAM-only session.
+
+        Other users' data is never touched (logout-wipe isolation). The
+        pinned server is reset only when the *last* certificate is gone.
+        """
+        if not username:
+            return
+        self.drop_session(username)
+        self._failed_attempts.pop(username, None)
+        self._enrollment_profiles.pop(username, None)
+        self.registry.delete_user(username)
+        self._reset_pin_if_last_cert()
+        logger.info("User '%s' wiped.", username)
+
+    def wipe_ephemeral(self) -> None:
+        """Wipe the whole install (all users, RAM sessions, pin).
+
+        Used by legacy paths and tests; logout-wipe normally only touches the
+        logged-in user via wipe_user().
+        """
+        self._sessions.clear()
+        self._enrollment_profiles.clear()
+        self._failed_attempts.clear()
+        self._deactivate()
+        for account in self.registry.list_accounts():
+            self.registry.delete_user(account.username)
+        self._reset_pin_if_last_cert()
         logger.info("Ephemeral storage wiped.")
 
 
