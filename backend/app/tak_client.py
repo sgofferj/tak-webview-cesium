@@ -18,6 +18,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 import cachetools
@@ -28,6 +29,21 @@ from .config import Settings, settings
 from .connection import manager
 
 logger = logging.getLogger("tak-webview.tak")
+
+
+@dataclass
+class Identity:
+    """Per-user identity a TAKClient announces to the TAK server."""
+
+    username: str
+    uid: str
+    callsign: str
+    color: str = ""
+    role: str = ""
+    server: str = ""
+
+    def changed(self, callsign: str, color: str, role: str) -> bool:
+        return callsign != self.callsign or color != self.color or role != self.role
 
 
 # Key mapping for minification
@@ -81,10 +97,22 @@ class TAKClient:
     def __init__(
         self,
         config: Settings = settings,
+        identity: Identity | None = None,
         on_cot: Callable[[Any], Any] | Callable[[Any], Awaitable[Any]] | None = None,
     ) -> None:
         self.config = config
         self.on_cot = on_cot
+        # Per-user identity. When not provided (e.g. legacy/test construction)
+        # fall back to the global settings so parsing/broadcast still work.
+        self.identity = identity or Identity(
+            username="",
+            uid=config.tak_uid_final,
+            callsign=config.tak_callsign_input or config.tak_callsign,
+            color=config.tak_color,
+            role=config.tak_role,
+            server=config.tak_host,
+        )
+        self.username = self.identity.username
         self._stop = False
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
@@ -122,15 +150,15 @@ class TAKClient:
     @property
     def chat_callsign(self) -> str:
         """Callsign used for chat: the user-configured one when set."""
-        return self.config.tak_callsign_input or self.config.tak_callsign
+        return self.identity.callsign or self.config.tak_callsign
 
     def _get_ssl_context(self) -> ssl.SSLContext:
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         from .auth import auth_manager
 
-        # Only use the active user's ephemeral certs
-        cert_bytes = auth_manager.get_cert_bytes()
-        ca_bytes = auth_manager.get_ca_bytes()
+        # Only use this user's ephemeral certs
+        cert_bytes = auth_manager.get_cert_bytes(self.username)
+        ca_bytes = auth_manager.get_ca_bytes(self.username)
 
         if not cert_bytes:
             raise FileNotFoundError("Certificate file missing for active user")
@@ -138,7 +166,7 @@ class TAKClient:
         logger.info("Initializing secure SSL context (RAM-only key)")
 
         # 1. Get decrypted key from AuthManager (RAM only)
-        key_bytes = auth_manager.get_private_key()
+        key_bytes = auth_manager.get_private_key(self.username)
         if not key_bytes:
             raise RuntimeError("Failed to decrypt private key in RAM")
 
@@ -189,7 +217,7 @@ class TAKClient:
 
         cot = etree.Element("event")
         cot.set("version", "2.0")
-        cot.set("uid", self.config.tak_uid_final)
+        cot.set("uid", self.identity.uid)
         cot.set("type", "a-f-G-U-C")
         cot.set("how", "m-g")
         cot.set("time", now_str)
@@ -211,8 +239,8 @@ class TAKClient:
 
         # Add __group for TAK server (color, not cert group)
         group = etree.SubElement(detail, "__group")
-        group.set("name", self.config.tak_color or self.config.tak_group_color)
-        group.set("role", self.config.tak_role or "Team Member")
+        group.set("name", self.identity.color or self.config.tak_group_color)
+        group.set("role", self.identity.role or "Team Member")
         status = etree.SubElement(detail, "status")
         status.set("battery", "100")
 
@@ -232,7 +260,7 @@ class TAKClient:
 
         ping = etree.Element("event")
         ping.set("version", "2.0")
-        ping.set("uid", f"{self.config.tak_uid_final}-ping")
+        ping.set("uid", f"{self.identity.uid}-ping")
         ping.set("type", "t-x-c-t")
         ping.set("how", "m-g")
         ping.set("time", now_str)
@@ -279,7 +307,7 @@ class TAKClient:
         detail = etree.SubElement(event, "detail")
         link = etree.SubElement(detail, "link")
         link.set("relation", "p-p")
-        link.set("uid", self.config.tak_uid_final)
+        link.set("uid", self.identity.uid)
         link.set("type", "a-f-G-U-C")
         return event
 
@@ -521,7 +549,7 @@ class TAKClient:
         grp = chat_el.find("chatgrp")
         uid0 = grp.get("uid0") if grp is not None else None
         uid1 = grp.get("uid1") if grp is not None else None
-        my_uid = self.config.tak_uid_final
+        my_uid = self.identity.uid
 
         # DM vs room: room messages carry the room as chatgrp id and/or use
         # parent TeamGroups. DMs carry the two participant uids.
@@ -585,7 +613,7 @@ class TAKClient:
         a uid0/uid1 chatgrp, a p-p link to the sender, and remarks@source.
         Classic-format chat relays but ATAK 5.8 does not display it.
         """
-        my_uid = self.config.tak_uid_final
+        my_uid = self.identity.uid
         is_dm = bool(peer_uid)
         target = peer_uid or room or CHAT_ROOM_ALL
         grp_id = target
@@ -678,7 +706,7 @@ class TAKClient:
             "kind": "dm" if peer_uid else "room",
             "message_id": message_id,
             "sender": self.chat_callsign,
-            "sender_uid": self.config.tak_uid_final,
+            "sender_uid": self.identity.uid,
             "peer": peer_uid,
             "text": text,
             "self": True,
@@ -704,15 +732,15 @@ class TAKClient:
     async def _broadcast_chat(self, chat: dict[str, Any]) -> None:
         payload: dict[str, Any] = {"chat": chat}
         if self.config.use_msgpack:
-            await manager.broadcast(msgpack.packb(payload))
+            await manager.broadcast(msgpack.packb(payload), username=self.username)
         else:
-            await manager.broadcast(json.dumps(payload))
+            await manager.broadcast(json.dumps(payload), username=self.username)
 
     def chat_snapshot(self) -> dict[str, Any]:
         """Full chat state for a freshly connected web client."""
         return {
             "self": {
-                "uid": self.config.tak_uid_final,
+                "uid": self.identity.uid,
                 "callsign": self.chat_callsign,
             },
             "threads": {k: list(v) for k, v in self._chat_threads.items()},
@@ -734,7 +762,7 @@ class TAKClient:
     ) -> tuple[str, dict[str, Any]] | None:
         """Track a live SA contact; returns (uid, info) when new/changed."""
         uid = parsed["uid"]
-        if uid == self.config.tak_uid_final:
+        if uid == self.identity.uid:
             return None
         info = {
             "callsign": parsed.get("callsign") or uid,
@@ -772,7 +800,7 @@ class TAKClient:
         type_ = link.get("type")
         if not uid or not relation or not type_:
             return removed
-        if uid == self.config.tak_uid_final:
+        if uid == self.identity.uid:
             return removed
         self._chat_contacts.pop(uid, None)
         removed.append(uid)
@@ -788,16 +816,16 @@ class TAKClient:
     async def _broadcast_cot_delete(self, uids: list[str]) -> None:
         payload: dict[str, Any] = {"cot_delete": uids}
         if self.config.use_msgpack:
-            await manager.broadcast(msgpack.packb(payload))
+            await manager.broadcast(msgpack.packb(payload), username=self.username)
         else:
-            await manager.broadcast(json.dumps(payload))
+            await manager.broadcast(json.dumps(payload), username=self.username)
 
     async def _broadcast_contacts_update(self, uid: str, info: dict[str, Any]) -> None:
         payload: dict[str, Any] = {"contacts_update": {uid: info}}
         if self.config.use_msgpack:
-            await manager.broadcast(msgpack.packb(payload))
+            await manager.broadcast(msgpack.packb(payload), username=self.username)
         else:
-            await manager.broadcast(json.dumps(payload))
+            await manager.broadcast(json.dumps(payload), username=self.username)
 
     async def _broadcast_if_needed(self, data: dict[str, Any]) -> None:
         uid = data["uid"]
@@ -823,7 +851,7 @@ class TAKClient:
         else:
             payload = json.dumps(minified)
 
-        await manager.broadcast(payload)
+        await manager.broadcast(payload, username=self.username)
 
     @property
     def is_running(self) -> bool:
@@ -841,8 +869,13 @@ class TAKClient:
     async def run(self) -> None:
         from .auth import auth_manager
 
-        # Use the enrolled server if we have one, otherwise fallback to config
-        tak_host = auth_manager.enrolled_server or self.config.tak_host
+        # Use this user's enrolled server if we have one, otherwise fallback
+        # to config.
+        tak_host = (
+            self.identity.server
+            or auth_manager.user_server(self.username)
+            or self.config.tak_host
+        )
 
         logger.info(
             f"Connecting to TAK Server at " f"{tak_host}:{self.config.tak_port}"
@@ -900,7 +933,7 @@ class TAKClient:
                                 if (
                                     sender_uid
                                     and sender
-                                    and sender_uid != self.config.tak_uid_final
+                                    and sender_uid != self.identity.uid
                                 ):
                                     info = self._chat_contacts.get(sender_uid)
                                     new_callsign = sender
@@ -1002,16 +1035,15 @@ class TAKClient:
         color: str | None = None,
         role: str | None = None,
     ) -> None:
-        """Update callsign/color/role and restart the connection if running."""
-        if callsign is not None:
-            self.config.tak_callsign_input = callsign
-        if color is not None:
-            self.config.tak_color = color
-        if role is not None:
-            self.config.tak_role = role
+        """Update callsign/color/role and restart the connection if changed."""
+        new_callsign = callsign or self.identity.callsign
+        new_color = color or self.identity.color
+        new_role = role or self.identity.role
+        if not self.identity.changed(new_callsign, new_color, new_role):
+            return
+        self.identity.callsign = new_callsign
+        self.identity.color = new_color
+        self.identity.role = new_role
         # Restart so the new identity is announced to the server
         await self.stop()
         await self.start()
-
-
-tak_client = TAKClient()

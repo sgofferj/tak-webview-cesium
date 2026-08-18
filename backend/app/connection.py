@@ -16,29 +16,47 @@ logger = logging.getLogger("tak-webview.connection")
 
 
 class ConnectionManager:
-    def __init__(self) -> None:
-        self.active_connections: list[WebSocket] = []
+    """Websocket hub that routes payloads to the right users.
 
-    async def connect(self, websocket: WebSocket) -> None:
+    Each connected websocket is tagged with its authenticated username so a
+    TAK client's SA/chat stream only reaches that user's tabs (multiuser
+    isolation). A message sent with username=None is broadcast to everyone,
+    which is only used for legacy/no-user paths.
+    """
+
+    def __init__(self) -> None:
+        self._connections: dict[WebSocket, str] = {}  # ws -> username
+
+    async def connect(self, websocket: WebSocket, username: str) -> None:
         await websocket.accept()
-        self.active_connections.append(websocket)
+        self._connections[websocket] = username
         client_host = websocket.client.host if websocket.client else "unknown"
         logger.info(
-            f"Client {client_host} connected. "
-            f"Active: {len(self.active_connections)}"
+            f"Client {client_host} connected as {username}. "
+            f"Active: {len(self._connections)}"
         )
 
     def disconnect(self, websocket: WebSocket) -> None:
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-            logger.debug(f"Client disconnected. Active: {len(self.active_connections)}")
+        if websocket in self._connections:
+            del self._connections[websocket]
+            logger.debug(f"Client disconnected. Active: {len(self._connections)}")
 
-    async def broadcast(self, message: str | bytes) -> None:
-        if not self.active_connections:
+    def count_for(self, username: str) -> int:
+        """Live websocket count for one user (across all their sessions)."""
+        return sum(1 for user in self._connections.values() if user == username)
+
+    async def broadcast(
+        self, message: str | bytes, username: str | None = None
+    ) -> None:
+        """Send to all websockets of `username`, or to everyone when None."""
+        targets = [
+            ws
+            for ws, user in self._connections.items()
+            if username is None or user == username
+        ]
+        if not targets:
             return
-        await asyncio.gather(
-            *(self._send_safe(conn, message) for conn in self.active_connections)
-        )
+        await asyncio.gather(*(self._send_safe(conn, message) for conn in targets))
 
     async def _send_safe(self, websocket: WebSocket, message: str | bytes) -> None:
         try:
@@ -48,11 +66,11 @@ class ConnectionManager:
                 await websocket.send_text(message)
         except (RuntimeError, AttributeError, WebSocketDisconnect):
             # Connection likely closed, will be handled by disconnect or manual removal
-            if websocket in self.active_connections:
-                self.active_connections.remove(websocket)
+            if websocket in self._connections:
+                del self._connections[websocket]
                 logger.debug(
                     "Send failed, removed connection. "
-                    f"Active: {len(self.active_connections)}"
+                    f"Active: {len(self._connections)}"
                 )
 
 
