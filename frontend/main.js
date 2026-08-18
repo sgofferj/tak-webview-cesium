@@ -314,12 +314,10 @@ export async function checkAuth() {
       return true;
     }
 
-    if (status.enrolled) {
-      loginForm.classList.remove("hidden");
-      document.getElementById("loginUser").focus();
-    } else {
-      choiceForm.classList.remove("hidden");
-    }
+    // Multiuser: when not authenticated, always show the choice screen.
+    // The Login option stays visible even with no account enrolled - a
+    // poor man's tarpit, since login is impossible and fails harmlessly.
+    choiceForm.classList.remove("hidden");
     setupAuthEvents();
     return false;
   } catch (e) {
@@ -380,6 +378,16 @@ function setupAuthEvents() {
     uploadForm.classList.remove("hidden");
     document.getElementById("uploadPass").focus();
   });
+
+  const loginChoice = document.getElementById("choiceLogin");
+  if (loginChoice) {
+    loginChoice.addEventListener("click", () => {
+      choiceForm.classList.add("hidden");
+      const loginForm = document.getElementById("loginForm");
+      if (loginForm) loginForm.classList.remove("hidden");
+      document.getElementById("loginUser").focus();
+    });
+  }
 
   document
     .getElementById("backToChoice1")
