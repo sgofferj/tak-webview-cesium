@@ -1477,18 +1477,18 @@ let ownLocationMarkerImageUrl = null;
 
 function getOwnLocationMarkerImage() {
   if (!ownLocationMarkerImageUrl) {
-    const size = 24;
+    const size = 26;
     const canvas = document.createElement("canvas");
     canvas.width = size;
-    canvas.height = size;
+    canvas.height = size + Math.round(size * 0.05);
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#6cb8ff";
     ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(size / 2, 2);
-    ctx.lineTo(size - 2, size - 2);
-    ctx.lineTo(2, size - 2);
+    ctx.lineTo(size - 2, size);
+    ctx.lineTo(2, size);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
