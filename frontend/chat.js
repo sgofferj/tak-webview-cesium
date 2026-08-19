@@ -18,8 +18,40 @@
 
 import { ws } from "./websocket.js";
 import { i18n } from "./config.js";
+import { renderGoogleIcon } from "./utils.js";
+import { getEntityIconUrl } from "./state.js";
 
 const MAX_PENDING_IDS = 400;
+
+// System room constants (must match the backend's CHAT_ROOM_ALL)
+const ROOM_ALL_KEY = "All Chat Rooms";
+const ROOM_COLORS = new Map([
+    ["White", "#ffffff"],
+    ["Yellow", "#ffff00"],
+    ["Orange", "#ffa500"],
+    ["Magenta", "#ff00ff"],
+    ["Red", "#ff0000"],
+    ["Maroon", "#800000"],
+    ["Purple", "#800080"],
+    ["Cyan", "#00ffff"],
+    ["Blue", "#0000ff"],
+    ["Green", "#00ff00"],
+    ["Dark Green", "#006400"],
+    ["Brown", "#a52a2a"],
+    ["Teal", "#008080"],
+]);
+const ROOM_ROLE_ABBR = {
+    HQ: "HQ",
+    "Team Member": "",
+    "Team Lead": "TL",
+    Sniper: "SN",
+    Medic: "MD",
+    "Forward Observer": "FO",
+    RTO: "RO",
+    K9: "K9",
+    Pilot: "PL",
+    Gateway: "GAT",
+};
 
 // Module state
 const contacts = new Map();        // uid -> {callsign, group_name, group_role, stale}
@@ -27,8 +59,9 @@ const threads = new Map();         // threadKey -> {key, kind, name, messages[],
 const pendingIds = new Map();      // threadKey -> Set(message_id)
 const receiptStatus = new Map();   // message_id -> "delivered" | "read"
 const readSignaled = new Set();    // message_ids a chat_read was already sent for
+const roomIconCache = new Map();   // "kind:key" -> data URL of the room icon
 let selectedThread = null;
-let selfInfo = { uid: "", callsign: "" };
+let selfInfo = { uid: "", callsign: "", color: "", role: "" };
 let chatConnected = false;
 
 /**
@@ -57,9 +90,137 @@ function getThreadDisplayName(threadKey) {
 
     if (thread.kind === "dm") {
         const contact = contacts.get(threadKey);
-        return contact?.callsign || threadKey;
+        return contact?.callsign || thread.name || threadKey;
     }
     return thread.name || threadKey;
+}
+
+/**
+ * Build the data-URL icon for a room channel.
+ * kind is one of "all", "color" or "role".
+ */
+function drawRoomIcon(kind, key) {
+    const cacheKey = `${kind}:${key}`;
+    if (roomIconCache.has(cacheKey)) return roomIconCache.get(cacheKey);
+
+    const size = 28;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    const cx = size / 2;
+    const radius = size / 2 - 1;
+
+    if (kind === "all") {
+        const iconCanvas = renderGoogleIcon("forum", "#ffffff", size, false, false);
+        const iconUrl = iconCanvas.toDataURL("image/png");
+        roomIconCache.set(cacheKey, iconUrl);
+        return iconUrl;
+    }
+
+    if (kind === "color") {
+        ctx.beginPath();
+        ctx.arc(cx, cx, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = ROOM_COLORS.get(key) || "#ffffff";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000000";
+        ctx.stroke();
+    } else if (kind === "role") {
+        const abbr =
+            ROOM_ROLE_ABBR[key] ||
+            (key ? key.substring(0, 3).toUpperCase() : "");
+        ctx.beginPath();
+        ctx.arc(cx, cx, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#000000";
+        ctx.stroke();
+        if (abbr) {
+            ctx.fillStyle = "#000000";
+            ctx.font = `bold ${size * 0.45}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(abbr, cx, cx + 0.5);
+        }
+    }
+
+    const iconUrl = canvas.toDataURL("image/png");
+    roomIconCache.set(cacheKey, iconUrl);
+    return iconUrl;
+}
+
+/**
+ * Whether a channel key is a system room (All Chat Rooms, color or role).
+ */
+function isSystemRoomKey(key) {
+    return (
+        key === ROOM_ALL_KEY ||
+        ROOM_COLORS.has(key) ||
+        Object.prototype.hasOwnProperty.call(ROOM_ROLE_ABBR, key)
+    );
+}
+
+/**
+ * Fitting icon for any room key (system, color, role or generic).
+ */
+function getRoomIcon(key) {
+    if (key === ROOM_ALL_KEY) return drawRoomIcon("all", key);
+    if (ROOM_COLORS.has(key)) return drawRoomIcon("color", key);
+    if (Object.prototype.hasOwnProperty.call(ROOM_ROLE_ABBR, key)) {
+        return drawRoomIcon("role", key);
+    }
+    return drawRoomIcon("all", key);
+}
+
+/**
+ * Icon for a room, preferring an explicit kind ("all" | "color" | "role").
+ */
+function roomIconFor(kind, key) {
+    return kind ? drawRoomIcon(kind, key) : getRoomIcon(key);
+}
+
+/**
+ * System rooms created from the visible roster:
+ * - "All Chat Rooms" unconditionally
+ * - one room per visible color (incl. our own)
+ * - one room per visible role other than "Team Member" (incl. our own)
+ */
+function buildSystemRooms() {
+    const colors = new Set();
+    const roles = new Set();
+    for (const c of contacts.values()) {
+        if (c.group_name) colors.add(c.group_name);
+        if (c.group_role && c.group_role !== "Team Member") roles.add(c.group_role);
+    }
+    if (selfInfo.color) colors.add(selfInfo.color);
+    if (selfInfo.role && selfInfo.role !== "Team Member") roles.add(selfInfo.role);
+
+    const rooms = [
+        { key: ROOM_ALL_KEY, kind: "room", name: ROOM_ALL_KEY, iconKind: "all", icon: roomIconFor("all", ROOM_ALL_KEY) },
+    ];
+    for (const color of colors) {
+        rooms.push({ key: color, kind: "room", name: color, iconKind: "color", icon: roomIconFor("color", color) });
+    }
+    for (const role of roles) {
+        rooms.push({ key: role, kind: "room", name: role, iconKind: "role", icon: roomIconFor("role", role) });
+    }
+    return rooms;
+}
+
+/**
+ * Room channels for the list: system rooms merged with live room threads.
+ */
+function roomChannelList() {
+    const roomThreads = [...threads.values()].filter(t => t.kind !== "dm");
+    const liveKeys = new Set(roomThreads.map(t => t.key));
+    const system = buildSystemRooms().filter(r => !liveKeys.has(r.key));
+    const named = roomThreads.map(t => ({
+        ...t,
+        icon: getRoomIcon(t.key),
+    }));
+    return [...system, ...named];
 }
 
 /**
@@ -111,6 +272,14 @@ export function initChat() {
             }
         });
     }
+
+    // Refresh channel list when a client's map icon becomes available
+    document.addEventListener("cot-icon-ready", (e) => {
+        const uid = e.detail?.uid;
+        if (uid && (contacts.has(uid) || threads.has(uid))) {
+            refreshAll();
+        }
+    });
 }
 
 /**
@@ -147,7 +316,9 @@ function handleChatInit(payload) {
     if (payload.self) {
         selfInfo = {
             uid: payload.self.uid || "",
-            callsign: payload.self.callsign || ""
+            callsign: payload.self.callsign || "",
+            color: payload.self.color || "",
+            role: payload.self.role || ""
         };
     }
 
@@ -279,13 +450,19 @@ function handleContactsUpdate(payload) {
 }
 
 /**
- * Handle cot_delete - remove contacts whose SA was deleted via t-x-d-d
+ * Handle cot_delete - remove contacts (and their DM threads) whose SA
+ * was deleted via t-x-d-d.
  */
 export function handleCotDelete(uids) {
     if (!Array.isArray(uids)) return;
 
     let changed = false;
     for (const uid of uids) {
+        if (threads.delete(uid)) {
+            if (selectedThread === uid) selectedThread = null;
+            pendingIds.delete(uid);
+            changed = true;
+        }
         if (contacts.delete(uid)) {
             changed = true;
         }
@@ -379,7 +556,7 @@ function sendMessage() {
 
     const thread = threads.get(selectedThread);
     const contact = contacts.get(selectedThread);
-    if (!thread && !contact) return;
+    if (!thread && !contact && !isSystemRoomKey(selectedThread)) return;
     const isDM = thread?.kind === "dm" || !!contact;
     const messageId = crypto.randomUUID();
 
@@ -435,7 +612,6 @@ function renderChannelList() {
     if (!container) return;
 
     // Separate rooms and DMs
-    const rooms = [...threads.values()].filter(t => t.kind !== "dm");
     const dms = [...threads.values()].filter(t => t.kind === "dm");
 
     // Also include contacts that don't have a thread yet (for starting new DMs)
@@ -450,9 +626,12 @@ function renderChannelList() {
         }));
 
     let html = '<div class="chat-channel-section">Rooms</div>';
-    for (const t of rooms) {
+    for (const t of roomChannelList()) {
         html += `<div class="chat-channel${t.key === selectedThread ? " active" : ""}" data-key="${escapeHtml(t.key)}">
-            <span>${escapeHtml(getThreadDisplayName(t.key))}</span>
+            <span class="chat-channel-label">
+                ${t.icon ? `<img class="chat-room-icon" src="${t.icon}" alt="">` : ""}
+                <span class="chat-channel-name">${escapeHtml(getThreadDisplayName(t.key))}</span>
+            </span>
             ${t.unread > 0 ? `<span class="chat-badge">${t.unread > 99 ? "99+" : t.unread}</span>` : ""}
         </div>`;
     }
@@ -462,8 +641,12 @@ function renderChannelList() {
     const allDMs = [...dms, ...contactThreads];
     for (const t of allDMs) {
         const isActive = t.key === selectedThread;
+        const icon = getEntityIconUrl(t.key);
         html += `<div class="chat-channel${isActive ? " active" : ""}" data-key="${escapeHtml(t.key)}">
-            <span>${escapeHtml(getThreadDisplayName(t.key))}</span>
+            <span class="chat-channel-label">
+                ${icon ? `<img class="chat-client-icon" src="${icon}" alt="">` : ""}
+                <span class="chat-channel-name">${escapeHtml(getThreadDisplayName(t.key))}</span>
+            </span>
             ${t.unread > 0 ? `<span class="chat-badge">${t.unread > 99 ? "99+" : t.unread}</span>` : ""}
         </div>`;
     }

@@ -1368,6 +1368,9 @@ async function _reconcileCesiumEntity(uid, data) {
       registerBlobUsage(iconUrl);
       state.entity.billboard.image = iconUrl;
       state.lastIconUrl = iconUrl;
+      document.dispatchEvent(
+        new CustomEvent("cot-icon-ready", { detail: { uid } }),
+      );
       if (oldIcon) unregisterBlobUsage(oldIcon);
     }
 
@@ -1382,6 +1385,14 @@ async function _reconcileCesiumEntity(uid, data) {
 
   // Update staff comment matching. This needs to be called after data update
   updateStaffCommentMatching(uid, data, state);
+}
+
+/**
+ * Return the map icon (blob URL) currently shown for a client, or null.
+ * Used by chat to mirror each client's icon in the channel list.
+ */
+export function getEntityIconUrl(uid) {
+  return entityState[uid]?.lastIconUrl || null;
 }
 
 // New function to perform the actual Cesium entity removal
