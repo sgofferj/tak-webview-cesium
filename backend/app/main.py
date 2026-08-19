@@ -49,6 +49,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("tak-webview.main")
 
+# CoT capture logs at DEBUG; raise the tak and main modules to DEBUG when
+# requested so LOG_COTS=true shows traffic and the ws chat_send routing.
+if settings.log_cots:
+    logging.getLogger("tak-webview.tak").setLevel(logging.DEBUG)
+    logging.getLogger("tak-webview.main").setLevel(logging.DEBUG)
+
 
 class HealthCheckLogFilter(logging.Filter):
     """Suppress access-log noise from haproxy alive checks."""
@@ -457,7 +463,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             cs = msg.get("chat_send")
             if not isinstance(cs, dict):
                 continue
-            if not client:
+            # Look the client up per message: the user may have confirmed the
+            # messaging config AFTER this socket connected, so a single
+            # pre-loop lookup could have captured client=None and every send
+            # would be dropped.
+            if client is None:
+                await _start_user_client(username)
+                client = pool.client_for(username)
+            if client is None:
+                logger.warning(
+                    "chat_send dropped for %s: no TAK client bound", username
+                )
                 continue
             logger.debug(
                 "chat_send: room=%s, peer_uid=%s, peer_callsign=%s, text=%s, "

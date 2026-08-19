@@ -316,7 +316,10 @@ class TAKClient:
             if self._writer is None:
                 return
             try:
-                self._writer.write(etree.tostring(root))
+                payload = etree.tostring(root)
+                if self.config.log_cots:
+                    logger.debug("Sending CoT: %s", payload.decode(errors="replace"))
+                self._writer.write(payload)
                 await self._writer.drain()
             except (OSError, RuntimeError) as e:
                 logger.error("Failed to send CoT: %s", e)
