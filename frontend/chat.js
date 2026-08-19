@@ -53,6 +53,14 @@ const ROOM_ROLE_ABBR = {
     Gateway: "GAT",
 };
 
+export function roleAbbr(role) {
+    return ROOM_ROLE_ABBR[role] ?? role;
+}
+
+export function colorHex(color) {
+    return ROOM_COLORS.get(color) || color;
+}
+
 // Module state
 const contacts = new Map();        // uid -> {callsign, group_name, group_role, stale}
 const threads = new Map();         // threadKey -> {key, kind, name, messages[], unread}
