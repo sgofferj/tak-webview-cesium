@@ -12,6 +12,8 @@ import {
   Rectangle,
   Cartographic,
   Math as CesiumMath,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "virtual-select-plugin/dist/virtual-select.min.js";
@@ -45,8 +47,8 @@ import {
   initStateManager,
 } from "./state.js";
 import { startWebSocket } from "./websocket.js";
-import { initChat } from "./chat.js";
-let selfInfo = { uid: "", callsign: "" };
+import { initChat, roleAbbr, colorHex } from "./chat.js";
+let selfInfo = { uid: "", callsign: "", color: "", role: "" };
 
 // Logged-in username (populated from /api/auth/status). Used to scope the
 // messaging config localStorage key so different users don't share settings.
@@ -235,6 +237,7 @@ async function startApp() {
   }
   startWebSocket();
   initChat();
+  initLocationPicker();
   // After websocket starts and entities begin flowing in, we need to ensure their visibility is set
   // before the first general applyFilter from setTabVisibility.
   applyFilter();
@@ -330,9 +333,7 @@ export async function checkAuth() {
 
 function updateStatus(status) {
   const userEl = document.getElementById("statusUser");
-  if (userEl) {
-    userEl.innerText = status.username ? `User: ${status.username}` : "";
-  }
+  if (userEl) renderIdentity();
   if (status.cert) {
     const cn = document.getElementById("certCN");
     const expiry = document.getElementById("certExpiry");
@@ -349,6 +350,24 @@ function updateStatus(status) {
   }
 }
 
+function renderIdentity() {
+  const el = document.getElementById("statusUser");
+  if (!el) return;
+  const username = currentUser || "";
+  const callsign = selfInfo?.callsign || "";
+  const role = selfInfo?.role || "";
+  const parts = [];
+  if (username) parts.push(username);
+  if (callsign) {
+    const color = colorHex(selfInfo?.color || "") || "";
+    const style = color ? ` style="color:${color}"` : "";
+    parts.push(`- <span${style}>${callsign}</span>`);
+  }
+  const abbr = roleAbbr(role);
+  if (abbr) parts.push(`(${abbr})`);
+  el.innerHTML = parts.length ? parts.join(" ") : "";
+}
+
 function setupAuthEvents() {
   if (window.authListenersAttached) return;
   window.authListenersAttached = true;
@@ -357,11 +376,12 @@ function setupAuthEvents() {
   const choiceForm = document.getElementById("authChoiceForm");
   const enrollmentForm = document.getElementById("enrollmentForm");
   const uploadForm = document.getElementById("uploadForm");
+  const loginForm = document.getElementById("loginForm");
   const newPassContainer = document.getElementById("newPassContainer");
 
   const showChoice = () => {
-    [enrollmentForm, uploadForm, choiceForm].forEach((f) =>
-      f.classList.add("hidden"),
+    [loginForm, enrollmentForm, uploadForm, choiceForm].forEach(
+      (f) => f && f.classList.add("hidden"),
     );
     choiceForm.classList.remove("hidden");
     message.classList.add("hidden");
@@ -395,6 +415,10 @@ function setupAuthEvents() {
   document
     .getElementById("backToChoice2")
     .addEventListener("click", showChoice);
+  const backToChoice3 = document.getElementById("backToChoice3");
+  if (backToChoice3) {
+    backToChoice3.addEventListener("click", showChoice);
+  }
 
   const validateStrength = (pw) => {
     if (!pw || pw.length < 8) return false;
@@ -545,6 +569,9 @@ function setupAuthEvents() {
 
     // Sync with chat.js selfInfo
     selfInfo.callsign = callsign;
+    selfInfo.color = color;
+    selfInfo.role = role;
+    renderIdentity();
 
     // Apply color to entities
     applyConfigColor(color);
@@ -1423,5 +1450,199 @@ async function loadMessagingConfig() {
   // Apply config to selfInfo
   selfInfo.callsign = cfg.callsign;
   selfInfo.uid = cfg.callsign; // Use callsign as UID for now
+  selfInfo.color = cfg.color || "";
+  selfInfo.role = cfg.role || "";
+  renderIdentity();
   applyConfigColor(cfg.color);
+}
+
+// ----------------------------------------------------------------------
+//  Own location (set-own-location feature)
+// ----------------------------------------------------------------------
+
+const locationKey = () =>
+  currentUser ? `location.${currentUser}` : "location";
+let ownLocation = null;
+let locationEntity = null;
+let locationHandler = null;
+
+function removeOwnLocationMarker() {
+  if (locationEntity && viewer) {
+    viewer.entities.remove(locationEntity);
+    locationEntity = null;
+  }
+}
+
+let ownLocationMarkerImageUrl = null;
+
+function getOwnLocationMarkerImage() {
+  if (!ownLocationMarkerImageUrl) {
+    const size = 26;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size + Math.round(size * 0.05);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#6cb8ff";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(size / 2, 2);
+    ctx.lineTo(size - 2, size);
+    ctx.lineTo(2, size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ownLocationMarkerImageUrl = canvas.toDataURL();
+  }
+  return ownLocationMarkerImageUrl;
+}
+
+function applyOwnLocationMarker(lat, lon) {
+  if (!viewer) return;
+  removeOwnLocationMarker();
+  locationEntity = viewer.entities.add({
+    position: Cartesian3.fromDegrees(lon, lat),
+    billboard: {
+      image: getOwnLocationMarkerImage(),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+}
+
+async function pushOwnLocation(lat, lon) {
+  try {
+    await fetch("/api/messaging/location", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lon }),
+    });
+  } catch (e) {
+    console.error("Failed to save location:", e);
+  }
+}
+
+function updateStatusLocation() {
+  const el = document.getElementById("statusLocation");
+  if (!el) return;
+  el.innerText = ownLocation
+    ? `Loc: ${ownLocation.lat.toFixed(3)}, ${ownLocation.lon.toFixed(3)}`
+    : "";
+}
+
+function setOwnLocation(lat, lon) {
+  ownLocation = { lat: Number(lat), lon: Number(lon) };
+  localStorage.setItem(locationKey(), JSON.stringify(ownLocation));
+  pushOwnLocation(ownLocation.lat, ownLocation.lon);
+  applyOwnLocationMarker(ownLocation.lat, ownLocation.lon);
+  updateStatusLocation();
+}
+
+function setLocationPickMode(on) {
+  const btn = document.getElementById("statusLocationBtn");
+  const picker = document.getElementById("locationPicker");
+  if (picker) picker.classList.add("hidden");
+  if (!on) {
+    if (locationHandler) {
+      locationHandler.destroy();
+      locationHandler = null;
+    }
+    if (btn) {
+      btn.classList.remove("loc-picking");
+      btn.textContent = "Location";
+    }
+    return;
+  }
+  locationHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+  locationHandler.setInputAction((movement) => {
+    if (!movement || !movement.position) return;
+    const cartesian =
+      viewer.scene.pickPosition(movement.position) ||
+      viewer.camera.pickEllipsoid(
+        movement.position,
+        viewer.scene.globe.ellipsoid,
+      );
+    if (cartesian) {
+      const carto = Cartographic.fromCartesian(cartesian);
+      setOwnLocation(
+        CesiumMath.toDegrees(carto.latitude),
+        CesiumMath.toDegrees(carto.longitude),
+      );
+      setLocationPickMode(false);
+    }
+  }, ScreenSpaceEventType.LEFT_CLICK);
+  if (btn) {
+    btn.classList.add("loc-picking");
+    btn.textContent = "Cancel Location";
+  }
+}
+
+function toggleLocationPicker() {
+  const picker = document.getElementById("locationPicker");
+  if (!picker) return;
+  const showing = !picker.classList.contains("hidden");
+  picker.classList.toggle("hidden", showing);
+  if (showing) setLocationPickMode(false);
+}
+
+function useBrowserLocation() {
+  if (!navigator.geolocation) {
+    alert("Browser geolocation is not available");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => setOwnLocation(pos.coords.latitude, pos.coords.longitude),
+    (err) => alert(`Geolocation failed: ${err.message}`),
+    { enableHighAccuracy: true, timeout: 10000 },
+  );
+}
+
+function initLocationPicker() {
+  const btn = document.getElementById("statusLocationBtn");
+  if (!btn) return;
+  btn.addEventListener("click", toggleLocationPicker);
+
+  const mapBtn = document.getElementById("locMap");
+  if (mapBtn) {
+    mapBtn.addEventListener("click", () => {
+      document.getElementById("locationPicker")?.classList.add("hidden");
+      setLocationPickMode(true);
+    });
+  }
+
+  const browserBtn = document.getElementById("locBrowser");
+  if (browserBtn) {
+    browserBtn.addEventListener("click", () => {
+      document.getElementById("locationPicker")?.classList.add("hidden");
+      useBrowserLocation();
+    });
+  }
+
+  const cancelBtn = document.getElementById("locCancel");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      document.getElementById("locationPicker")?.classList.add("hidden");
+    });
+  }
+
+  // Restore a persisted location and re-push it to the backend.
+  try {
+    const saved = localStorage.getItem(locationKey());
+    if (saved) {
+      const loc = JSON.parse(saved);
+      if (
+        loc &&
+        typeof loc.lat === "number" &&
+        typeof loc.lon === "number" &&
+        Number.isFinite(loc.lat) &&
+        Number.isFinite(loc.lon)
+      ) {
+        ownLocation = { lat: loc.lat, lon: loc.lon };
+        applyOwnLocationMarker(loc.lat, loc.lon);
+        pushOwnLocation(loc.lat, loc.lon);
+        updateStatusLocation();
+      }
+    }
+  } catch {
+    // ignore malformed saved location
+  }
 }

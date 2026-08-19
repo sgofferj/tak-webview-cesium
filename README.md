@@ -13,6 +13,7 @@ This application provides a real-time 3D tactical view of Cursor-on-Target (CoT)
     - **Automated Enrollment:** Securely obtain certificates directly from your TAK Server (port 8446).
     - **Manual Certificate Upload:** Support for importing existing `.p12`/`.pfx` certificates.
 - **Privacy & Security:** Ephemeral session storage for certificates and credentials. No data is stored permanently on disk in unencrypted form.
+- **Multi-User (Single Server):** Register any number of users against the same TAK Server on one install. Every user gets their own certificate, credentials, distinct per-user UID and fully isolated data; logging out wipes only that user's data.
 - **Status Tray:** Real-time feedback on connection status, certificate expiry, and identity.
 - **Advanced Visualization:** 
     - **3D Environment:** Powered by CesiumJS for a global, high-fidelity view.
@@ -68,30 +69,92 @@ The application is designed with a "Never-Unencrypted-on-Disk" philosophy:
 
 **Note:** For production use, always run this application behind a reverse proxy (like Nginx or Traefik) to provide HTTPS transport security.
 
-## Configuration
-Configuration is handled via environment variables or an `.env` file.
+## Multi-User Support (Single Server)
 
-| Variable              | Default          | Purpose                                                                                |
-| --------------------- | ---------------- | -------------------------------------------------------------------------------------- |
-| `APP_TITLE`           | `TAK Cesium Map` | Title displayed in the browser tab and header                                          |
-| `TAK_HOST`            | `localhost`      | Hostname or IP of the TAK Server                                                       |
-| `TAK_PORT`            | `8089`           | TLS port of the TAK Server                                                             |
-| `TAK_ENROLL_PORT`     | `8446`           | Enrollment port (for automated certificate setup)                                      |
-| `TAK_CALLSIGN`        | `CesiumViewer`   | Callsign for this viewer instance                                                      |
-| `TAK_TYPE`            | `a-f-G-U-C-I`    | CoT type for the viewer entity                                                         |
-| `TAK_UID`             | (Generated)      | Fixed UID override. When unset, a distinct per-user UID (`CesiumViewer-<sha256(username) prefix>`) is derived automatically from the certificate CN at enrollment/import time (username is hashed, never in cleartext)                                        |
-| `TAK_STAFF_COMMENTS`  | (Empty)          | Comma-separated map for highlighting staff comments (e.g., `#SF=ShadowFleet,#LEO=LEO`) |
-| `GOTO_BUTTONS`        | (Empty)          | Quick-jump buttons: `Label:Lat,Lon,Zoom;...`                                           |
-| `SECRET_KEY`          | (Random)         | Key for signing session cookies (regenerated on restart)                               |
-| `WS_THROTTLE`         | `0.5`            | Minimum seconds between updates per entity (throttles frontend traffic)                |
-| `USE_MSGPACK`         | `true`           | Use MessagePack for binary WebSocket communication                                     |
-| `CENTER_ALERT`        | `false`          | Automatically center the map on new emergency/alert messages                           |
-| `LOGO`                | (Empty)          | Path to a custom logo file inside the container                                        |
-| `LOGO_POSITION`       | `bottom_right`   | Map logo position: `top_left`, `top_center`, `top_right`, etc.                         |
-| `CESIUM_ION_TOKEN`    | (Empty)          | Cesium Ion token for Bing Maps and global terrain                                      |
-| `TERRAIN_URL`         | (Empty)          | URL to a Cesium terrain provider                                                       |
-| `INITIAL_LAT` / `LON` | Helsinki         | Initial map center coordinates                                                         |
-| `TRUSTED_PROXIES`     | `127.0.0.1`      | IPs to trust for `X-Forwarded-For` headers                                             |
+The application supports multiple users against a **single** TAK Server from one install:
+
+- Each registered user gets their **own** certificate, storage key and TAK connection. Enrollment/upload and login are always scoped to exactly one user.
+- Every user announces a **distinct per-user UID** (`CesiumViewer-<sha256(username) prefix>`), so all sessions are separately visible on the TAK network.
+- Users are fully isolated: per-user accounts, per-user messaging config (callsign/color/role) and per-user chat state. Logout or forgetting an account wipes **only that user's** data, never anyone else's.
+- Private keys are still decrypted **RAM-only** per session (Fernet + `memfd`); each user's storage key is derived from their own password.
+- When `FORCE_SERVER` is set, the whole install is pinned to one TAK Server: the server is resolved automatically in the UI and enrollments/uploads for any other server are rejected backend-side.
+- **Scope:** exactly one TAK Server at a time. Multiserver support (several distinct servers with per-server data scoping) is deliberately deferred — see `MULTIUSER_PLAN.md`.
+
+## Configuration
+Configuration is handled via environment variables or an `.env` file. This is the complete list of supported variables.
+
+### Connection & Server
+
+| Variable              | Default      | Purpose                                                                          |
+| --------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `TAK_HOST`            | `localhost`  | Hostname or IP of the TAK Server                                                 |
+| `TAK_PORT`            | `8089`       | TLS port of the TAK Server                                                       |
+| `TAK_ENROLL_PORT`     | `8446`       | Enrollment port (for automated certificate setup)                                |
+| `TAK_TYPE`            | `a-f-G-U-C-I`| CoT type for the viewer entity                                                   |
+| `FORCE_SERVER`        | (Empty)      | Pin the install to one TAK Server; resolved automatically in the UI, and enrollments/uploads for any other server are rejected backend-side |
+
+### Identity & Messaging
+
+| Variable              | Default            | Purpose                                                                                                                     |
+| --------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `TAK_CALLSIGN`        | `CesiumViewer`     | Default callsign for a viewer instance                                                                                      |
+| `TAK_CALLSIGN_INPUT`  | (Empty)            | Callsign override from the messaging config UI                                                                              |
+| `TAK_COLOR`           | (Empty)            | Team color chosen in the config UI (one of the TAK colors; e.g. `Cyan`, `Red`, `Green`)                                     |
+| `TAK_GROUP_COLOR`     | `Cyan`             | Fallback team color for the SA `__group` when the UI has set none                                                             |
+| `TAK_ROLE`            | (Empty)            | Role chosen in the config UI (e.g. `Team Lead`, `Medic`, `Forward Observer`)                                                |
+| `TAK_UID`             | (Generated)        | Fixed UID override. When unset, a distinct per-user UID (`CesiumViewer-<sha256(username) prefix>`) is derived from the username (hashed, never in cleartext) |
+
+### Enrollment / Ephemeral Certificate Files
+
+The ephemeral file *names* living under the fixed directory `/app/certs/ephemeral`:
+
+| Variable            | Default     | Purpose                       |
+| ------------------- | ----------- | ----------------------------- |
+| `EPHEMERAL_CERT`    | `cert.pem`  | Ephemeral certificate file    |
+| `EPHEMERAL_KEY`     | `cert.key`  | Ephemeral private key file    |
+| `EPHEMERAL_CA`      | `ca.pem`    | Ephemeral CA chain file       |
+| `EPHEMERAL_CREDS`   | `creds.json`| Ephemeral credentials file    |
+
+### Security
+
+| Variable           | Default        | Purpose                                                                                                       |
+| ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------- |
+| `SECRET_KEY`       | (Random)       | Key for signing session cookies. Set a fixed value to keep sessions valid across container restarts           |
+| `TRUSTED_PROXIES`  | `127.0.0.1`    | Comma-separated list (or JSON array) of proxy IPs trusted for `X-Forwarded-For`                                   |
+
+### Map & UI
+
+| Variable                | Default                    | Purpose                                                          |
+| ----------------------- | -------------------------- | ---------------------------------------------------------------- |
+| `INITIAL_LAT`           | `60.1699`                  | Initial map center latitude                                      |
+| `INITIAL_LON`           | `24.9384`                  | Initial map center longitude                                     |
+| `TERRAIN_URL`           | (Empty)                    | URL to a Cesium terrain provider                                 |
+| `TERRAIN_EXAGGERATION`  | `1.0`                      | Terrain height exaggeration factor                               |
+| `CESIUM_ION_TOKEN`      | (Empty)                    | Cesium Ion token for Bing Maps and global terrain                |
+| `APP_TITLE`             | `TAK Cesium Map`           | Title displayed in the browser tab and header                    |
+| `LOGO`                  | (Empty)                    | Path to a custom logo file inside the container                  |
+| `LOGO_POSITION`         | `bottom_right`             | Logo position (`top_left`, `top_center`, `top_right`, ...)       |
+| `GOTO_BUTTONS`          | (Empty)                    | Quick-jump buttons: `Label:Lat,Lon,Zoom;...`                     |
+| `CENTER_ALERT`          | `false`                    | Automatically center the map on new emergency/alert messages     |
+
+### Traffic, Chat & Logging
+
+| Variable              | Default      | Purpose                                                                   |
+| --------------------- | ------------ | ------------------------------------------------------------------------- |
+| `WS_THROTTLE`         | `0.5`        | Minimum seconds between updates per entity (throttles frontend traffic)   |
+| `USE_MSGPACK`         | `true`       | Use MessagePack for binary WebSocket communication                        |
+| `TAK_STAFF_COMMENTS`  | (Empty)      | Comma-separated staff-comment highlight map (e.g. `#SF=ShadowFleet,#LEO=LEO`) |
+| `LOG_COTS`            | `false`      | Log incoming/outgoing CoT traffic                                         |
+
+### Server & Files
+
+| Variable              | Default             | Purpose                                                          |
+| --------------------- | ------------------- | ---------------------------------------------------------------- |
+| `PORT`                | `8000`              | HTTP port the web application listens on                         |
+| `LAYERS_CONFIG_FILE`  | `customlayers.json` | Filename of the custom web map-source JSON (in the working directory) |
+
+### Fixed container paths
+The following paths are fixed inside the container and **not** configurable via environment variables: `/app/overlays` (auto-loaded local GeoJSON/KML/CZML overlays), `/iconsets` (built-in MIL-STD-2525 iconsets), `/app/user_iconsets` (user-provided iconsets) and `/app/certs/ephemeral` (RAM-only decrypted ephemeral certs).
 
 ## Quick Start (Docker Compose)
 
