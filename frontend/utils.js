@@ -176,6 +176,8 @@ export function throttle(func, limit) {
 export const GOOGLE_ICON_PATHS = {
   navigation: "M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z",
   triangle: "M12,2 L22,22 L2,22 Z",
+  forum:
+    "M21,6h-2v9H6v2c0,0.55,0.45,1,1,1h11l4,4V7C22,6.45,21.55,6,21,6z M17,12V3c0-0.55-0.45-1-1-1H3C2.45,2,2,2.45,2,3v14l4-4h10C16.55,13,17,12.55,17,12z",
 };
 
 // Render Google Icon to Canvas

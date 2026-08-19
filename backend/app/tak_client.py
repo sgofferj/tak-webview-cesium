@@ -810,6 +810,16 @@ class TAKClient:
         link.set("type", "a-f-G-U-C")
         link.set("relation", "p-p")
 
+        if is_dm:
+            # Explicit recipient routing. The TAK server only delivers a chat
+            # to a single recipient when it carries a <marti><dest .../></marti>;
+            # without it the message is treated as a group message and
+            # broadcast. The server strips the marti element again on delivery,
+            # so it is never visible in captured (server-delivered) traffic.
+            marti = etree.SubElement(detail, "marti")
+            dest = etree.SubElement(marti, "dest")
+            dest.set("uid", target)
+
         remarks = etree.SubElement(detail, "remarks")
         remarks.set("source", f"BAO.F.ATAK.{my_uid}")
         remarks.text = text
@@ -888,6 +898,8 @@ class TAKClient:
             "self": {
                 "uid": self.identity.uid,
                 "callsign": self.chat_callsign,
+                "color": self.identity.color or self.config.tak_group_color,
+                "role": self.identity.role or "Team Member",
             },
             "threads": {k: list(v) for k, v in self._chat_threads.items()},
             "contacts": dict(self._chat_contacts),
@@ -951,6 +963,7 @@ class TAKClient:
         if uid == self.identity.uid:
             return removed
         self._chat_contacts.pop(uid, None)
+        self._chat_threads.pop(uid, None)
         removed.append(uid)
         return removed
 
