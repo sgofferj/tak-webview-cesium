@@ -47,6 +47,10 @@ import {
 import { startWebSocket } from "./websocket.js";
 import { initChat } from "./chat.js";
 let selfInfo = { uid: "", callsign: "" };
+
+// Logged-in username (populated from /api/auth/status). Used to scope the
+// messaging config localStorage key so different users don't share settings.
+let currentUser = null;
 async function init() {
   const authenticated = await checkAuth();
   if (authenticated) {
@@ -277,11 +281,14 @@ export async function checkAuth() {
   try {
     const resp = await fetch("/api/auth/status");
     const status = await resp.json();
+    currentUser = status.username || null;
 
     // Single-server pinning: once a server is decided (FORCE_SERVER or the
-    // first enrollment/upload), it is fixed for the install and the server
-    // fields are hidden from the enrollment/upload dialogs.
+    // first enrollment/upload), it is fixed for the install. The server input
+    // fields are hidden and the pinned server is shown as text instead.
     const decidedServer = status.forceServer || status.pinnedServer || null;
+    const serverInfo = document.getElementById("authServerInfo");
+    const serverName = document.getElementById("authServerName");
     for (const id of ["enrollServer", "uploadServer"]) {
       const el = document.getElementById(id);
       if (decidedServer) {
@@ -292,6 +299,12 @@ export async function checkAuth() {
         el.style.display = "";
       }
     }
+    if (decidedServer) {
+      serverName.textContent = decidedServer;
+      serverInfo.classList.remove("hidden");
+    } else {
+      serverInfo.classList.add("hidden");
+    }
 
     if (status.authenticated) {
       overlay.classList.add("hidden");
@@ -301,12 +314,10 @@ export async function checkAuth() {
       return true;
     }
 
-    if (status.enrolled) {
-      loginForm.classList.remove("hidden");
-      document.getElementById("loginUser").focus();
-    } else {
-      choiceForm.classList.remove("hidden");
-    }
+    // Multiuser: when not authenticated, always show the choice screen.
+    // The Login option stays visible even with no account enrolled - a
+    // poor man's tarpit, since login is impossible and fails harmlessly.
+    choiceForm.classList.remove("hidden");
     setupAuthEvents();
     return false;
   } catch (e) {
@@ -318,11 +329,17 @@ export async function checkAuth() {
 }
 
 function updateStatus(status) {
+  const userEl = document.getElementById("statusUser");
+  if (userEl) {
+    userEl.innerText = status.username ? `User: ${status.username}` : "";
+  }
   if (status.cert) {
     const cn = document.getElementById("certCN");
     const expiry = document.getElementById("certExpiry");
     if (cn) {
-      cn.innerText = status.cert.cn;
+      // Show the cert organization (O) instead of the CN/username so the
+      // login identity is not exposed on screen.
+      cn.innerText = status.cert.org || status.cert.cn;
       cn.className = `status-${status.cert.status}`;
     }
     if (expiry) {
@@ -361,6 +378,16 @@ function setupAuthEvents() {
     uploadForm.classList.remove("hidden");
     document.getElementById("uploadPass").focus();
   });
+
+  const loginChoice = document.getElementById("choiceLogin");
+  if (loginChoice) {
+    loginChoice.addEventListener("click", () => {
+      choiceForm.classList.add("hidden");
+      const loginForm = document.getElementById("loginForm");
+      if (loginForm) loginForm.classList.remove("hidden");
+      document.getElementById("loginUser").focus();
+    });
+  }
 
   document
     .getElementById("backToChoice1")
@@ -446,7 +473,9 @@ function setupAuthEvents() {
   const configSave = document.getElementById("configSave");
   const configCancel = document.getElementById("configCancel");
 
-  const selfInfoKey = "messagingConfig";
+  const selfInfoKey = currentUser
+    ? `messagingConfig.${currentUser}`
+    : "messagingConfig";
   // Profile pushed by the TAK server on enrollment (takes priority over
   // localStorage, if present).
   let pendingServerProfile = null;
@@ -665,7 +694,9 @@ function setupAuthEvents() {
       } catch {
         console.error("Forget failed");
       }
-      localStorage.removeItem("messagingConfig");
+      localStorage.removeItem(
+        currentUser ? `messagingConfig.${currentUser}` : "messagingConfig",
+      );
       location.reload();
     }
   });
@@ -1349,7 +1380,9 @@ if (chatToggle && chatPanel) {
 }
 
 async function loadMessagingConfig() {
-  const selfInfoKey = "messagingConfig";
+  const selfInfoKey = currentUser
+    ? `messagingConfig.${currentUser}`
+    : "messagingConfig";
   let cfg = null;
 
   // 1. Try localStorage first

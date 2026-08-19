@@ -266,6 +266,23 @@ function handleContactsUpdate(payload) {
         refreshAll();
     }
 }
+
+/**
+ * Handle cot_delete - remove contacts whose SA was deleted via t-x-d-d
+ */
+export function handleCotDelete(uids) {
+    if (!Array.isArray(uids)) return;
+
+    let changed = false;
+    for (const uid of uids) {
+        if (contacts.delete(uid)) {
+            changed = true;
+        }
+    }
+    if (changed) {
+        refreshAll();
+    }
+}
 function handleChatError(error) {
     console.error("Chat error:", error);
     const input = $("chatInput");
