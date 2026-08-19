@@ -41,6 +41,8 @@ class Identity:
     color: str = ""
     role: str = ""
     server: str = ""
+    lat: float = 0.0
+    lon: float = 0.0
 
     def changed(self, callsign: str, color: str, role: str) -> bool:
         return callsign != self.callsign or color != self.color or role != self.role
@@ -231,8 +233,8 @@ class TAKClient:
         cot.set("access", "Undefined")
 
         point = etree.SubElement(cot, "point")
-        point.set("lat", "0")
-        point.set("lon", "0")
+        point.set("lat", f"{self.identity.lat:.6f}")
+        point.set("lon", f"{self.identity.lon:.6f}")
         point.set("hae", "0")
         point.set("ce", "9999999")
         point.set("le", "9999999")
@@ -274,8 +276,8 @@ class TAKClient:
         etree.SubElement(
             ping,
             "point",
-            lat="0.0",
-            lon="0.0",
+            lat=f"{self.identity.lat:.6f}",
+            lon=f"{self.identity.lon:.6f}",
             hae="0.0",
             ce="9999999",
             le="9999999",

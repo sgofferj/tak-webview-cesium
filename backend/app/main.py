@@ -334,6 +334,8 @@ def _user_identity(username: str, cfg: dict[str, str]) -> Identity:
         color=cfg.get("color") or "",
         role=cfg.get("role") or "",
         server=auth_manager.user_server(username) or settings.tak_host,
+        lat=(account.lat if account else 0.0),
+        lon=(account.lon if account else 0.0),
     )
 
 
@@ -401,11 +403,55 @@ async def set_messaging_config(req: dict[str, str], request: Request) -> dict[st
 
 
 @app.get("/api/messaging/config")
-async def get_messaging_config(request: Request) -> dict[str, str]:
+async def get_messaging_config(request: Request) -> dict[str, Any]:
     username = tracker.username_for(request.session.get("sid"))
     if not username:
         return {}
-    return dict(messaging_config.get(username, {}))
+    cfg: dict[str, Any] = dict(messaging_config.get(username, {}))
+    account = auth_manager.registry.get_account(username)
+    if account:
+        cfg.setdefault("lat", float(account.lat))
+        cfg.setdefault("lon", float(account.lon))
+    return cfg
+
+
+@app.post("/api/messaging/location")
+async def set_messaging_location(
+    req: dict[str, Any], request: Request
+) -> dict[str, Any]:
+    """Persist the user's map location and feed it into the SA/ping events.
+
+    Unlike the messaging config, setting a location must not restart the TAK
+    connection - the live identity is refreshed in place so the next SA
+    position report carries the new coordinates.
+    """
+    username = tracker.username_for(request.session.get("sid"))
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    lat_raw = req.get("lat")
+    lon_raw = req.get("lon")
+    if lat_raw is None or lon_raw is None:
+        raise HTTPException(status_code=400, detail="Invalid location")
+    try:
+        lat = float(lat_raw)
+        lon = float(lon_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid location")
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        raise HTTPException(status_code=400, detail="Invalid location")
+
+    account = auth_manager.registry.get_account(username)
+    if account:
+        account.lat = lat
+        account.lon = lon
+        auth_manager.registry.save_account(account)
+
+    # Refresh the live identity so the next SA carries the new position.
+    client = pool.client_for(username)
+    if client is not None:
+        client.identity = _user_identity(username, messaging_config.get(username, {}))
+    return {"status": "ok"}
 
 
 @app.get("/iconsets")

@@ -8,10 +8,14 @@
 
 import {
   Cartesian3,
+  Cartesian2,
   buildModuleUrl,
   Rectangle,
   Cartographic,
   Math as CesiumMath,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  Color,
 } from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "virtual-select-plugin/dist/virtual-select.min.js";
@@ -235,6 +239,7 @@ async function startApp() {
   }
   startWebSocket();
   initChat();
+  initLocationPicker();
   // After websocket starts and entities begin flowing in, we need to ensure their visibility is set
   // before the first general applyFilter from setTabVisibility.
   applyFilter();
@@ -333,6 +338,7 @@ function updateStatus(status) {
   if (userEl) {
     userEl.innerText = status.username ? `User: ${status.username}` : "";
   }
+  updateStatusCallsign();
   if (status.cert) {
     const cn = document.getElementById("certCN");
     const expiry = document.getElementById("certExpiry");
@@ -347,6 +353,13 @@ function updateStatus(status) {
       expiry.className = `status-${status.cert.status}`;
     }
   }
+}
+
+function updateStatusCallsign() {
+  const el = document.getElementById("statusCallsign");
+  if (!el) return;
+  const callsign = selfInfo?.callsign || "";
+  el.innerText = callsign ? `Callsign: ${callsign}` : "";
 }
 
 function setupAuthEvents() {
@@ -395,6 +408,10 @@ function setupAuthEvents() {
   document
     .getElementById("backToChoice2")
     .addEventListener("click", showChoice);
+  const backToChoice3 = document.getElementById("backToChoice3");
+  if (backToChoice3) {
+    backToChoice3.addEventListener("click", showChoice);
+  }
 
   const validateStrength = (pw) => {
     if (!pw || pw.length < 8) return false;
@@ -545,6 +562,7 @@ function setupAuthEvents() {
 
     // Sync with chat.js selfInfo
     selfInfo.callsign = callsign;
+    updateStatusCallsign();
 
     // Apply color to entities
     applyConfigColor(color);
@@ -1423,5 +1441,182 @@ async function loadMessagingConfig() {
   // Apply config to selfInfo
   selfInfo.callsign = cfg.callsign;
   selfInfo.uid = cfg.callsign; // Use callsign as UID for now
+  updateStatusCallsign();
   applyConfigColor(cfg.color);
+}
+
+// ----------------------------------------------------------------------
+//  Own location (set-own-location feature)
+// ----------------------------------------------------------------------
+
+const locationKey = () =>
+  currentUser ? `location.${currentUser}` : "location";
+let ownLocation = null;
+let locationEntity = null;
+let locationHandler = null;
+
+function removeOwnLocationMarker() {
+  if (locationEntity && viewer) {
+    viewer.entities.remove(locationEntity);
+    locationEntity = null;
+  }
+}
+
+function applyOwnLocationMarker(lat, lon) {
+  if (!viewer) return;
+  removeOwnLocationMarker();
+  locationEntity = viewer.entities.add({
+    position: Cartesian3.fromDegrees(lon, lat),
+    point: {
+      pixelSize: 12,
+      color: Color.ORANGE,
+      outlineColor: Color.WHITE,
+      outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: "You",
+      font: "12px sans-serif",
+      pixelOffset: new Cartesian2(0, -18),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+}
+
+async function pushOwnLocation(lat, lon) {
+  try {
+    await fetch("/api/messaging/location", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lon }),
+    });
+  } catch (e) {
+    console.error("Failed to save location:", e);
+  }
+}
+
+function updateStatusLocation() {
+  const el = document.getElementById("statusLocation");
+  if (!el) return;
+  el.innerText = ownLocation
+    ? `Loc: ${ownLocation.lat.toFixed(3)}, ${ownLocation.lon.toFixed(3)}`
+    : "";
+}
+
+function setOwnLocation(lat, lon) {
+  ownLocation = { lat: Number(lat), lon: Number(lon) };
+  localStorage.setItem(locationKey(), JSON.stringify(ownLocation));
+  pushOwnLocation(ownLocation.lat, ownLocation.lon);
+  applyOwnLocationMarker(ownLocation.lat, ownLocation.lon);
+  updateStatusLocation();
+}
+
+function setLocationPickMode(on) {
+  const btn = document.getElementById("statusLocationBtn");
+  const picker = document.getElementById("locationPicker");
+  if (picker) picker.classList.add("hidden");
+  if (!on) {
+    if (locationHandler) {
+      locationHandler.destroy();
+      locationHandler = null;
+    }
+    if (btn) {
+      btn.classList.remove("loc-picking");
+      btn.textContent = "Location";
+    }
+    return;
+  }
+  locationHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+  locationHandler.setInputAction((movement) => {
+    if (!movement || !movement.position) return;
+    const cartesian =
+      viewer.scene.pickPosition(movement.position) ||
+      viewer.camera.pickEllipsoid(
+        movement.position,
+        viewer.scene.globe.ellipsoid,
+      );
+    if (cartesian) {
+      const carto = Cartographic.fromCartesian(cartesian);
+      setOwnLocation(
+        CesiumMath.toDegrees(carto.latitude),
+        CesiumMath.toDegrees(carto.longitude),
+      );
+      setLocationPickMode(false);
+    }
+  }, ScreenSpaceEventType.LEFT_CLICK);
+  if (btn) {
+    btn.classList.add("loc-picking");
+    btn.textContent = "Cancel Location";
+  }
+}
+
+function toggleLocationPicker() {
+  const picker = document.getElementById("locationPicker");
+  if (!picker) return;
+  const showing = !picker.classList.contains("hidden");
+  picker.classList.toggle("hidden", showing);
+  if (showing) setLocationPickMode(false);
+}
+
+function useBrowserLocation() {
+  if (!navigator.geolocation) {
+    alert("Browser geolocation is not available");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => setOwnLocation(pos.coords.latitude, pos.coords.longitude),
+    (err) => alert(`Geolocation failed: ${err.message}`),
+    { enableHighAccuracy: true, timeout: 10000 },
+  );
+}
+
+function initLocationPicker() {
+  const btn = document.getElementById("statusLocationBtn");
+  if (!btn) return;
+  btn.addEventListener("click", toggleLocationPicker);
+
+  const mapBtn = document.getElementById("locMap");
+  if (mapBtn) {
+    mapBtn.addEventListener("click", () => {
+      document.getElementById("locationPicker")?.classList.add("hidden");
+      setLocationPickMode(true);
+    });
+  }
+
+  const browserBtn = document.getElementById("locBrowser");
+  if (browserBtn) {
+    browserBtn.addEventListener("click", () => {
+      document.getElementById("locationPicker")?.classList.add("hidden");
+      useBrowserLocation();
+    });
+  }
+
+  const cancelBtn = document.getElementById("locCancel");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      document.getElementById("locationPicker")?.classList.add("hidden");
+    });
+  }
+
+  // Restore a persisted location and re-push it to the backend.
+  try {
+    const saved = localStorage.getItem(locationKey());
+    if (saved) {
+      const loc = JSON.parse(saved);
+      if (
+        loc &&
+        typeof loc.lat === "number" &&
+        typeof loc.lon === "number" &&
+        Number.isFinite(loc.lat) &&
+        Number.isFinite(loc.lon)
+      ) {
+        ownLocation = { lat: loc.lat, lon: loc.lon };
+        applyOwnLocationMarker(loc.lat, loc.lon);
+        pushOwnLocation(loc.lat, loc.lon);
+        updateStatusLocation();
+      }
+    }
+  } catch {
+    // ignore malformed saved location
+  }
 }

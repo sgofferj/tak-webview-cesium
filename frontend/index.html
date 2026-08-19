@@ -961,6 +961,50 @@
         color: #fff;
         font-weight: bold;
       }
+      #statusCallsign {
+        color: #fff;
+        font-weight: bold;
+      }
+      #statusLocation {
+        font-weight: bold;
+        color: #ff9800;
+      }
+      #statusActions button.loc-picking {
+        background: #4caf50 !important;
+        color: #000;
+      }
+      #locationPicker {
+        position: absolute;
+        bottom: 28px;
+        right: 10px;
+        z-index: 1100;
+        background: rgba(30, 30, 30, 0.95);
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #locationPicker .location-picker-title {
+        color: #fff;
+        font-size: 11px;
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      #locationPicker button {
+        background: #333;
+        border: 1px solid #444;
+        color: #ccc;
+        font-size: 11px;
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: 2px;
+        text-align: left;
+      }
+      #locationPicker button:hover {
+        background: #444;
+      }
       #statusCert span.status-green {
         color: #4caf50 !important;
       }
@@ -1190,8 +1234,17 @@
         </div>
       </div>
 
+      <div id="locationPicker" class="hidden">
+        <div class="location-picker-title">Set your location</div>
+        <button id="locBrowser">Use browser location</button>
+        <button id="locMap">Click on map</button>
+        <button id="locCancel">Cancel</button>
+      </div>
+
       <div id="statusBar" class="hidden">
         <div id="statusUser"></div>
+        <div id="statusCallsign"></div>
+        <div id="statusLocation"></div>
         <div id="statusCert">
           Cert: <span id="certCN"></span> (<span id="certExpiry"></span>)
         </div>
@@ -1199,6 +1252,9 @@
         <div id="statusPulse" title="Incoming Packets"></div>
         <div id="statusActions">
           <button id="configStatusBtn">Config</button>
+          <button id="statusLocationBtn" title="Set your location on the map">
+            Location
+          </button>
           <button id="authLogout">Logout</button>
           <button id="authForget">Forget</button>
         </div>
@@ -1485,6 +1541,7 @@
 
         <!-- Login Form -->
         <div id="loginForm" class="hidden">
+          <button class="back-btn" id="backToChoice3">← Back</button>
           <p id="labelLoginDesc">Authenticated access required.</p>
           <input type="text" id="loginUser" placeholder="Username" />
           <input type="password" id="loginPass" placeholder="Password" />

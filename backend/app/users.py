@@ -33,6 +33,8 @@ class UserAccount:
     server: str
     cert_expiry: str | None = None
     uid: str | None = None
+    lat: float = 0.0
+    lon: float = 0.0
 
 
 @dataclass
@@ -107,6 +109,8 @@ class UserRegistry:
                     "server": account.server,
                     "cert_expiry": account.cert_expiry,
                     "uid": account.uid,
+                    "lat": account.lat,
+                    "lon": account.lon,
                 },
                 f,
             )
@@ -115,6 +119,11 @@ class UserRegistry:
         try:
             with open(self._account_path(username), encoding="utf-8") as f:
                 data = json.load(f)
+            try:
+                lat = float(data.get("lat") or 0.0)
+                lon = float(data.get("lon") or 0.0)
+            except (TypeError, ValueError):
+                lat = lon = 0.0
             return UserAccount(
                 username=str(data.get("username", "")),
                 pw_hash=str(data.get("hash", "")),
@@ -124,6 +133,8 @@ class UserRegistry:
                     str(data["cert_expiry"]) if data.get("cert_expiry") else None
                 ),
                 uid=str(data["uid"]) if data.get("uid") else None,
+                lat=lat,
+                lon=lon,
             )
         except (OSError, json.JSONDecodeError):
             return None
