@@ -66,5 +66,7 @@
   "labelLoginDesc": "Autentiserad åtkomst krävs.",
   "labelImportedCertFor": "Certifikat importerat för:",
   "uploadButton": "Ladda upp och anslut",
-  "loginButton": "Logga in"
+  "loginButton": "Logga in",
+  "chatDelivered": "Levererad",
+  "chatRead": "Läst"
 }

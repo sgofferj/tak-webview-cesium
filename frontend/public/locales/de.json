@@ -66,5 +66,7 @@
   "labelLoginDesc": "Authentifizierter Zugriff erforderlich.",
   "labelImportedCertFor": "Zertifikat importiert für:",
   "uploadButton": "Hochladen & Verbinden",
-  "loginButton": "Anmelden"
+  "loginButton": "Anmelden",
+  "chatDelivered": "Zugestellt",
+  "chatRead": "Gelesen"
 }

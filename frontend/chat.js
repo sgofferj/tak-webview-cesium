@@ -12,10 +12,12 @@
  * - chat_init: {self, threads, contacts} - initial state on connect
  * - chat: {thread, kind, message_id, sender, text, time, self, ...} - new message
  * - contacts_update: {uid: {callsign, group_name, group_role}} - contact list update
+ * - chat_receipt: {message_id, status} - delivery/read receipt for a sent message
  * - chat_error: string - error message
  */
 
 import { ws } from "./websocket.js";
+import { i18n } from "./config.js";
 
 const MAX_PENDING_IDS = 400;
 
@@ -23,6 +25,8 @@ const MAX_PENDING_IDS = 400;
 const contacts = new Map();        // uid -> {callsign, group_name, group_role, stale}
 const threads = new Map();         // threadKey -> {key, kind, name, messages[], unread}
 const pendingIds = new Map();      // threadKey -> Set(message_id)
+const receiptStatus = new Map();   // message_id -> "delivered" | "read"
+const readSignaled = new Set();    // message_ids a chat_read was already sent for
 let selectedThread = null;
 let selfInfo = { uid: "", callsign: "" };
 let chatConnected = false;
@@ -129,6 +133,8 @@ export function handleChatMessage(data) {
         handleIncomingChat(data.chat);
     } else if (data.contacts_update !== undefined) {
         handleContactsUpdate(data.contacts_update);
+    } else if (data.chat_receipt !== undefined) {
+        handleChatReceipt(data.chat_receipt);
     } else if (data.chat_error !== undefined) {
         handleChatError(data.chat_error);
     }
@@ -244,6 +250,11 @@ function insertMessage(msg, isHistory = false) {
         thread.unread += 1;
     }
 
+    // New message in the open thread: send the read receipt right away
+    if (!isHistory && isChatOpen() && selectedThread === threadKey) {
+        signalReadForThread(threadKey);
+    }
+
     refreshAll();
 }
 
@@ -292,6 +303,54 @@ function handleChatError(error) {
 }
 
 /**
+ * Handle a delivery/read receipt (b-t-f-d/b-t-f-r) for one of our messages
+ */
+function handleChatReceipt(receipt) {
+    if (!receipt || !receipt.message_id) return;
+    receiptStatus.set(
+        receipt.message_id,
+        receipt.status === "read" ? "read" : "delivered"
+    );
+    refreshAll();
+}
+
+/**
+ * Send chat_read for every received message in a thread once it is viewed.
+ */
+function signalReadForThread(threadKey) {
+    const thread = threads.get(threadKey);
+    if (!thread) return;
+    if (!isChatOpen() || selectedThread !== threadKey) return;
+    for (const msg of thread.messages) {
+        if (msg.self || !msg.message_id) continue;
+        if (msg.pending || readSignaled.has(msg.message_id)) continue;
+        readSignaled.add(msg.message_id);
+        if (ws && ws.readyState === WebSocket.OPEN && chatConnected) {
+            ws.send(
+                JSON.stringify({
+                    chat_read: { thread: threadKey, message_id: msg.message_id }
+                })
+            );
+        }
+    }
+}
+
+/**
+ * Delivery/read checkmark for messages we sent.
+ */
+function statusCheckmark(messageId) {
+    if (!messageId) return "";
+    const status = receiptStatus.get(messageId);
+    if (status === "read") {
+        return ` <span class="chat-status" title="${i18n.chatRead || "Read"}">✓✓</span>`;
+    }
+    if (status === "delivered") {
+        return ` <span class="chat-status" title="${i18n.chatDelivered || "Delivered"}">✓</span>`;
+    }
+    return "";
+}
+
+/**
  * Select a thread (channel or DM)
  */
 function selectThread(threadKey) {
@@ -302,6 +361,7 @@ function selectThread(threadKey) {
         thread.unread = 0;
     }
     refreshAll();
+    signalReadForThread(threadKey);
 
     // Focus input
     const input = $("chatInput");
@@ -446,8 +506,9 @@ function renderThread() {
     for (const msg of thread.messages) {
         const classes = ["chat-msg", msg.self ? "self" : ""];
         if (msg.pending) classes.push("pending");
+        const status = msg.self ? statusCheckmark(msg.message_id) : "";
         html += `<div class="${classes.join(" ")}">
-            <span class="chat-meta">${escapeHtml(msg.sender)} &middot; ${formatTime(msg.time)}</span>
+            <span class="chat-meta">${escapeHtml(msg.sender)} &middot; ${formatTime(msg.time)}${status}</span>
             ${escapeHtml(msg.text)}
         </div>`;
     }
