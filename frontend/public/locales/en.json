@@ -66,5 +66,7 @@
   "labelLoginDesc": "Authenticated access required.",
   "labelImportedCertFor": "Imported certificate for:",
   "uploadButton": "Upload & Connect",
-  "loginButton": "Login"
+  "loginButton": "Login",
+  "chatDelivered": "Delivered",
+  "chatRead": "Read"
 }

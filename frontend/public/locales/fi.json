@@ -66,5 +66,7 @@
   "labelLoginDesc": "Pääsy vaatii tunnistautumisen.",
   "labelImportedCertFor": "Sertifikaatti tuotu käyttäjälle:",
   "uploadButton": "Lataa ja yhdistä",
-  "loginButton": "Kirjaudu"
+  "loginButton": "Kirjaudu",
+  "chatDelivered": "Toimitettu",
+  "chatRead": "Luettu"
 }

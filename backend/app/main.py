@@ -461,7 +461,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             except (json.JSONDecodeError, TypeError, ValueError):
                 continue
             cs = msg.get("chat_send")
-            if not isinstance(cs, dict):
+            cr = msg.get("chat_read")
+            if not isinstance(cs, dict) and not isinstance(cr, dict):
                 continue
             # Look the client up per message: the user may have confirmed the
             # messaging config AFTER this socket connected, so a single
@@ -474,6 +475,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 logger.warning(
                     "chat_send dropped for %s: no TAK client bound", username
                 )
+                continue
+            if isinstance(cr, dict):
+                message_id = str(cr.get("message_id") or "")
+                if message_id:
+                    await client.send_chat_read(message_id)
                 continue
             logger.debug(
                 "chat_send: room=%s, peer_uid=%s, peer_callsign=%s, text=%s, "

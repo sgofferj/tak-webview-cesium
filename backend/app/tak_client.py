@@ -134,6 +134,11 @@ class TAKClient:
         self._chat_threads: dict[str, deque[dict[str, Any]]] = {}
         # Live SA contacts (uid -> info) for the DM recipient list
         self._chat_contacts: dict[str, dict[str, Any]] = {}
+        # Received message_id -> original __chat mirror, used to build the
+        # b-t-f-d (delivery) and b-t-f-r (read) receipts for the sender.
+        self._receipts: dict[str, dict[str, str]] = {}
+        # message_ids that already got an outgoing b-t-f-r read receipt.
+        self._read_sent: set[str] = set()
 
         # Parse staff comments:
         # "#shadowfleet=SF,#LEO=LEO" -> {"#shadowfleet": "SF", "#LEO": "LEO"}
@@ -601,6 +606,144 @@ class TAKClient:
             "self": False,
         }
 
+    def parse_receipt(self, xml_data: bytes) -> dict[str, Any] | None:
+        """Parse an inbound b-t-f-d (delivery) / b-t-f-r (read) receipt.
+
+        Receipts carry a __chatreceipt element whose messageId references the
+        message being acknowledged. Returns None for anything that is not a
+        receipt and for receipts we sent ourselves (server echo).
+        """
+        try:
+            root = etree.fromstring(xml_data.strip())
+        except etree.LxmlError:
+            return None
+        ctype = root.get("type")
+        if ctype not in ("b-t-f-d", "b-t-f-r"):
+            return None
+        detail = root.find("detail")
+        if detail is None:
+            return None
+        chat_el = detail.find("__chatreceipt")
+        if chat_el is None:
+            return None
+        link = detail.find("link")
+        sender_uid = link.get("uid") if link is not None else None
+        if sender_uid == self.identity.uid:
+            return None  # our own receipt echoed back by the server
+        message_id = chat_el.get("messageId") or root.get("uid") or ""
+        if not message_id:
+            return None
+        return {
+            "message_id": message_id,
+            "status": "delivered" if ctype == "b-t-f-d" else "read",
+            "sender_uid": sender_uid or "",
+        }
+
+    def _extract_receipt_mirror(self, xml_data: bytes) -> dict[str, str] | None:
+        """Snapshot the sender-facing __chat of a received message.
+
+        Used to build the mirrored __chatreceipt for delivery/read receipts.
+        """
+        try:
+            root = etree.fromstring(xml_data.strip())
+        except etree.LxmlError:
+            return None
+        detail = root.find("detail")
+        if detail is None:
+            return None
+        chat_el = detail.find("__chat")
+        if chat_el is None:
+            return None
+        grp = chat_el.find("chatgrp")
+        link = detail.find("link")
+        return {
+            "parent": chat_el.get("parent") or "RootContactGroup",
+            "groupOwner": chat_el.get("groupOwner") or "false",
+            "messageId": chat_el.get("messageId") or root.get("uid") or "",
+            "chatroom": chat_el.get("chatroom") or "",
+            "id": chat_el.get("id") or "",
+            "senderCallsign": chat_el.get("senderCallsign") or "",
+            "uid0": (grp.get("uid0") or "") if grp is not None else "",
+            "uid1": (grp.get("uid1") or "") if grp is not None else "",
+            "senderUid": (link.get("uid") or "") if link is not None else "",
+        }
+
+    def _build_receipt_event(
+        self, mirror: dict[str, str], receipt_type: str
+    ) -> etree._Element:
+        """Build a b-t-f-d/b-t-f-r __chatreceipt event mirroring the original.
+
+        The event uid and __chatreceipt.messageId reference the original
+        message; the link/uid points at us so the server routes the receipt
+        back to the sender.
+        """
+        now = datetime.datetime.now(datetime.UTC)
+        now_str = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        stale_str = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        event = etree.Element("event")
+        event.set("version", "2.0")
+        event.set("uid", mirror.get("messageId") or "")
+        event.set("type", receipt_type)
+        event.set("how", "m-g")
+        event.set("time", now_str)
+        event.set("start", now_str)
+        event.set("stale", stale_str)
+        event.set("access", "Undefined")
+
+        point = etree.SubElement(event, "point")
+        point.set("lat", "0")
+        point.set("lon", "0")
+        point.set("hae", "0")
+        point.set("ce", "9999999")
+        point.set("le", "9999999")
+
+        detail = etree.SubElement(event, "detail")
+        chat_el = etree.SubElement(detail, "__chatreceipt")
+        chat_el.set("parent", mirror.get("parent") or "RootContactGroup")
+        chat_el.set("groupOwner", mirror.get("groupOwner") or "false")
+        chat_el.set("messageId", mirror.get("messageId") or "")
+        chat_el.set("chatroom", mirror.get("chatroom") or "")
+        chat_el.set("id", mirror.get("id") or "")
+        chat_el.set("senderCallsign", self.chat_callsign)
+        grp_el = etree.SubElement(chat_el, "chatgrp")
+        grp_el.set("uid0", mirror.get("uid0") or "")
+        grp_el.set("uid1", mirror.get("uid1") or "")
+        grp_el.set("id", mirror.get("id") or "")
+
+        link = etree.SubElement(detail, "link")
+        link.set("uid", self.identity.uid)
+        link.set("type", "a-f-G-U-C")
+        link.set("relation", "p-p")
+
+        return event
+
+    async def _send_receipt(self, mirror: dict[str, str], receipt_type: str) -> None:
+        message_id = mirror.get("messageId") or ""
+        if not message_id:
+            return
+        event = self._build_receipt_event(mirror, receipt_type)
+        await self._send_xml(event)
+        if self.config.log_cots:
+            logger.debug("Sent %s receipt for message %s", receipt_type, message_id)
+
+    async def _broadcast_receipt(self, receipt: dict[str, Any]) -> None:
+        payload: dict[str, Any] = {"chat_receipt": receipt}
+        if self.config.use_msgpack:
+            await manager.broadcast(msgpack.packb(payload), username=self.username)
+        else:
+            await manager.broadcast(json.dumps(payload), username=self.username)
+
+    async def send_chat_read(self, message_id: str) -> None:
+        """Send a b-t-f-r read receipt for a received message (from ws)."""
+        if not message_id or message_id in self._read_sent:
+            return
+        mirror = self._receipts.get(message_id)
+        if mirror is None:
+            return
+        self._read_sent.add(message_id)
+        await self._send_receipt(mirror, "b-t-f-r")
+
     def _build_chat_event(
         self,
         room: str,
@@ -754,6 +897,8 @@ class TAKClient:
         """Drop chat state when the active user changes (multiuser isolation)."""
         self._chat_threads = {}
         self._chat_contacts = {}
+        self._receipts = {}
+        self._read_sent = set()
         self._last_send_time = cachetools.TTLCache(maxsize=1000, ttl=60)
         logger.info("Chat state reset (active user changed)")
 
@@ -928,8 +1073,29 @@ class TAKClient:
 
                         # Geochat: b-t-f events bypass the atom pipeline.
                         if b"b-t-f" in data:
+                            if b"b-t-f-d" in data or b"b-t-f-r" in data:
+                                # Delivery/read receipts -> frontend status.
+                                receipt = await asyncio.to_thread(
+                                    self.parse_receipt, data
+                                )
+                                if receipt:
+                                    await self._broadcast_receipt(receipt)
+                                continue
                             chat = await asyncio.to_thread(self.parse_chat, data)
                             if chat:
+                                # Ack the sender unless it is our own echo.
+                                mirror = await asyncio.to_thread(
+                                    self._extract_receipt_mirror, data
+                                )
+                                message_id = mirror.get("messageId") if mirror else ""
+                                if (
+                                    mirror
+                                    and message_id
+                                    and mirror.get("senderUid") != self.identity.uid
+                                    and message_id not in self._receipts
+                                ):
+                                    self._receipts[message_id] = mirror
+                                    await self._send_receipt(mirror, "b-t-f-d")
                                 # Update contact from chat sender info
                                 sender_uid = chat.get("sender_uid")
                                 sender = chat.get("sender")
