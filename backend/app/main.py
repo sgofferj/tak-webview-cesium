@@ -15,6 +15,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from anyio import Path
 from fastapi import (
     FastAPI,
@@ -36,6 +37,7 @@ from .auth import auth_manager
 from .clients import ClientPool
 from .config import settings
 from .connection import manager, tracker
+from .groups import get_channels, set_subscribed_channels
 from .iconsets import iconsets_cache, load_iconsets
 from .layers import get_app_config, load_layers
 from .tak_client import Identity
@@ -454,6 +456,45 @@ async def set_messaging_location(
     return {"status": "ok"}
 
 
+# ----------------------------------------------------------------------
+#  Channel (group subscription) selection
+# ----------------------------------------------------------------------
+
+
+@app.get("/api/channels")
+async def list_channels(request: Request) -> dict[str, Any]:
+    """Available TAK server channels with the user's subscription state."""
+    username = tracker.username_for(request.session.get("sid"))
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    server = auth_manager.user_server(username) or settings.tak_host
+    try:
+        channels = await get_channels(server, username)
+    except (httpx.HTTPError, FileNotFoundError, RuntimeError, OSError) as exc:
+        logger.warning("Channel fetch failed for %s: %s", username, exc)
+        raise HTTPException(status_code=502, detail="TAK server unreachable")
+    return {"channels": channels}
+
+
+@app.put("/api/channels")
+async def update_channels(req: dict[str, Any], request: Request) -> dict[str, Any]:
+    """Set the user's subscribed channels (each checkbox covers IN and OUT)."""
+    username = tracker.username_for(request.session.get("sid"))
+    if not username:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    raw = req.get("channels")
+    if not isinstance(raw, list) or not all(isinstance(n, str) for n in raw):
+        raise HTTPException(status_code=400, detail="Invalid channel list")
+    names = {n.strip() for n in raw if n.strip()}
+    server = auth_manager.user_server(username) or settings.tak_host
+    try:
+        await set_subscribed_channels(server, username, names)
+    except (httpx.HTTPError, FileNotFoundError, RuntimeError, OSError) as exc:
+        logger.warning("Channel update failed for %s: %s", username, exc)
+        raise HTTPException(status_code=502, detail="TAK server unreachable")
+    return {"status": "ok"}
+
+
 @app.get("/iconsets")
 async def get_iconsets() -> dict[str, dict[str, Any]]:
     return iconsets_cache
@@ -575,5 +616,5 @@ async def serve_index() -> FileResponse:
 # Static files from dist (JS, CSS, etc.)
 if os.path.exists("frontend/dist"):
     app.mount("/", StaticFiles(directory="frontend/dist"), name="static")
-else:
+elif os.path.exists("frontend"):
     app.mount("/", StaticFiles(directory="frontend"), name="static")

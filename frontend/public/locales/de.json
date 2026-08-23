@@ -68,5 +68,11 @@
   "uploadButton": "Hochladen & Verbinden",
   "loginButton": "Anmelden",
   "chatDelivered": "Zugestellt",
-  "chatRead": "Gelesen"
+  "chatRead": "Gelesen",
+  "channelsButton": "Kanäle",
+  "channelsTitle": "Kanäle",
+  "channelsLoading": "Kanäle werden geladen…",
+  "channelsLoadError": "Kanäle konnten nicht geladen werden",
+  "channelsSave": "Speichern",
+  "channelsCancel": "Abbrechen"
 }

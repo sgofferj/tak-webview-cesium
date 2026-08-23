@@ -68,5 +68,11 @@
   "uploadButton": "Lataa ja yhdistä",
   "loginButton": "Kirjaudu",
   "chatDelivered": "Toimitettu",
-  "chatRead": "Luettu"
+  "chatRead": "Luettu",
+  "channelsButton": "Kanavat",
+  "channelsTitle": "Kanavat",
+  "channelsLoading": "Ladataan kanavia…",
+  "channelsLoadError": "Kanavien lataus epäonnistui",
+  "channelsSave": "Tallenna",
+  "channelsCancel": "Peruuta"
 }

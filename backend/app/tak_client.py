@@ -95,6 +95,63 @@ CHAT_HISTORY_MAX_THREADS = 50
 CHAT_MAX_TEXT = 4000
 
 
+def build_ssl_context_for_user(username: str) -> ssl.SSLContext:
+    """Build an mTLS SSL context for a user's cert/key (RAM-only key).
+
+    Used both for the streaming CoT connection and for Marti REST API
+    calls (e.g. channel/group subscription). The private key only ever
+    exists decrypted in RAM and is fed to OpenSSL via memfd.
+    """
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    from .auth import auth_manager
+
+    # Only use this user's ephemeral certs
+    cert_bytes = auth_manager.get_cert_bytes(username)
+    ca_bytes = auth_manager.get_ca_bytes(username)
+
+    if not cert_bytes:
+        raise FileNotFoundError("Certificate file missing for active user")
+
+    logger.info("Initializing secure SSL context (RAM-only key)")
+
+    # 1. Get decrypted key from AuthManager (RAM only)
+    key_bytes = auth_manager.get_private_key(username)
+    if not key_bytes:
+        raise RuntimeError("Failed to decrypt private key in RAM")
+
+    # 2. Use memfd to feed bytes to ssl.load_cert_chain (Linux only)
+    fd_cert = os.memfd_create("tak_cert", 0)
+    fd_key = os.memfd_create("tak_key", 0)
+
+    try:
+        os.write(fd_cert, cert_bytes)
+        os.write(fd_key, key_bytes)
+
+        # Reset offsets
+        os.lseek(fd_cert, 0, 0)
+        os.lseek(fd_key, 0, 0)
+
+        # Python's ssl library can load from /dev/fd/ paths
+        ctx.load_cert_chain(certfile=f"/dev/fd/{fd_cert}", keyfile=f"/dev/fd/{fd_key}")
+    finally:
+        os.close(fd_cert)
+        os.close(fd_key)
+
+    if ca_bytes:
+        fd_ca = os.memfd_create("tak_ca", 0)
+        try:
+            os.write(fd_ca, ca_bytes)
+            os.lseek(fd_ca, 0, 0)
+            ctx.load_verify_locations(cafile=f"/dev/fd/{fd_ca}")
+        finally:
+            os.close(fd_ca)
+    else:
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+    return ctx
+
+
 class TAKClient:
     def __init__(
         self,
@@ -160,56 +217,7 @@ class TAKClient:
         return self.identity.callsign or self.config.tak_callsign
 
     def _get_ssl_context(self) -> ssl.SSLContext:
-        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        from .auth import auth_manager
-
-        # Only use this user's ephemeral certs
-        cert_bytes = auth_manager.get_cert_bytes(self.username)
-        ca_bytes = auth_manager.get_ca_bytes(self.username)
-
-        if not cert_bytes:
-            raise FileNotFoundError("Certificate file missing for active user")
-
-        logger.info("Initializing secure SSL context (RAM-only key)")
-
-        # 1. Get decrypted key from AuthManager (RAM only)
-        key_bytes = auth_manager.get_private_key(self.username)
-        if not key_bytes:
-            raise RuntimeError("Failed to decrypt private key in RAM")
-
-        # 2. Use memfd to feed bytes to ssl.load_cert_chain (Linux only)
-        fd_cert = os.memfd_create("tak_cert", 0)
-        fd_key = os.memfd_create("tak_key", 0)
-
-        try:
-            os.write(fd_cert, cert_bytes)
-            os.write(fd_key, key_bytes)
-
-            # Reset offsets
-            os.lseek(fd_cert, 0, 0)
-            os.lseek(fd_key, 0, 0)
-
-            # Python's ssl library can load from /dev/fd/ paths
-            ctx.load_cert_chain(
-                certfile=f"/dev/fd/{fd_cert}", keyfile=f"/dev/fd/{fd_key}"
-            )
-        finally:
-            os.close(fd_cert)
-            os.close(fd_key)
-
-        if ca_bytes:
-            fd_ca = os.memfd_create("tak_ca", 0)
-            try:
-                os.write(fd_ca, ca_bytes)
-                os.lseek(fd_ca, 0, 0)
-                ctx.load_verify_locations(cafile=f"/dev/fd/{fd_ca}")
-            finally:
-                os.close(fd_ca)
-        else:
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-
-        return ctx
+        return build_ssl_context_for_user(self.username)
 
     def _build_sa_event(self) -> etree._Element:
         """SA position report - also serves as the initial identification.

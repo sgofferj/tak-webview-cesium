@@ -608,6 +608,105 @@ function setupAuthEvents() {
     }
   });
 
+  // Channel Selection Popup
+
+  const channelsOverlay = document.getElementById("channelsOverlay");
+  const channelsList = document.getElementById("channelsList");
+  const channelsLoading = document.getElementById("channelsLoading");
+  const channelsSave = document.getElementById("channelsSave");
+  const channelsCancel = document.getElementById("channelsCancel");
+  const channelsStatusBtn = document.getElementById("channelsStatusBtn");
+
+  let channelsAvailable = [];
+
+  const applyChannelsI18n = () => {
+    document.getElementById("channelsTitle").innerText =
+      i18n.channelsTitle || "Channels";
+    channelsSave.innerText = i18n.channelsSave || "Save";
+    channelsCancel.innerText = i18n.channelsCancel || "Cancel";
+    if (channelsStatusBtn) {
+      channelsStatusBtn.innerText = i18n.channelsButton || "Channels";
+    }
+  };
+
+  const renderChannels = () => {
+    channelsList.replaceChildren();
+    for (const ch of channelsAvailable) {
+      const row = document.createElement("label");
+      row.className = "channel-row";
+
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = ch.name;
+      box.checked = !!ch.subscribed;
+
+      const text = document.createElement("span");
+      text.innerText = ch.name;
+
+      row.appendChild(box);
+      row.appendChild(text);
+      channelsList.appendChild(row);
+    }
+  };
+
+  const loadChannels = async () => {
+    channelsList.replaceChildren();
+    channelsLoading.innerText = i18n.channelsLoading || "Loading channels…";
+    channelsLoading.className = "channels-loading";
+    channelsList.appendChild(channelsLoading);
+    try {
+      const resp = await fetch("/api/channels");
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      channelsAvailable = Array.isArray(data.channels) ? data.channels : [];
+      renderChannels();
+    } catch (e) {
+      console.error("Failed to load channels:", e);
+      channelsLoading.innerText =
+        i18n.channelsLoadError || "Failed to load channels";
+      channelsLoading.className = "channels-error";
+    }
+  };
+
+  const openChannelsOverlay = async () => {
+    // Fetch fresh state from the server on every open
+    channelsAvailable = [];
+    channelsOverlay.classList.remove("hidden");
+    await loadChannels();
+  };
+
+  const closeChannelsOverlay = () => {
+    channelsOverlay.classList.add("hidden");
+  };
+
+  if (channelsStatusBtn && channelsOverlay) {
+    applyChannelsI18n();
+    channelsStatusBtn.addEventListener("click", openChannelsOverlay);
+    channelsSave.addEventListener("click", async () => {
+      const selected = [
+        ...channelsList.querySelectorAll('input[type="checkbox"]:checked'),
+      ].map((box) => box.value);
+      try {
+        const resp = await fetch("/api/channels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channels: selected }),
+        });
+        if (!resp.ok) {
+          const err = await resp.json();
+          console.error("Failed to save channel subscriptions:", err);
+        }
+      } catch (e) {
+        console.error("Failed to save channel subscriptions:", e);
+      }
+      closeChannelsOverlay();
+    });
+    channelsCancel.addEventListener("click", closeChannelsOverlay);
+    channelsOverlay.addEventListener("click", (e) => {
+      if (e.target === channelsOverlay) closeChannelsOverlay();
+    });
+  }
+
   const triggerEnroll = async () => {
     const server = document.getElementById("enrollServer").value;
     const username = document.getElementById("enrollUser").value;
