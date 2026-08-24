@@ -718,9 +718,8 @@ ja chat-kontaktin/DM:n (`handleCotDelete`).
   ylitä käyttäjärajoja.
 - **Vääryysrajoitukset (nykytila)**: 3 epäonnistunutta loginia whitetää
   tilin tiedot; salasanavahvuuden valvonta tuonnissa; syötteiden validointi
-  värien, roolien, koordinaattien, kanavalistojen ja chat-pituuden osalta.
-  Rate limitingiä ja IP-bannausta **ei ole vielä toteutettu** (katso
-  AGENTS.md:n avoimet kohdat).
+  värien,   roolien, koordinaattien, kanavalistojen ja chat-pituuden osalta.
+  Rate limitingiä ja IP-bannausta **ei ole vielä toteutettu**.
 - **Yksityisyys**: UID on username-suolanaton hash; tilapalkki näyttää cert-
   organisaation eikä CN:tä; käyttäjänimet eivät lähde taustasta ulos paitsi
   Marti API -kutsuissa, jotka niitä vaativat.
