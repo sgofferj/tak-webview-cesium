@@ -633,7 +633,7 @@ function renderChannelList() {
             unread: 0
         }));
 
-    let html = '<div class="chat-channel-section">Rooms</div>';
+    let html = `<div class="chat-channel-section">${i18n.chatRoomsHeader || "Rooms"}</div>`;
     for (const t of roomChannelList()) {
         html += `<div class="chat-channel${t.key === selectedThread ? " active" : ""}" data-key="${escapeHtml(t.key)}">
             <span class="chat-channel-label">
@@ -644,7 +644,7 @@ function renderChannelList() {
         </div>`;
     }
 
-    html += '<div class="chat-channel-section">Users</div>';
+    html += `<div class="chat-channel-section">${i18n.chatUsersHeader || "Users"}</div>`;
     // Combine DM threads and contacts without threads
     const allDMs = [...dms, ...contactThreads];
     for (const t of allDMs) {
@@ -677,7 +677,8 @@ function renderThread() {
 
     if (!selectedThread) {
         header.textContent = "";
-        threadDiv.innerHTML = '<div class="chat-empty">Select a channel to start chatting</div>';
+        threadDiv.innerHTML =
+            `<div class="chat-empty">${i18n.chatEmptySelection || "Select a channel to start chatting"}</div>`;
         input.disabled = true;
         sendBtn.disabled = true;
         return;
@@ -689,7 +690,8 @@ function renderThread() {
     sendBtn.disabled = !chatConnected;
 
     if (!thread || thread.messages.length === 0) {
-        threadDiv.innerHTML = '<div class="chat-empty">No messages yet</div>';
+        threadDiv.innerHTML =
+            `<div class="chat-empty">${i18n.chatEmptyMessages || "No messages yet"}</div>`;
         return;
     }
 

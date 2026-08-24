@@ -18,8 +18,7 @@ import {
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "virtual-select-plugin/dist/virtual-select.min.js";
 import "virtual-select-plugin/dist/virtual-select.min.css";
-import { loadConfig, loadTranslations, appConfig, i18n } from "./config.js";
-import {
+import { loadConfig, loadTranslations, appConfig, i18n } from "./config.js";import {
   initViewer,
   viewer,
   getBaseMaps,
@@ -1640,17 +1639,17 @@ function setLocationPickMode(on) {
   const btn = document.getElementById("statusLocationBtn");
   const picker = document.getElementById("locationPicker");
   if (picker) picker.classList.add("hidden");
-  if (!on) {
-    if (locationHandler) {
-      locationHandler.destroy();
-      locationHandler = null;
+    if (!on) {
+      if (locationHandler) {
+        locationHandler.destroy();
+        locationHandler = null;
+      }
+      if (btn) {
+        btn.classList.remove("loc-picking");
+        btn.textContent = i18n.locationButton || "Location";
+      }
+      return;
     }
-    if (btn) {
-      btn.classList.remove("loc-picking");
-      btn.textContent = "Location";
-    }
-    return;
-  }
   locationHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
   locationHandler.setInputAction((movement) => {
     if (!movement || !movement.position) return;
@@ -1671,7 +1670,7 @@ function setLocationPickMode(on) {
   }, ScreenSpaceEventType.LEFT_CLICK);
   if (btn) {
     btn.classList.add("loc-picking");
-    btn.textContent = "Cancel Location";
+    btn.textContent = i18n.locationCancel || "Cancel Location";
   }
 }
 

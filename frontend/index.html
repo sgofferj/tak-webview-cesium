@@ -1261,18 +1261,20 @@
       <!-- Custom Layer Picker Panel -->
       <div id="layerPickerPanel" class="hidden">
         <div id="terrainSection">
-          <div class="layer-section-header">Terrain</div>
+          <div class="layer-section-header" id="layerTerrainHeader">Terrain</div>
           <div id="terrainGrid" class="layer-grid"></div>
         </div>
-        <div class="layer-section-header">Base Maps</div>
+        <div class="layer-section-header" id="layerBaseMapsHeader">Base Maps</div>
         <div id="baseMapGrid" class="layer-grid"></div>
-        <div class="layer-section-header">Overlays</div>
+        <div class="layer-section-header" id="layerOverlaysHeader">Overlays</div>
         <div id="overlayGrid" class="layer-grid"></div>
         <div id="analysisSection" class="hidden">
-          <div class="layer-section-header">Analysis</div>
+          <div class="layer-section-header" id="layerAnalysisHeader">Analysis</div>
           <div id="analysisGrid" class="layer-grid"></div>
           <div id="contourSettings" class="hidden">
-            <span style="font-size: 0.8em; color: #ccc">Density</span>
+            <span style="font-size: 0.8em; color: #ccc" id="contourDensity"
+              >Density</span
+            >
             <div style="display: flex; align-items: center; gap: 5px">
               <button id="contourDec">-</button>
               <span
@@ -1292,7 +1294,9 @@
       </div>
 
       <div id="locationPicker" class="hidden">
-        <div class="location-picker-title">Set your location</div>
+        <div class="location-picker-title" id="locationPickerTitle">
+          Set your location
+        </div>
         <button id="locBrowser">Use browser location</button>
         <button id="locMap">Click on map</button>
         <button id="locCancel">Cancel</button>
@@ -1321,10 +1325,10 @@
       <img id="brandingLogo" class="hidden" alt="Branding" />
     </div>
 
-    <div id="chatPanel" class="collapsed">
-      <div id="chatHeader">
-        <h3>Chat</h3>
-      </div>
+      <div id="chatPanel" class="collapsed">
+        <div id="chatHeader">
+          <h3 id="chatTitle">Chat</h3>
+        </div>
       <div id="chatChannelList"></div>
       <div id="chatThreadWrap">
         <div id="chatThreadHeader"></div>
@@ -1560,7 +1564,7 @@
           <input type="text" id="uploadServer" placeholder="TAK Server" />
           <div style="margin-bottom: 15px; text-align: left">
             <label for="p12File" style="font-size: 0.8em; color: #888"
-              >Select .p12 file</label
+              id="labelSelectP12">Select .p12 file</label
             >
             <input
               type="file"
@@ -1612,11 +1616,11 @@
       <div id="configContent">
         <h2 id="configTitle">Messaging Configuration</h2>
         <div class="config-row">
-          <label for="configCallsign">Callsign</label>
+          <label for="configCallsign" id="configCallsignLabel">Callsign</label>
           <input type="text" id="configCallsign" placeholder="Your callsign" />
         </div>
         <div class="config-row">
-          <label for="configColor">Color</label>
+          <label for="configColor" id="configColorLabel">Color</label>
           <select id="configColor">
             <option value="White">White</option>
             <option value="Yellow">Yellow</option>
@@ -1635,7 +1639,7 @@
           </select>
         </div>
         <div class="config-row">
-          <label for="configRole">Role</label>
+          <label for="configRole" id="configRoleLabel">Role</label>
           <select id="configRole">
             <option value="HQ">HQ</option>
             <option value="Team Member" selected>Team Member</option>
