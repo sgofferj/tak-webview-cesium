@@ -673,7 +673,7 @@ removes map entity (`removeEntity`) and chat contact/DM (`handleCotDelete`).
 - **Abuse limits (current)**: 3 failed logins wipe the account's records;
   password strength enforcement on import; input validation on colors,
   roles, coordinates, channel lists, chat length. Rate limiting and IP
-  banning are **not yet implemented** (see AGENTS.md open items).
+  banning are **not yet implemented**.
 - **Privacy**: UID is a salted-nothing hash of the username; the status bar
   shows cert organization rather than CN; usernames never leave the
   backend except in Marti API calls that require them.
