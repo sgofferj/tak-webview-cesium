@@ -68,5 +68,11 @@
   "uploadButton": "Ladda upp och anslut",
   "loginButton": "Logga in",
   "chatDelivered": "Levererad",
-  "chatRead": "Läst"
+  "chatRead": "Läst",
+  "channelsButton": "Kanaler",
+  "channelsTitle": "Kanaler",
+  "channelsLoading": "Laddar kanaler…",
+  "channelsLoadError": "Det gick inte att läsa in kanaler",
+  "channelsSave": "Spara",
+  "channelsCancel": "Avbryt"
 }

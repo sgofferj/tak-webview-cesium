@@ -15,6 +15,7 @@ This application provides a real-time 3D tactical view of Cursor-on-Target (CoT)
 - **Privacy & Security:** Ephemeral session storage for certificates and credentials. No data is stored permanently on disk in unencrypted form.
 - **Multi-User (Single Server):** Register any number of users against the same TAK Server on one install. Every user gets their own certificate, credentials, distinct per-user UID and fully isolated data; logging out wipes only that user's data.
 - **Status Tray:** Real-time feedback on connection status, certificate expiry, and identity.
+- **Channel Selection:** Status-bar "Channels" popup to subscribe/unsubscribe TAK Server groups (channels) via the Marti REST API; one checkbox per channel covers both IN and OUT directions.
 - **Advanced Visualization:** 
     - **3D Environment:** Powered by CesiumJS for a global, high-fidelity view.
     - **MIL-STD-2525 Support:** Military symbols rendered efficiently using `milsymbol`.
@@ -90,6 +91,7 @@ Configuration is handled via environment variables or an `.env` file. This is th
 | `TAK_HOST`            | `localhost`  | Hostname or IP of the TAK Server                                                 |
 | `TAK_PORT`            | `8089`       | TLS port of the TAK Server                                                       |
 | `TAK_ENROLL_PORT`     | `8446`       | Enrollment port (for automated certificate setup)                                |
+| `TAK_API_PORT`        | `8443`       | TLS port of the Marti REST API (channel/group subscription)                      |
 | `TAK_TYPE`            | `a-f-G-U-C-I`| CoT type for the viewer entity                                                   |
 | `FORCE_SERVER`        | (Empty)      | Pin the install to one TAK Server; resolved automatically in the UI, and enrollments/uploads for any other server are rejected backend-side |
 
@@ -188,6 +190,7 @@ Here are some tips for using the frontend that might not be immediately obvious:
 -   **"Zoom to All" Logic:** This button intelligently zooms to fit all *filtered* entities. It also automatically excludes extreme outliers to prevent zooming out to a global view unnecessarily.
 -   **"Reset View" Button:** This button does two things: it resets the camera to a top-down, North-up orientation, and its icon changes to indicate whether the current view is tilted or top-down.
 -   **Session Persistence:** The application automatically saves your view (camera position, filters, selected layers) to your browser's local storage. When you reload the page, your session will be restored exactly where you left off.
+-   **Channels Popup:** The "Channels" button in the status bar lists your TAK Server groups (channels). Checking a channel subscribes you in all entitled directions (IN and OUT); unchecking unsubscribes. State is fetched fresh from the server every time the popup opens.
 
 ## Examples
 

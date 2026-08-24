@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     tak_group_color: str = "Cyan"  # color for SA/__group
     tak_role: str = ""  # role chosen by user
 
+    # Marti REST API (TLS) port - channel/group subscription endpoints
+    tak_api_port: int = 8443
+
     # Enrollment
     tak_enroll_port: int = 8446
     force_server: str | None = None

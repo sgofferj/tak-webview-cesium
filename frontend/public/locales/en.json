@@ -68,5 +68,11 @@
   "uploadButton": "Upload & Connect",
   "loginButton": "Login",
   "chatDelivered": "Delivered",
-  "chatRead": "Read"
+  "chatRead": "Read",
+  "channelsButton": "Channels",
+  "channelsTitle": "Channels",
+  "channelsLoading": "Loading channels…",
+  "channelsLoadError": "Failed to load channels",
+  "channelsSave": "Save",
+  "channelsCancel": "Cancel"
 }
