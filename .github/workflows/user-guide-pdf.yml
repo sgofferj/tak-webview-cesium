@@ -1,0 +1,77 @@
+name: Build user guide PDFs
+
+# Builds the English and Finnish user guides as PDFs and publishes them
+# as release assets whenever a docs/* branch is merged into main.
+# Also runnable manually from the Actions tab.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-pdf:
+    name: Build and release user guide PDFs
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.head_ref, 'docs/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install pandoc and XeLaTeX
+        run: >-
+          sudo apt-get update &&
+          sudo apt-get install -y --no-install-recommends
+          pandoc texlive-xetex texlive-fonts-recommended lmodern
+          fonts-dejavu
+
+      - name: Concatenate chapters per language
+        run: |
+          set -eu
+          mkdir -p build
+          for lang in en fi; do
+            dir="docs/user-guide/$lang"
+            out="build/user-guide-$lang.md"
+            cp "$dir/README.md" "$out"
+            for f in "$dir"/[0-9][0-9]-*.md; do
+              printf '\n\n\\newpage\n\n' >> "$out"
+              cat "$f" >> "$out"
+            done
+          done
+
+      - name: Build PDFs with pandoc (xelatex)
+        run: |
+          set -eu
+          for lang in en fi; do
+            pandoc "build/user-guide-$lang.md" \
+              -o "build/tak-webview-cesium-user-guide-$lang.pdf" \
+              --from markdown \
+              --pdf-engine=xelatex \
+              --toc \
+              --toc-depth=2 \
+              -V geometry:margin=2.2cm \
+              -V fontsize=11pt \
+              -V mainfont="DejaVu Sans" \
+              -V colorlinks=true \
+              --resource-path="docs/user-guide/$lang:docs/user-guide"
+          done
+
+      - name: Create release and upload PDFs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: user-guide-v${{ github.run_number }}
+          name: "User Guide (EN/FI) — build ${{ github.run_number }}"
+          body: >-
+            End-user guide PDFs, built automatically from the docs merged
+            into main (commit ${{ github.sha }}).
+
+            - tak-webview-cesium-user-guide-en.pdf (English)
+            - tak-webview-cesium-user-guide-fi.pdf (Finnish)
+          files: build/tak-webview-cesium-user-guide-*.pdf
