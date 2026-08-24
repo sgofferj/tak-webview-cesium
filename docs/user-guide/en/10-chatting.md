@@ -18,12 +18,20 @@ conversations.
 
 Rooms are group conversations. Several are created for you automatically:
 
-- **All Chat Rooms** — everyone on the network. The default room.
+- **All Chat Rooms** — everyone on the network. The default room:
+
+  ![All Chat Rooms](../images/chat-room-all.png)
+
 - **One room per team color** — only members of that color (for example
-  everyone in Red). Shown as a colored circle.
+  everyone in Red). Shown as a colored circle:
+
+  ![Red room](../images/room-red.png) ![Cyan room](../images/room-cyan.png)
+
 - **One room per role** — for example all Medics or all Team Leads.
   Team Members do not get a separate role room. Shown as a white circle
-  with the role abbreviation.
+  with the role abbreviation:
+
+  ![Medic room](../images/role-circle-medic.png) ![Team Lead room](../images/role-circle-team-lead.png)
 
 Rooms appear as soon as a member of that color or role is visible to you,
 so the list grows and shrinks with who is actually online.

@@ -24,7 +24,10 @@ the map origin) until you do.
 
 ## After setting it
 
-- A **blue triangle marker** appears at your position on the map.
+- A **blue triangle marker** appears at your position on the map:
+
+  ![Own location marker](../images/own-location-marker.png)
+
 - Your coordinates are shown next to the **Location** button, so you can
   read them off at any time.
 - Other users see your symbol move to the new position within moments.

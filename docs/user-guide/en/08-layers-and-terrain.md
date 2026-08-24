@@ -48,7 +48,11 @@ working in 3D view.
 ## Elevation contours
 
 With terrain enabled and a dark base map active, an **Analysis** option
-appears: elevation contours drawn directly on the ground, in cyan. Use
+appears: elevation contours drawn directly on the ground, in cyan.
+
+![Contours option](../images/contours-thumbnail.png)
+
+Use
 the −/+ stepper to change contour spacing (for example every 50 m or every
 200 m). Contours turn off automatically if you switch to a light map or
 back to flat terrain.

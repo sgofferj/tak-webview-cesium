@@ -18,7 +18,11 @@ tactical systems. You do not need to know the standard to read the map:
 
 Connected team members appear as **colored circles** instead of standard
 military symbols. The circle color is the member's team color (Chapter 3),
-and a role abbreviation inside the circle shows their function:
+and a role abbreviation inside the circle shows their function. For
+example, a medic of the Red team and a team lead of the Blue team look
+like this:
+
+![Red team medic](../images/team-red-medic.png) ![Blue team lead](../images/team-blue-team-lead.png)
 
 | Abbreviation | Role |
 | ------------ | ---- |
@@ -45,7 +49,10 @@ Each symbol carries its callsign next to it in a small label.
 ## Course arrows and trails
 
 - A small white **arrow** next to a moving unit points in its direction of
-  travel; it rotates with the map view.
+  travel; it rotates with the map view:
+
+  ![Course arrow](../images/course-arrow.png)
+
 - When you select a unit, its recent **movement trail** appears as a line.
   Deselect the unit to hide the trail again.
 

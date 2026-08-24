@@ -20,6 +20,9 @@ already set up the system; you only need your personal credentials.
 Each chapter covers one task area. You do not need to read them in order —
 jump to what you need. If you are new, start with chapters 1–3.
 
+> This guide is also available in Finnish / Opas on saatavilla myös
+> suomeksi: [fi/README.md](../fi/README.md)
+
 | Chapter | File | Contents |
 | ------- | ---- | -------- |
 | 1 | [01-getting-started.md](01-getting-started.md) | What you need, opening the application |
