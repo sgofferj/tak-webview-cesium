@@ -113,10 +113,73 @@ function applyStaticTranslations() {
       (el.innerText = i18n.labelLoginDesc || "Authenticated access required."),
     labelImportedCertFor: (el) =>
       (el.innerText = i18n.labelImportedCertFor || "Imported certificate for:"),
-    enrollButton: (el) => (el.innerText = i18n.labelEnroll || "Enroll"),
+    enrollButton: (el) => (el.innerText = i18n.enrollSubmit || "Enroll"),
     uploadButton: (el) =>
       (el.innerText = i18n.uploadButton || "Upload & Connect"),
     loginButton: (el) => (el.innerText = i18n.loginButton || "Login"),
+    labelSelectP12: (el) =>
+      (el.innerText = i18n.selectP12File || "Select .p12 file"),
+    authLogout: (el) => (el.innerText = i18n.logoutButton || "Logout"),
+    authForget: (el) => (el.innerText = i18n.forgetButton || "Forget"),
+    configStatusBtn: (el) => (el.innerText = i18n.configButton || "Config"),
+    statusLocationBtn: (el) => {
+      el.innerText = i18n.locationButton || "Location";
+      el.title = i18n.locationButtonTitle || "Set your location on the map";
+    },
+    locationPickerTitle: (el) =>
+      (el.innerText = i18n.locationPickerTitle || "Set your location"),
+    locBrowser: (el) =>
+      (el.innerText = i18n.locUseBrowser || "Use browser location"),
+    locMap: (el) => (el.innerText = i18n.locUseMap || "Click on map"),
+    locCancel: (el) => (el.innerText = i18n.cancelButton || "Cancel"),
+    layerTerrainHeader: (el) => (el.innerText = i18n.terrainLabel || "Terrain"),
+    layerBaseMapsHeader: (el) =>
+      (el.innerText = i18n.baseMapsHeader || "Base Maps"),
+    layerOverlaysHeader: (el) =>
+      (el.innerText = i18n.overlaysHeader || "Overlays"),
+    layerAnalysisHeader: (el) =>
+      (el.innerText = i18n.analysisHeader || "Analysis"),
+    contourDensity: (el) =>
+      (el.innerText = i18n.contourDensityLabel || "Density"),
+    chatTitle: (el) => (el.innerText = i18n.chatTitle || "Chat"),
+    chatEmpty: (el) =>
+      (el.innerText =
+        i18n.chatEmptySelection || "Select a channel to start chatting"),
+    chatInput: (el) =>
+      (el.placeholder = i18n.chatMessagePlaceholder || "Message…"),
+    chatSend: (el) => (el.innerText = i18n.sendButton || "Send"),
+    statusConnection: (el) => {
+      el.innerText = i18n.connectionOffline || "Disconnected";
+    },
+    authTitle: (el) => (el.innerText = i18n.authTitle || "TAK Login"),
+    backToChoice1: (el) => (el.innerText = `← ${i18n.backButton || "Back"}`),
+    backToChoice2: (el) => (el.innerText = `← ${i18n.backButton || "Back"}`),
+    backToChoice3: (el) => (el.innerText = `← ${i18n.backButton || "Back"}`),
+    labelLogin: (el) => (el.innerText = i18n.labelLogin || "Login"),
+    enrollServer: (el) =>
+      (el.placeholder = i18n.takServerPlaceholder || "TAK Server"),
+    uploadServer: (el) =>
+      (el.placeholder = i18n.takServerPlaceholder || "TAK Server"),
+    enrollUser: (el) => (el.placeholder = i18n.usernamePlaceholder || "Username"),
+    loginUser: (el) => (el.placeholder = i18n.usernamePlaceholder || "Username"),
+    enrollPass: (el) => (el.placeholder = i18n.passwordPlaceholder || "Password"),
+    loginPass: (el) => (el.placeholder = i18n.passwordPlaceholder || "Password"),
+    uploadPass: (el) =>
+      (el.placeholder = i18n.certPasswordPlaceholder || "Certificate Password"),
+    uploadNewPass: (el) =>
+      (el.placeholder =
+        i18n.newStrongPasswordPlaceholder || "New Strong Password"),
+    configCallsign: (el) =>
+      (el.placeholder = i18n.yourCallsignPlaceholder || "Your callsign"),
+    configTitle: (el) =>
+      (el.innerText = i18n.configTitle || "Messaging Configuration"),
+    configCallsignLabel: (el) =>
+      (el.innerText = i18n.callsignFieldLabel || "Callsign"),
+    configColorLabel: (el) =>
+      (el.innerText = i18n.colorFieldLabel || "Color"),
+    configRoleLabel: (el) => (el.innerText = i18n.roleFieldLabel || "Role"),
+    configSave: (el) => (el.innerText = i18n.saveButton || "Save"),
+    configCancel: (el) => (el.innerText = i18n.cancelButton || "Cancel"),
     showInfo: (el) => {
       el.innerText = "ⓘ " + (i18n.infoTitle || "Info");
     },
