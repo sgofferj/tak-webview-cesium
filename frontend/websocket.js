@@ -7,6 +7,7 @@
 // You may obtain a copy of the License at https://www.gnu.org/licenses/gpl-3.0.en.html
 
 import { decode } from "@msgpack/msgpack";
+import { i18n } from "./config.js";
 import { updateEntity, removeEntity } from "./state.js";
 import { checkAuth } from "./main.js";
 import {
@@ -38,7 +39,7 @@ export function startWebSocket() {
     setChatConnected(true);
     const conn = document.getElementById("statusConnection");
     if (conn) {
-      conn.innerText = "Connected";
+      conn.innerText = i18n.connectionOnline || "Connected";
       conn.classList.add("conn-online");
     }
   };
@@ -76,7 +77,7 @@ export function startWebSocket() {
     setChatConnected(false);
     const conn = document.getElementById("statusConnection");
     if (conn) {
-      conn.innerText = "Disconnected";
+      conn.innerText = i18n.connectionOffline || "Disconnected";
       conn.classList.remove("conn-online");
     }
 
