@@ -205,7 +205,12 @@ export function renderGoogleIcon(
   }
 
   const p = new Path2D(pathData);
-  const isLargeCoords = pathData.includes("-") || pathData.startsWith("m");
+  // Detect the coordinate grid by magnitude: all built-in icons use a
+  // 24-unit grid; a 960-unit grid would only make sense if coordinates
+  // exceed that. (Checking for "-" would misfire on paths like the forum
+  // glyph, which contains negative deltas but is 24-unit based.)
+  const coords = pathData.match(/-?\d+(?:\.\d+)?/g) ?? [];
+  const isLargeCoords = coords.some((c) => Math.abs(parseFloat(c)) > 30);
   const viewboxSize = isLargeCoords ? 960 : 24;
   const iconScale = (size * 0.65) / viewboxSize;
 
