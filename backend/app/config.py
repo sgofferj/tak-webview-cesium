@@ -91,7 +91,7 @@ class Settings(BaseSettings):
             "Red",
             "Maroon",
             "Cyan",
-            "Dark Cyan",
+            "Teal",
             "Blue",
             "Dark Blue",
             "Green",
