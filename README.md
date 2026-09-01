@@ -177,6 +177,10 @@ services:
     restart: unless-stopped
 ```
 
+## Changelog (2026-09-01)
+- **Messaging config persistence:** Callsign/color/role now stored in `account.json` (per-user) in addition to RAM, so a container restart or re-login no longer loses the identity. `GET /api/messaging/config` falls back to disk and `POST` syncs both layers. Frontend now loads the config on startup (`startApp → loadMessagingConfig` before `startWebSocket`), correctly scopes `localStorage` per user (`getSelfInfoKey()`), migrates the legacy unscoped key, and pushes a locally-stored identity to the backend when the backend is empty. Status bar now shows `username - <callsign> (<role>)` immediately after login.
+- **Channels 403 fix:** `GET /Marti/api/groups/user` is admin-only (403 for normal certs — verified live). Switched `get_group_entitlements` to `GET /Marti/api/groups/all?useCache=true&sendLatestSA=true` (the endpoint that works with a user cert), with deduplication by `(name, direction, created)` mirroring `python-takserver-api` and fallback to the old path. `PUT /groups/active` body now deduplicates `(name, direction)`. `GET /api/channels` now returns the full catalog with correct `subscribed` flags.
+
 ## Support
 If you find a bug or have a suggestion, feel free to open an issue or submit a pull request. This is a community effort!
 

@@ -308,8 +308,37 @@ async def config() -> dict[str, Any]:
     return await get_app_config()
 
 
-# Per-user messaging config (callsign/color/role), RAM only.
+# Per-user messaging config (callsign/color/role).
+# RAM cache + persisted copy in UserAccount (callsign/color/role) so a
+# restart does not lose the user's identity and the TAK client can auto-start.
 messaging_config: dict[str, dict[str, str]] = {}
+
+
+def _persisted_cfg(username: str) -> dict[str, str]:
+    """Load callsign/color/role from the on-disk account, if present."""
+    account = auth_manager.registry.get_account(username)
+    if not account:
+        return {}
+    cfg: dict[str, str] = {}
+    if account.callsign:
+        cfg["callsign"] = account.callsign
+    if account.color:
+        cfg["color"] = account.color
+    if account.role:
+        cfg["role"] = account.role
+    return cfg
+
+
+def _effective_cfg(username: str) -> dict[str, str]:
+    """RAM config if present, otherwise the persisted copy (and cache it)."""
+    cfg = messaging_config.get(username)
+    if cfg and cfg.get("callsign"):
+        return cfg
+    persisted = _persisted_cfg(username)
+    if persisted:
+        messaging_config[username] = dict(persisted)
+        return messaging_config[username]
+    return cfg or {}
 
 
 def reset_messaging_config(username: str | None) -> None:
@@ -321,20 +350,43 @@ def reset_messaging_config(username: str | None) -> None:
     """
     if username:
         messaging_config.pop(username, None)
+        account = auth_manager.registry.get_account(username)
+        if account and (account.callsign or account.color or account.role):
+            account.callsign = ""
+            account.color = ""
+            account.role = ""
+            auth_manager.registry.save_account(account)
     else:
         messaging_config.clear()
+        for acc in auth_manager.registry.list_accounts():
+            if acc.callsign or acc.color or acc.role:
+                acc.callsign = ""
+                acc.color = ""
+                acc.role = ""
+                auth_manager.registry.save_account(acc)
 
 
 def _user_identity(username: str, cfg: dict[str, str]) -> Identity:
-    """Per-user identity: stable UID + the user's callsign/color/role/server."""
+    """Per-user identity: stable UID + the user's callsign/color/role/server.
+
+    `cfg` is the RAM config; when it is empty the persisted account copy is
+    used so a restart does not lose the identity.
+    """
     account = auth_manager.registry.get_account(username)
     uid = account.uid if account and account.uid else uid_for_username(username)
+    callsign = (
+        cfg.get("callsign")
+        or (account.callsign if account else "")
+        or settings.tak_callsign
+    )
+    color = cfg.get("color") or (account.color if account else "") or ""
+    role = cfg.get("role") or (account.role if account else "") or ""
     return Identity(
         username=username,
         uid=uid,
-        callsign=cfg.get("callsign") or settings.tak_callsign,
-        color=cfg.get("color") or "",
-        role=cfg.get("role") or "",
+        callsign=callsign,
+        color=color,
+        role=role,
         server=auth_manager.user_server(username) or settings.tak_host,
         lat=(account.lat if account else 0.0),
         lon=(account.lon if account else 0.0),
@@ -349,7 +401,7 @@ async def _start_user_client(username: str) -> None:
     server and can see each other. The client only starts once the user
     confirmed callsign+color+role in the config overlay.
     """
-    cfg = messaging_config.get(username)
+    cfg = _effective_cfg(username)
     if (
         not cfg
         or not cfg.get("callsign")
@@ -392,6 +444,13 @@ async def set_messaging_config(req: dict[str, str], request: Request) -> dict[st
         "color": color,
         "role": role,
     }
+    # Persist so a restart still knows the identity
+    account = auth_manager.registry.get_account(username)
+    if account:
+        account.callsign = callsign
+        account.color = color
+        account.role = role
+        auth_manager.registry.save_account(account)
 
     # Start (or reconnect) this user's own TAK client with their identity.
     identity = _user_identity(username, messaging_config[username])
@@ -409,11 +468,15 @@ async def get_messaging_config(request: Request) -> dict[str, Any]:
     username = tracker.username_for(request.session.get("sid"))
     if not username:
         return {}
-    cfg: dict[str, Any] = dict(messaging_config.get(username, {}))
+    cfg: dict[str, Any] = dict(_effective_cfg(username))
     account = auth_manager.registry.get_account(username)
     if account:
         cfg.setdefault("lat", float(account.lat))
         cfg.setdefault("lon", float(account.lon))
+        # Ensure persisted callsign/color/role are visible even when RAM missed
+        cfg.setdefault("callsign", account.callsign or "")
+        cfg.setdefault("color", account.color or "")
+        cfg.setdefault("role", account.role or "")
     return cfg
 
 
@@ -452,7 +515,7 @@ async def set_messaging_location(
     # Refresh the live identity so the next SA carries the new position.
     client = pool.client_for(username)
     if client is not None:
-        client.identity = _user_identity(username, messaging_config.get(username, {}))
+        client.identity = _user_identity(username, _effective_cfg(username))
     return {"status": "ok"}
 
 

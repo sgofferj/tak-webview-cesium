@@ -234,9 +234,14 @@ async function startApp() {
     await setTerrain(false);
     updateLayerPickerUI();
   }
-  startWebSocket();
   initChat();
   initLocationPicker();
+  // Load persisted messaging config (callsign/color/role) so the status bar
+  // shows the identity immediately after login — even before the chat panel
+  // is opened. Also syncs localStorage <-> backend so a restart does not
+  // lose the identity and the TAK client can auto-start.
+  await loadMessagingConfig();
+  startWebSocket();
   // After websocket starts and entities begin flowing in, we need to ensure their visibility is set
   // before the first general applyFilter from setTabVisibility.
   applyFilter();
@@ -496,9 +501,8 @@ function setupAuthEvents() {
   const configSave = document.getElementById("configSave");
   const configCancel = document.getElementById("configCancel");
 
-  const selfInfoKey = currentUser
-    ? `messagingConfig.${currentUser}`
-    : "messagingConfig";
+  const getSelfInfoKey = () =>
+    currentUser ? `messagingConfig.${currentUser}` : "messagingConfig";
   // Profile pushed by the TAK server on enrollment (takes priority over
   // localStorage, if present).
   let pendingServerProfile = null;
@@ -526,8 +530,10 @@ function setupAuthEvents() {
       prefillConfigFields(pendingServerProfile);
       pendingServerProfile = null;
     } else {
-      // 2. Fall back to localStorage.
-      const saved = localStorage.getItem(selfInfoKey);
+      // 2. Fall back to localStorage (per-user key, computed live so a
+      //    later login as a different user does not reuse the stale key).
+      const key = getSelfInfoKey();
+      const saved = localStorage.getItem(key);
       if (saved) {
         try {
           prefillConfigFields(JSON.parse(saved));
@@ -564,7 +570,7 @@ function setupAuthEvents() {
     const role = document.getElementById("configRole").value;
 
     const cfg = { callsign, color, role };
-    localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
+    localStorage.setItem(getSelfInfoKey(), JSON.stringify(cfg));
 
     // Sync with chat.js selfInfo
     selfInfo.callsign = callsign;
@@ -1509,34 +1515,73 @@ async function loadMessagingConfig() {
     ? `messagingConfig.${currentUser}`
     : "messagingConfig";
   let cfg = null;
+  let backendCfg = null;
 
-  // 1. Try localStorage first
+  // 1. Fetch backend config (authoritative when present)
+  try {
+    const resp = await fetch("/api/messaging/config");
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.callsign) backendCfg = data;
+    }
+  } catch {
+    // ignore network errors
+  }
+
+  // 2. Try localStorage (per-user key, with fallback to the legacy
+  //    unscoped key that was written before the multiuser scoping fix)
   const saved = localStorage.getItem(selfInfoKey);
   if (saved) {
     try {
-      cfg = JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.callsign) cfg = parsed;
     } catch {
       // ignore parse errors
     }
   }
-
-  // 2. If not in localStorage, try backend
-  if (!cfg || !cfg.callsign) {
-    try {
-      const resp = await fetch("/api/messaging/config");
-      if (resp.ok) {
-        const backendCfg = await resp.json();
-        if (backendCfg && backendCfg.callsign) {
-          cfg = backendCfg;
-          localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
+  if ((!cfg || !cfg.callsign) && selfInfoKey !== "messagingConfig") {
+    const fallback = localStorage.getItem("messagingConfig");
+    if (fallback) {
+      try {
+        const parsed = JSON.parse(fallback);
+        if (parsed && parsed.callsign) {
+          cfg = parsed;
+          // Migrate to the per-user key
+          try {
+            localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
+          } catch {
+            // ignore quota errors
+          }
         }
+      } catch {
+        // ignore parse errors
       }
+    }
+  }
+
+  // 3. Prefer backend when it has a callsign, otherwise use localStorage
+  if (backendCfg && backendCfg.callsign) {
+    cfg = backendCfg;
+    try {
+      localStorage.setItem(selfInfoKey, JSON.stringify(cfg));
+    } catch {
+      // ignore quota errors
+    }
+  } else if (cfg && cfg.callsign) {
+    // Backend empty but localStorage has it — push to backend so the TAK
+    // client can start even after a server restart.
+    try {
+      await fetch("/api/messaging/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      });
     } catch {
       // ignore network errors
     }
   }
 
-  // 3. If still no callsign, open config overlay
+  // 4. If still no callsign, open config overlay
   if (!cfg || !cfg.callsign) {
     const configOverlay = document.getElementById("configOverlay");
     if (configOverlay) {
