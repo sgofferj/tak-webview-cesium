@@ -35,6 +35,9 @@ class UserAccount:
     uid: str | None = None
     lat: float = 0.0
     lon: float = 0.0
+    callsign: str = ""
+    color: str = ""
+    role: str = ""
 
 
 @dataclass
@@ -111,6 +114,9 @@ class UserRegistry:
                     "uid": account.uid,
                     "lat": account.lat,
                     "lon": account.lon,
+                    "callsign": account.callsign,
+                    "color": account.color,
+                    "role": account.role,
                 },
                 f,
             )
@@ -135,6 +141,9 @@ class UserRegistry:
                 uid=str(data["uid"]) if data.get("uid") else None,
                 lat=lat,
                 lon=lon,
+                callsign=str(data.get("callsign", "") or ""),
+                color=str(data.get("color", "") or ""),
+                role=str(data.get("role", "") or ""),
             )
         except (OSError, json.JSONDecodeError):
             return None

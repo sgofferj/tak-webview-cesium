@@ -12,8 +12,12 @@
 TAK Server 5.x exposes the classic file/LDAP auth groups to users as
 selectable "channels". The wire protocol is the Marti group REST API:
 
-- GET  /Marti/api/groups/user?username=<name>   - entitlements + state
-- PUT  /Marti/api/groups/active                 - set active group set
+- GET  /Marti/api/groups/all?useCache=true  - entitlements + state
+     (``GET /groups/user?username=`` is admin-only and returns 403 for a
+      normal user cert — verified live on a TAK Server 5.7 instance;
+      ``useCache=false`` only returns the currently active subset, so
+      ``true`` is needed for the full catalog)
+- PUT  /Marti/api/groups/active              - set active group set
 
 Verified live against TAK Server 5.7:
 - Groups are directional (IN = receive, OUT = send); each user sees one
@@ -64,7 +68,42 @@ async def get_group_entitlements(server: str, username: str) -> list[dict[str, A
     """Fetch the user's group entitlements from the TAK server.
 
     Returns the raw list of Group entries (one per name/direction pair).
+
+    Regular (non-admin) certificates cannot query ``GET /groups/user`` — the
+    server answers 403.  The channel list that a normal user is *entitled*
+    to is available via ``GET /groups/all?useCache=true`` (verified live
+    against a TAK Server 5.7 instance: ``/groups/user`` 403,
+    ``/groups/all`` 200; ``useCache=false`` only returns the active subset).
+    ``active`` in that response already reflects the user's current
+    subscription, so it can be used for both the catalog and the subscribed
+    state.  We try ``/groups/all`` first and fall back to the old
+    ``/groups/user`` path for backwards compatibility.
     """
+    # Primary: the endpoint that works with a normal user cert.
+    try:
+        resp = await _marti_request(
+            "GET",
+            server,
+            username,
+            "/groups/all",
+            params={"useCache": "true", "sendLatestSA": "true"},
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data")
+        if isinstance(data, list) and data:
+            filtered = [g for g in data if isinstance(g, dict) and g.get("name")]
+            if filtered:
+                return filtered
+    except httpx.HTTPStatusError as exc:
+        # 403 from the per-user endpoint is expected for non-admins; the
+        # ``/groups/all`` fallback already succeeded in that case, so only
+        # log when both paths fail.  Fall through to the legacy path.
+        if exc.response.status_code not in (403, 404):
+            logger.debug("groups/all failed for %s: %s", username, exc)
+    except (httpx.HTTPError, RuntimeError, OSError) as exc:
+        logger.debug("groups/all failed for %s: %s", username, exc)
+
+    # Legacy/fallback: per-user readback (requires admin on some servers).
     resp = await _marti_request(
         "GET",
         server,
@@ -86,10 +125,27 @@ def channels_from_entitlements(
 
     A checkbox represents both IN and OUT: a channel counts as subscribed
     only when every available direction is currently active.
+
+    The ``/groups/all?useCache=true`` response can contain stale duplicates
+    (same name+direction with different ``created`` dates).  The newest entry
+    wins, mirroring ``python-takserver-api``'s ``get_channels()`` deduplication.
     """
-    by_name: dict[str, list[dict[str, Any]]] = {}
+    # Deduplicate by (name, direction), keeping the newest ``created``.
+    latest: dict[tuple[str, str], dict[str, Any]] = {}
     for g in entitlements:
-        by_name.setdefault(str(g["name"]).strip(), []).append(g)
+        name = str(g.get("name", "")).strip()
+        direction = str(g.get("direction", "")).strip().upper()
+        if not name or not direction:
+            continue
+        key = (name, direction)
+        created = str(g.get("created") or "")
+        existing = latest.get(key)
+        if existing is None or created > str(existing.get("created") or ""):
+            latest[key] = g
+
+    by_name: dict[str, list[dict[str, Any]]] = {}
+    for (name, _direction), entry in latest.items():
+        by_name.setdefault(name, []).append(entry)
 
     channels = [
         {
@@ -115,11 +171,20 @@ async def set_subscribed_channels(server: str, username: str, names: set[str]) -
     Entries for omitted names become inactive on the server.
     """
     entitlements = await get_group_entitlements(server, username)
-    body = [
-        {"name": g["name"], "direction": g["direction"]}
-        for g in entitlements
-        if str(g["name"]).strip() in names
-    ]
+    seen: set[tuple[str, str]] = set()
+    body: list[dict[str, str]] = []
+    for g in entitlements:
+        name = str(g.get("name", "")).strip()
+        if name not in names:
+            continue
+        direction = str(g.get("direction", "")).strip().upper()
+        if not direction:
+            continue
+        key = (name, direction)
+        if key in seen:
+            continue
+        seen.add(key)
+        body.append({"name": name, "direction": direction})
     resp = await _marti_request(
         "PUT",
         server,
